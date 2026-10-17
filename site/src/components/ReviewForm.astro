@@ -3,7 +3,8 @@ interface Props {
   formAction?: string;
 }
 
-const { formAction = 'https://formspree.io/f/YOUR_FORM_ID' } = Astro.props;
+const { formAction = '/api/contact' } = Astro.props;
+const turnstileSiteKey = import.meta.env.PUBLIC_TURNSTILE_SITE_KEY ?? '';
 ---
 
 <section class="container section review-form" id="leave-a-review">
@@ -18,6 +19,9 @@ const { formAction = 'https://formspree.io/f/YOUR_FORM_ID' } = Astro.props;
     novalidate
     id="review-form"
   >
+    <input type="hidden" name="type" value="review" />
+    <input type="hidden" name="ts" id="review-ts" value="" />
+
     <div class="review-form__hidden" aria-hidden="true">
       <label for="website">Leave this field empty</label>
       <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
@@ -65,6 +69,17 @@ const { formAction = 'https://formspree.io/f/YOUR_FORM_ID' } = Astro.props;
       <label for="review">Review <span aria-label="required">*</span></label>
       <textarea id="review" name="review" rows="4" required></textarea>
     </div>
+
+    {turnstileSiteKey && (
+      <div class="review-form__turnstile">
+        <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-theme="auto"></div>
+      </div>
+    )}
+    {!turnstileSiteKey && (
+      <p class="review-form__turnstile-none muted">
+        Security challenge not configured in this environment — submissions are accepted without verification.
+      </p>
+    )}
 
     <div class="review-form__actions">
       <button class="btn btn-primary" type="submit">Submit review</button>
@@ -157,6 +172,14 @@ const { formAction = 'https://formspree.io/f/YOUR_FORM_ID' } = Astro.props;
     color: var(--color-primary);
   }
 
+  .review-form__turnstile {
+    margin: var(--space-4) 0;
+  }
+
+  .review-form__turnstile-none {
+    margin: var(--space-4) 0 0;
+  }
+
   .review-form__actions {
     display: flex;
     flex-wrap: wrap;
@@ -190,6 +213,9 @@ const { formAction = 'https://formspree.io/f/YOUR_FORM_ID' } = Astro.props;
   const form = document.getElementById('review-form');
   const success = document.getElementById('review-success');
   const errorEl = document.getElementById('review-error');
+  const tsInput = document.getElementById('review-ts') as HTMLInputElement | null;
+
+  if (tsInput) tsInput.value = String(Date.now());
 
   if (form && success && errorEl) {
     form.addEventListener('submit', async (event) => {
@@ -207,31 +233,61 @@ const { formAction = 'https://formspree.io/f/YOUR_FORM_ID' } = Astro.props;
         return;
       }
 
-      const action = formEl.getAttribute('action');
-      if (!action) return;
+      // Turnstile: when a widget is rendered, a challenge response is required
+      // before the submission is allowed through.
+      if (formEl.querySelector('.cf-turnstile')) {
+        const token = new FormData(formEl).get('cf-turnstile-response');
+        if (!token || typeof token !== 'string' || token.length === 0) {
+          event.preventDefault();
+          errorEl.textContent = 'Please complete the security challenge above before submitting.';
+          errorEl.removeAttribute('hidden');
+          success.setAttribute('hidden', '');
+          errorEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          return;
+        }
+      }
 
-      event.preventDefault();
+      const action = formEl.getAttribute('action') || '/api/contact';
       const formData = new FormData(formEl);
 
+      event.preventDefault();
       try {
         const response = await fetch(action, {
           method: 'POST',
-          body: formData,
-          headers: { Accept: 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            type: 'review',
+            name: String(formData.get('name') || ''),
+            email: String(formData.get('email') || ''),
+            company: String(formData.get('company') || ''),
+            linkedin: String(formData.get('linkedin') || ''),
+            rating: String(formData.get('rating') || ''),
+            review: String(formData.get('review') || ''),
+            website: String(formData.get('website') || ''),
+            ts: Number(formData.get('ts')) || Date.now(),
+            turnstileToken: String(formData.get('cf-turnstile-response') || ''),
+          }),
         });
 
-        // Formspree answers 4xx/5xx for rejected submissions; fetch only rejects
-        // on network errors, so check the status before claiming success.
+        const data = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
+          throw new Error((data && data.error) || `Request failed with status ${response.status}`);
         }
 
         formEl.reset();
+        if (tsInput) tsInput.value = String(Date.now());
+        // Turnstile tokens are single-use; refresh the widget after a successful submit.
+        if (typeof window !== 'undefined' && (window as any).turnstile) {
+          try {
+            (window as any).turnstile.reset();
+          } catch {}
+        }
         errorEl.setAttribute('hidden', '');
         success.removeAttribute('hidden');
         success.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } catch (err) {
         success.setAttribute('hidden', '');
+        errorEl.textContent = err instanceof Error ? err.message : 'Sorry — we couldn\'t send your review just now.';
         errorEl.removeAttribute('hidden');
         errorEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }

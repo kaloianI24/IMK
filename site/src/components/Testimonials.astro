@@ -11,59 +11,40 @@ interface Props {
   items?: Testimonial[];
 }
 
-const defaultItems: Testimonial[] = [
-  {
-    name: 'Alex R.',
-    role: 'Ops Lead',
-    company: 'IXI Client',
-    rating: 5,
-    quote:
-      "Clear plan, clean handover, and it actually just works. Saved us hours every week without adding complexity.",
-  },
-  {
-    name: 'Morgan T.',
-    role: 'Founder',
-    company: 'Service Business',
-    rating: 5,
-    quote:
-      'The automation was built in our own accounts with a proper runbook. Zero lock-in, exactly what we needed.',
-  },
-  {
-    name: 'Jordan K.',
-    role: 'RevOps',
-    company: 'B2B Team',
-    rating: 5,
-    quote:
-      'Pragmatic, focused on the thing that actually moves the needle. Reliable from day one.',
-  },
-];
-
-const { items = defaultItems } = Astro.props;
+const { items = [] } = Astro.props;
 ---
 
 <section class="container section testimonials" id="testimonials">
   <p class="eyebrow">What our clients say</p>
   <h2>Testimonials</h2>
-  <div class="testimonials__grid">
-    {items.map((item) => (
-      <article class="testimonial-card">
-        <div class="testimonial-card__stars" aria-label={`${item.rating ?? 5} out of 5 stars`}>
-          {Array.from({ length: item.rating ?? 5 }).map(() => (
-            <span aria-hidden="true">★</span>
-          ))}
-        </div>
-        <p class="testimonial-card__quote">“{item.quote}”</p>
-        <div class="testimonial-card__meta">
-          <span class="testimonial-card__name">{item.name}</span>
-          {(item.role || item.company) && (
-            <span class="testimonial-card__role">
-              {[item.role, item.company].filter(Boolean).join(' · ')}
-            </span>
-          )}
-        </div>
-      </article>
-    ))}
-  </div>
+
+  {items.length === 0 ? (
+    <p class="testimonials__sample-note">
+      Sample content — no approved client quotes yet. Replace this placeholder
+      with real testimonials once clients consent to being named.
+    </p>
+  ) : (
+    <div class="testimonials__grid">
+      {items.map((item) => (
+        <article class="testimonial-card">
+          <div class="testimonial-card__stars" aria-label={`${item.rating ?? 5} out of 5 stars`}>
+            {Array.from({ length: item.rating ?? 5 }).map(() => (
+              <span aria-hidden="true">★</span>
+            ))}
+          </div>
+          <p class="testimonial-card__quote">“{item.quote}”</p>
+          <div class="testimonial-card__meta">
+            <span class="testimonial-card__name">{item.name}</span>
+            {(item.role || item.company) && (
+              <span class="testimonial-card__role">
+                {[item.role, item.company].filter(Boolean).join(' · ')}
+              </span>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+  )}
 </section>
 
 <style>
@@ -114,5 +95,11 @@ const { items = defaultItems } = Astro.props;
   :root[data-theme='dark'] .testimonial-card {
     background: color-mix(in srgb, var(--color-surface) 92%, white 2%);
     border: 1px solid color-mix(in srgb, var(--color-border) 80%, white 8%);
+  }
+
+  .testimonials__sample-note {
+    margin: 0;
+    color: var(--color-text-muted, var(--text-muted));
+    font-size: var(--text-lg);
   }
 </style>
