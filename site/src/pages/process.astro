@@ -1,0 +1,49 @@
+﻿---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import CtaBand from '../components/CtaBand.astro';
+const steps = [
+  { t: "1. Map it", d: "We meet the task owner, count the hours, trace every step and the failure modes." },
+  { t: "2. Design it", d: "The simplest automation that works, success criteria agreed in writing. Scope fixed." },
+  { t: "3. Build + test", d: "In a sandbox, on real data, edge cases included. You see it before it goes live." },
+  { t: "4. Go live softly", d: "Parallel run with the manual process. We turn the manual one off once verified." },
+  { t: "5. Hand over", d: "Owner gets credentials, accounts, runbook. We leave or stay via Automation Care." },
+];
+---
+<BaseLayout title="Process — IXI" description="How IXI designs, builds and hands over automations your team owns." path="/process" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Process' }]} />
+    <h1>Process</h1>
+    <p style="max-width:60ch;">Five steps, scope fixed in writing at kickoff, no surprises. Every project leaves with a runbook.</p>
+  </section>
+  <section class="container section" style="padding-top:0;">
+    <div class="grid-2">
+      {steps.map(s => (
+        <div class="card">
+          <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;">{s.t}</h2>
+          <p class="muted" style="margin-top:var(--space-2);">{s.d}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+  <section class="container section">
+    <h2>Ownership and exit</h2>
+    <div class="callout">
+      <p>Automations run in <strong>your</strong> accounts. You hold the credentials and the admin. If we ever stop working together, you keep running them — nothing is held hostage, no vendor lock-in.</p>
+      <p>If you want to take over maintenance yourself, we walk your team through the runbook on a live call. Disengagement takes days, not months.</p>
+    </div>
+  </section>
+  <section class="container section">
+    <h2>Automation Care SLA</h2>
+    <p class="muted">When systems break silently, owners find out from a customer, not a dashboard.</p>
+    <ul>
+      <li><strong>Alerts immediately</strong> on failures (email + Slack).</li>
+      <li><strong>1 business-day ticket response.</strong></li>
+      <li><strong>Same-week critical fix.</strong></li>
+      <li>Monthly health check report to the owner.</li>
+      <li>API-mapping guard weekly: we catch vendor field changes before they break you.</li>
+    </ul>
+  </section>
+  <CtaBand title="Not sure which service fits?" text="A 15-minute call is enough to tell your situation apart. No pitch, no slides." ctaLabel="Book a 15-minute call" ctaHref="/book" />
+</BaseLayout
+>

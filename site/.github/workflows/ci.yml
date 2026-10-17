@@ -1,0 +1,47 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: '.node-version', cache: 'npm' }
+      - run: npm ci
+      - run: npm run build
+      - name: Typecheck
+        run: npm run check
+      - name: Static invariant check
+        run: |
+          test "$(grep -o \"output:[[:space:]]*'static'\" astro.config.mjs | head -1)" != ""
+          ! grep -r "@astrojs/cloudflare" package.json
+          test -f functions/api/contact.ts
+      - name: Secrets-in-bundle check
+        run: |
+          if grep -R -nE "TURNSTILE_SECRET_KEY|RESEND_API_KEY" dist/ ; then echo "leak"; exit 1; fi
+          echo ok
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: '.node-version', cache: 'npm' }
+      - run: npm ci
+      - run: npm run build
+      # Plan §6: mobile, median of 5 runs, ≥90 all four categories on Home, a
+      # service page and /book (plus /pricing). The color scheme is pinned in
+      # .lighthouserc.cjs so the gate is reproducible across machines.
+      - name: Lighthouse CI
+        run: npm run lhci
+      - name: Upload Lighthouse evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse
+          path: |
+            qa/artifacts/lighthouse/
+            .lighthouseci/

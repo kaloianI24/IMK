@@ -1,0 +1,37 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection, render } from 'astro:content';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import CtaBand from '../../components/CtaBand.astro';
+
+export async function getStaticPaths() {
+  const cases = await getCollection('cases');
+  return cases.map(c => ({ params: { slug: c.id }, props: { c } }));
+}
+const { c } = Astro.props;
+const { Content } = await render(c);
+const d = c.data;
+const slug = c.id;
+---
+<BaseLayout title={`${d.title} — IXI`} description={d.outcome} path={`/work/${slug}`} stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Work', href: '/work' }, { label: d.title }]} />
+    <div class="tag">Sample project</div>
+    <h1 style="margin-top:var(--space-3);">{d.title}</h1>
+    <p class="muted">{d.sector}</p>
+    <p style="font-size:var(--text-xl);max-width:60ch;font-weight:600;">{d.outcome}</p>
+  </section>
+  <section class="container section" style="padding-top:0;">
+    <div class="prose">
+      <h2>Context</h2><p>{d.context}</p>
+      <h2>Problem</h2><p>{d.problem}</p>
+      <h2>Approach</h2><p>{d.approach}</p>
+      <h2>Execution</h2>
+      <ul>{d.execution.map(x => <li>{x}</li>)}</ul>
+      <h2>Result</h2><p>{d.result}</p>
+      {d.quote && <blockquote class="callout" style="font-style:italic;">"{d.quote.quote}" — {d.quote.name}, {d.quote.role}</blockquote>}
+    </div>
+  </section>
+  <CtaBand title="Could this fit you?" text="A 15-minute call is enough to tell whether your situation matches. No pitch." ctaLabel="Book a 15-minute call" ctaHref="/book" />
+  <section class="container section"><div class="prose"><Content /></div></section>
+</BaseLayout>

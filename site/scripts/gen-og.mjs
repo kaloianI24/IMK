@@ -1,0 +1,15 @@
+import { writeFileSync } from 'node:fs';
+import sharp from 'sharp';
+
+const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#121012"/>
+  <rect x="80" y="80" width="1040" height="470" rx="24" fill="#1F1B1E"/>
+  <text x="140" y="260" font-family="system-ui, sans-serif" font-size="76" font-weight="700" fill="#F6F1EA">IXI</text>
+  <text x="140" y="340" font-family="system-ui, sans-serif" font-size="40" font-weight="600" fill="#E04B67">Automations that still work in month six.</text>
+  <text x="140" y="400" font-family="system-ui, sans-serif" font-size="26" fill="#B7AEA7">Workflow automation · B2B AI agents · Integrations · Audits</text>
+  <text x="140" y="470" font-family="system-ui, sans-serif" font-size="22" fill="#9E9590">Owned by you. Handed over. No lock-in.</text>
+</svg>`;
+writeFileSync('public/og.svg', svg);
+await sharp(Buffer.from(svg)).png().toFile('public/og.png');
+console.log('og.png written');

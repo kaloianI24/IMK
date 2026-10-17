@@ -1,0 +1,103 @@
+﻿---
+interface Props {
+  href: string;
+  title: string;
+  tagline: string;
+  startingAt: string;
+  headingLevel?: 'h2' | 'h3';
+  icon?: string;
+}
+
+const { href, title, tagline, startingAt, headingLevel = 'h3', icon } = Astro.props;
+const Heading = headingLevel;
+
+const iconMap: Record<string, string> = {
+  workflow: '⚡',
+  bot: '🤖',
+  plug: '🔌',
+  'search-check': '🔍',
+};
+const iconEmoji = icon ? iconMap[icon] : null;
+---
+
+<a class="card service-card" href={href}>
+  <div class="service-card__header">
+    {iconEmoji && (
+      <div class="service-card__icon" aria-hidden="true">
+        <span class="service-card__icon-emoji">{iconEmoji}</span>
+      </div>
+    )}
+    <Heading class="service-card__title">{title}</Heading>
+  </div>
+  <p class="muted service-card__tagline">{tagline}</p>
+  <div class="service-card__meta">
+    <span class="tag">{startingAt}</span>
+    <span class="service-card__cta">Learn more →</span>
+  </div>
+</a>
+
+<style>
+  .service-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  .service-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px -20px rgba(0, 0, 0, 0.8);
+  }
+
+  .service-card__header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+  }
+
+  .service-card__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+    color: var(--color-text);
+    flex-shrink: 0;
+  }
+
+  .service-card__icon-emoji {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .service-card__title {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: 600;
+  }
+
+  .service-card__tagline {
+    margin: 0;
+  }
+
+  .service-card__meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: var(--space-4);
+  }
+
+  .service-card__cta {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  :root[data-theme='dark'] .service-card {
+    background: color-mix(in srgb, var(--color-surface) 92%, white 2%);
+    border: 1px solid color-mix(in srgb, var(--color-border) 80%, white 8%);
+  }
+</style>

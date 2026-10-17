@@ -1,0 +1,10 @@
+# build
+dist/
+.astro/
+node_modules/
+# lighthouse scratch (qa/artifacts/lighthouse is the committed evidence)
+.lighthouseci/
+# env
+.env
+.env.*
+!.env.example

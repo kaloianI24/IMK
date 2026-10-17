@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 32" width="96" height="32" role="img" aria-label="IXI">
+  <title>IXI</title>
+  <g fill="#B01C3B">
+    <rect x="4" y="4" width="6" height="24" rx="1.5" />
+    <rect x="45" y="4" width="6" height="24" rx="1.5" />
+    <rect x="86" y="4" width="6" height="24" rx="1.5" />
+  </g>
+</svg>

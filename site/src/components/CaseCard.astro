@@ -1,0 +1,15 @@
+﻿---
+interface Props { href: string; title: string; sector: string; outcome: string; headingLevel?: 'h2' | 'h3'; }
+const { href, title, sector, outcome, headingLevel = 'h3' } = Astro.props;
+const Heading = headingLevel;
+---
+<a class="card" href={href} style="display:block;text-decoration:none;color:inherit;">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <span class="tag">Sample project</span>
+    <span class="muted" style="font-size:var(--text-xs);">{sector}</span>
+  </div>
+  <Heading style="margin-top:var(--space-4);margin-bottom:var(--space-2);font-size:var(--text-xl);font-weight:600;">{title}</Heading>
+  <p style="margin-top:var(--space-3);font-weight:600;">{outcome}</p>
+  <span style="display:inline-block;margin-top:var(--space-3);color:var(--color-primary);font-weight:600;">Read more →</span>
+</a
+>

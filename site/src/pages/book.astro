@@ -1,0 +1,91 @@
+﻿---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+const calendlyUrl = import.meta.env.CALENDLY_URL || 'https://calendly.com/ixi/15-min';
+---
+<BaseLayout title="Book a 15-minute call — IXI" description="Pick a time that suits. 15 minutes, no agenda, no pitch." path="/book">
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Book' }]} />
+    <h1>Book a 15-minute call</h1>
+    <p style="max-width:60ch;">No pitch deck. Pick a slot and we will meet to hear your situation. If we can help, we'll tell you what we'd do next and what it would cost.</p>
+  </section>
+
+  <section class="container section" style="padding-top:0;">
+    <p class="banner" style="max-width:60ch;"><strong>Third-party embed.</strong> Calendly loads Calendly's cookies. Treat this like a booking site. <a href="/privacy">Privacy details</a>.</p>
+
+    <div class="card" style="padding:0;overflow:hidden;margin-top:var(--space-4);">
+      <div id="calendly-slot" style="min-height:640px;display:flex;align-items:center;justify-content:center;">
+        <div id="calendly-facade" style="padding:var(--space-6);text-align:center;max-width:56ch;">
+          <p style="margin:0 auto var(--space-4);">The scheduler is a third-party embed, so it only loads when you ask for it — nothing from Calendly is requested until then.</p>
+          <button type="button" class="btn btn-primary" id="calendly-load" data-calendly={calendlyUrl}>Load the scheduler</button>
+          <p class="muted" style="font-size:var(--text-sm);margin:var(--space-3) 0 0;">Prefer a new tab? <a href={calendlyUrl}>Open Calendly directly</a>.</p>
+        </div>
+
+        <noscript>
+          <style>#calendly-facade{display:none;}</style>
+          <div style="padding:var(--space-6);width:100%;max-width:56ch;">
+            <p>JavaScript is off, so the inline calendar cannot load. <a href={calendlyUrl}>Book on Calendly directly.</a></p>
+            <h2 style="font-size:var(--text-xl);">Send a message instead</h2>
+            <form id="book-fallback" method="POST" action="/api/contact" accept-charset="UTF-8">
+              <div class="form-group"><label for="bf-name">Name *</label><input id="bf-name" name="name" type="text" required maxlength="80" autocomplete="name" /></div>
+              <div class="form-group"><label for="bf-email">Work email *</label><input id="bf-email" name="email" type="email" required maxlength="254" autocomplete="email" /></div>
+              <div class="form-group"><label for="bf-project">One thing you'd like fixed *</label><textarea id="bf-project" name="project" required maxlength="500"></textarea></div>
+              <input type="hidden" name="budget" value="not-sure" />
+              <input type="hidden" name="timeline" value="exploring" />
+              <div style="position:absolute;left:-9999px;top:auto;height:0;overflow:hidden;" aria-hidden="true">
+                <label for="bf-website">Website</label>
+                <input id="bf-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+              </div>
+              <input type="hidden" name="ts" value="" />
+              <div style="margin-top:var(--space-4);"><button type="submit" class="btn btn-primary">Send and I'll reply to arrange a time</button></div>
+            </form>
+          </div>
+        </noscript>
+      </div>
+    </div>
+
+    <p class="muted" style="margin-top:var(--space-4);" id="calendly-fallback" hidden>If the calendar doesn't load, <a href={calendlyUrl}>book here →</a>.</p>
+    <p class="muted" style="margin-top:var(--space-2);">Replies within one business day. Usually a few hours. No pitch call. No retainer requirement. No auto-renewal.</p>
+  </section>
+
+  <script>
+    // Progressive enhancement: request nothing from Calendly until the visitor asks for it.
+    const loadBtn = document.getElementById('calendly-load') as HTMLButtonElement | null;
+    const slot = document.getElementById('calendly-slot');
+    const fallback = document.getElementById('calendly-fallback');
+    const revealFallback = () => { if (fallback) fallback.hidden = false; };
+
+    if (loadBtn && slot) {
+      loadBtn.addEventListener('click', () => {
+        const url = loadBtn.dataset.calendly || '';
+
+        // preconnect only now — never in the global head
+        const preconnect = document.createElement('link');
+        preconnect.rel = 'preconnect';
+        preconnect.href = 'https://assets.calendly.com';
+        document.head.appendChild(preconnect);
+
+        // mount the widget into the reserved-height slot (no layout shift)
+        const widget = document.createElement('div');
+        widget.className = 'calendly-inline-widget';
+        widget.setAttribute('data-url', url);
+        widget.style.width = '100%';
+        widget.style.minWidth = '320px';
+        widget.style.height = '640px';
+        slot.textContent = '';
+        slot.appendChild(widget);
+
+        const script = document.createElement('script');
+        script.src = 'https://assets.calendly.com/assets/external/widget.js';
+        script.async = true;
+        script.addEventListener('error', revealFallback);
+        document.body.appendChild(script);
+
+        // Guard against a silently blocked/never-initialised embed.
+        window.setTimeout(() => {
+          if (!slot.querySelector('iframe')) revealFallback();
+        }, 8000);
+      });
+    }
+  </script>
+</BaseLayout>

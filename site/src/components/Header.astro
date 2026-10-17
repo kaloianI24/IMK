@@ -1,0 +1,35 @@
+﻿---
+import '../styles/global.css';
+import BrandMark from './BrandMark.astro';
+---
+<header class="header">
+  <div class="header-inner">
+    <a href="/" class="brand-wordmark" aria-label="IXI home">
+      <BrandMark variant="wordmark" height={22} />
+    </a>
+    <button class="burger" data-burger aria-label="Open menu" aria-expanded="false">
+      <span class="hamburger-bar"></span><span class="hamburger-bar"></span><span class="hamburger-bar"></span>
+    </button>
+    <nav class="nav" aria-label="Primary">
+      <a href="/services">Services</a>
+      <a href="/work">Work</a>
+      <a href="/process">Process</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/about">About</a>
+      <a href="/book" class="btn btn-primary btn-sm">Book a 15-minute call</a>
+    </nav>
+  </div>
+  <div class="drawer" data-drawer>
+    <div class="drawer-panel">
+      <nav aria-label="Mobile primary">
+        <a href="/services">Services</a>
+        <a href="/work">Work</a>
+        <a href="/process">Process</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/about">About</a>
+        <a href="/book" class="btn btn-primary" style="margin-top:var(--space-4);width:100%;">Book a 15-minute call</a>
+      </nav>
+    </div>
+  </div>
+</header
+>

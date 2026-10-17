@@ -1,0 +1,118 @@
+---
+interface Testimonial {
+  name: string;
+  role?: string;
+  company?: string;
+  rating?: number;
+  quote: string;
+}
+
+interface Props {
+  items?: Testimonial[];
+}
+
+const defaultItems: Testimonial[] = [
+  {
+    name: 'Alex R.',
+    role: 'Ops Lead',
+    company: 'IXI Client',
+    rating: 5,
+    quote:
+      "Clear plan, clean handover, and it actually just works. Saved us hours every week without adding complexity.",
+  },
+  {
+    name: 'Morgan T.',
+    role: 'Founder',
+    company: 'Service Business',
+    rating: 5,
+    quote:
+      'The automation was built in our own accounts with a proper runbook. Zero lock-in, exactly what we needed.',
+  },
+  {
+    name: 'Jordan K.',
+    role: 'RevOps',
+    company: 'B2B Team',
+    rating: 5,
+    quote:
+      'Pragmatic, focused on the thing that actually moves the needle. Reliable from day one.',
+  },
+];
+
+const { items = defaultItems } = Astro.props;
+---
+
+<section class="container section testimonials" id="testimonials">
+  <p class="eyebrow">What our clients say</p>
+  <h2>Testimonials</h2>
+  <div class="testimonials__grid">
+    {items.map((item) => (
+      <article class="testimonial-card">
+        <div class="testimonial-card__stars" aria-label={`${item.rating ?? 5} out of 5 stars`}>
+          {Array.from({ length: item.rating ?? 5 }).map(() => (
+            <span aria-hidden="true">★</span>
+          ))}
+        </div>
+        <p class="testimonial-card__quote">“{item.quote}”</p>
+        <div class="testimonial-card__meta">
+          <span class="testimonial-card__name">{item.name}</span>
+          {(item.role || item.company) && (
+            <span class="testimonial-card__role">
+              {[item.role, item.company].filter(Boolean).join(' · ')}
+            </span>
+          )}
+        </div>
+      </article>
+    ))}
+  </div>
+</section>
+
+<style>
+  .testimonials__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--space-4);
+    margin-top: var(--space-4);
+  }
+
+  .testimonial-card {
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: var(--space-4);
+    background: var(--color-surface);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .testimonial-card__stars {
+    color: var(--color-primary);
+    font-size: 1rem;
+    letter-spacing: 2px;
+  }
+
+  .testimonial-card__quote {
+    margin: 0;
+    line-height: 1.7;
+  }
+
+  .testimonial-card__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: auto;
+  }
+
+  .testimonial-card__name {
+    font-weight: 600;
+  }
+
+  .testimonial-card__role {
+    color: var(--color-text-muted, var(--text-muted));
+    font-size: var(--text-sm);
+  }
+
+  :root[data-theme='dark'] .testimonial-card {
+    background: color-mix(in srgb, var(--color-surface) 92%, white 2%);
+    border: 1px solid color-mix(in srgb, var(--color-border) 80%, white 8%);
+  }
+</style>

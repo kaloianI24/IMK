@@ -1,0 +1,26 @@
+﻿---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import CtaBand from '../components/CtaBand.astro';
+---
+<BaseLayout title="About — IXI" description="IXI builds automations that still work in month six. Small team, plain tools, owned outcomes." path="/about">
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'About' }]} />
+    <h1>About IXI</h1>
+    <p style="max-width:60ch;">We are a small team that designs, builds and hands over automations for owners who are tired of doing manually what their tools could do for them.</p>
+  </section>
+  <section class="container section" style="padding-top:0;">
+    <div class="prose">
+      <h2>What we believe</h2>
+      <p>Automation that breaks silently is worse than no automation. So we monitor, document and hand over.</p>
+      <h2>Platform neutrality</h2>
+      <p>We are not tied to a single tool. We choose whatever is simplest for your team to maintain, and we only recommend platforms where we would do the maintenance ourselves.</p>
+      <h2>Sample work, real numbers</h2>
+      <p>Until a client consents to being named, case studies stay labelled "sample". Metrics are provisional until attested by the owner who lived them.</p>
+      <h2>Engagements we decline</h2>
+      <p>Projects without a named owner on your side. Projects where the honest answer is "do nothing yet". Anything that requires fabricating metrics or testimonials.</p>
+    </div>
+  </section>
+  <CtaBand title="Meet us for 15 minutes" text="Tell us your situation. We'll tell you honestly whether we can help." ctaLabel="Book a 15-minute call" ctaHref="/book" />
+</BaseLayout
+>

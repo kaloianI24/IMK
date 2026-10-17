@@ -1,0 +1,133 @@
+﻿---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../types/contracts';
+---
+<BaseLayout title="Pricing — IXI" description="Automation audit from £600. Fixed-scope builds, automation care monthly. No hourly billing, no surprise retainers." path="/pricing" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Pricing' }]} />
+    <h1>Pricing</h1>
+    <p style="max-width:60ch;">Fixed scope, starting prices. We quote after an audit or a scoping call. Nothing is billed hourly — ever.</p>
+  </section>
+
+  <section class="container section" style="padding-top:0;">
+    <div class="grid-3">
+      <div class="card">
+        <p class="eyebrow">Audit</p>
+        <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;">Automation audit</h2>
+        <p style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">from £600</p>
+        <p class="muted">10 working days · written report · one scoped quick win.</p>
+        <ul class="muted">
+          <li>Process inventory (hours/week)</li>
+          <li>Ranked automation roadmap</li>
+          <li>Cost vs time estimates</li>
+        </ul>
+        <a class="btn btn-secondary" style="margin-top:var(--space-4);" href="#apply">Start an audit</a>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Build</p>
+        <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;">Fixed-scope build</h2>
+        <p style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">£1,500 – £15,000+</p>
+        <p class="muted">Agreed in writing at kickoff. Timeline fixed.</p>
+        <ul class="muted">
+          <li>Workflow automation, agents, integrations</li>
+          <li>Runbook + handover ownership</li>
+          <li>Monitoring + alerts</li>
+        </ul>
+        <a class="btn btn-secondary" style="margin-top:var(--space-4);" href="#apply">Scope a build</a>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Care</p>
+        <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;">Automation Care</h2>
+        <p style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">from £150/mo</p>
+        <p class="muted">Same-week critical fixes, monthly health check, API guard.</p>
+        <ul class="muted">
+          <li>Alerts on silent failures</li>
+          <li>1 business-day ticket response</li>
+          <li>Same-week critical fixes</li>
+        </ul>
+        <a class="btn btn-secondary" style="margin-top:var(--space-4);" href="#apply">Learn about Care</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="container section" id="apply">
+    <h2>Apply (start an audit or scope a build)</h2>
+    <p class="muted" style="max-width:60ch;">Free text. We reply within 2 business days. Quote "apply" gets you on the audit track. Client logos or case studies only appear with written consent (see privacy).</p>
+    <form id="ixi-contact" method="POST" action="/api/contact" accept-charset="UTF-8" style="max-width:640px;">
+      <div class="form-group"><label for="name">Name *</label><input id="name" name="name" type="text" required maxlength="80" autocomplete="name" /></div>
+      <div class="form-group"><label for="email">Email *</label><input id="email" name="email" type="email" required maxlength="254" autocomplete="email" /></div>
+      <div class="form-group"><label for="company">Company</label><input id="company" name="company" type="text" maxlength="120" autocomplete="organization" /></div>
+      <div class="form-group"><label for="budget">Budget *</label>
+        <select id="budget" name="budget" required>
+          <option value="" disabled selected>Select</option>
+          {BUDGET_ENUM.map(b => <option value={b}>{BUDGET_LABELS[b as keyof typeof BUDGET_LABELS]}</option>)}
+        </select>
+      </div>
+      <div class="form-group"><label for="timeline">Timeline *</label>
+        <select id="timeline" name="timeline" required>
+          <option value="" disabled selected>Select</option>
+          {TIMELINE_ENUM.map(t => <option value={t}>{TIMELINE_LABELS[t as keyof typeof TIMELINE_LABELS]}</option>)}
+        </select>
+      </div>
+      <div class="form-group"><label for="project">Project description *</label><textarea id="project" name="project" required maxlength="500" placeholder="What manual process, ticket queue or integration is the pain?"></textarea></div>
+      <div style="position:absolute;left:-9999px;top:auto;height:0;overflow:hidden;" aria-hidden="true">
+        <label for="website">Website</label>
+        <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+      {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
+        <div style="margin:var(--space-4) 0;">
+          <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} data-theme="auto"></div>
+        </div>
+      )}
+      <input type="hidden" name="ts" id="ts" value="" />
+      <div id="form-result" class="banner" style="display:none;margin-top:var(--space-4);" role="status" aria-live="polite"></div>
+      <div style="margin-top:var(--space-4);">
+        <button type="submit" class="btn btn-primary">Send inquiry</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="container section">
+    <h2>Care plans in detail</h2>
+    <p class="muted">Automation Care is the same monthly retainer regardless of what we build: alerts on silent failures, 1-business-day ticket response, same-business-week critical fixes. Audit and build pricing are independent and there is no hourly billing.</p>
+    <div class="callout">
+      <strong>Ownership clause.</strong> Automations, accounts, data and runbooks are yours from day one. If we ever stop working together, you keep running them — nothing is held hostage.
+    </div>
+    <p class="muted" style="margin-top:var(--space-6);max-width:60ch;">All case studies and metrics labelled "sample" pending client attestation. ⚠️ PROVISIONAL</p>
+  </section>
+
+  <script>
+    const form = document.getElementById('ixi-contact') as HTMLFormElement | null;
+    const result = document.getElementById('form-result');
+    const ts = document.getElementById('ts') as HTMLInputElement | null;
+    if (ts) ts.value = String(Date.now());
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const fd = new FormData(form);
+        const payload = {
+          name: String(fd.get('name') || ''),
+          email: String(fd.get('email') || ''),
+          company: String(fd.get('company') || ''),
+          project: String(fd.get('project') || ''),
+          budget: fd.get('budget'),
+          timeline: fd.get('timeline'),
+          website: String(fd.get('website') || ''),
+          ts: Number(fd.get('ts')) || Date.now(),
+          turnstileToken: String(fd.get('cf-turnstile-response') || ''),
+        };
+        const res = await fetch('/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json().catch(() => ({}));
+        if (result) { result.style.display = 'block'; }
+        if (res.ok && data && data.ok) {
+          window.location.href = '/thank-you';
+        } else {
+          if (result) { result.textContent = (data && data.error) ? data.error : 'Sorry, something went wrong.'; result.style.borderColor = 'var(--color-error)'; }
+        }
+      });
+    }
+  </script>
+  {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && <script async src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</BaseLayout
+>

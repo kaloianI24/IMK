@@ -1,0 +1,74 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection, render } from 'astro:content';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import Faq from '../../components/Faq.astro';
+import CtaBand from '../../components/CtaBand.astro';
+
+export async function getStaticPaths() {
+  const services = await getCollection('services');
+  return services.map(s => ({ params: { slug: s.id }, props: { service: s } }));
+}
+const { service } = Astro.props;
+const { Content } = await render(service);
+const d = service.data;
+const slug = service.id;
+const sd = { "@context": "https://schema.org", "@type": "Service", "name": d.title, "description": d.tagline, "offers": { "@type": "Offer", "priceSpecification": d.startingAt } };
+---
+<BaseLayout title={`${d.title} — IXI`} description={d.summary} path={`/services/${slug}`} structuredData={sd} stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Services', href: '/services' }, { label: d.title }]} />
+    <p class="eyebrow">{d.whoFor}</p>
+    <h1>{d.title}</h1>
+    <p style="font-size:var(--text-xl);max-width:55ch;">{d.tagline}</p>
+    <div style="margin-top:var(--space-4);"><span class="tag">{d.startingAt}</span> <span class="muted" style="margin-left:var(--space-3);">{d.timeline}</span></div>
+    <div style="margin-top:var(--space-6);display:flex;gap:var(--space-3);">
+      <a class="btn btn-primary" href="/book">Book a 15-minute call</a>
+      <a class="btn btn-secondary" href="/pricing">See pricing</a>
+    </div>
+  </section>
+
+  <section class="container section" style="padding-top:0;">
+    <h2>The problem</h2>
+    <p style="max-width:60ch;">{d.problem}</p>
+  </section>
+
+  <section class="container section">
+    <div class="grid-2">
+      <div>
+        <h2>What you get</h2>
+        <ul>{d.deliverables.map(x => <li>{x}</li>)}</ul>
+      </div>
+      <div>
+        <h2>How it works</h2>
+        <ol>{d.howItWorks.map(x => <li><strong>{x.title}</strong> — {x.body}</li>)}</ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="container section">
+    <div class="grid-2">
+      <div>
+        <h2>In scope</h2>
+        <ul>{d.inScope.map(x => <li>{x}</li>)}</ul>
+      </div>
+      <div>
+        <h2>Out of scope</h2>
+        <ul>{d.outOfScope.map(x => <li>{x}</li>)}</ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="container section">
+    <h2>Sustainability</h2>
+    <p>Care option: {d.careOption}</p>
+    <p class="callout">Ownership: credentials and accounts are yours from day one. See <a href="/process">how we hand over</a>.</p>
+  </section>
+
+  <Faq items={d.faq} />
+  <CtaBand title="Ready to start?" text={d.caseSnapshot} ctaLabel="Start an automation audit" ctaHref="/pricing#apply?offer=audit" />
+
+  <section class="container section">
+    <div class="prose"><Content /></div>
+  </section>
+</BaseLayout>

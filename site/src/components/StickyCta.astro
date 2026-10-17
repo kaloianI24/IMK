@@ -1,0 +1,11 @@
+﻿---
+interface Props { label: string; href: string; }
+const { label, href } = Astro.props;
+---
+<div class="sticky-cta" data-sticky-cta>
+  <div class="card">
+    <span class="muted" style="font-size:var(--text-sm);">Ready to save the hours?</span>
+    <a class="btn btn-primary btn-sm" href={href}>{label}</a>
+  </div>
+</div
+>

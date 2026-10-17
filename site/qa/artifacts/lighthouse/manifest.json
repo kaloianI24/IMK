@@ -1,0 +1,242 @@
+[
+  {
+    "url": "http://localhost:59324/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/services/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/services/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/services/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/services/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/pricing/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/pricing/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/pricing/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/pricing/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/book/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/book/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/book/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/book/",
+    "isRepresentativeRun": false,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/",
+    "isRepresentativeRun": true,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/services/",
+    "isRepresentativeRun": true,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_services_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/pricing/",
+    "isRepresentativeRun": true,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_pricing_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  },
+  {
+    "url": "http://localhost:59324/book/",
+    "isRepresentativeRun": true,
+    "htmlPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.html",
+    "jsonPath": "C:\\Users\\Kalch\\Documents\\IXI\\site\\qa\\artifacts\\lighthouse\\_book_.report.json",
+    "summary": {
+      "performance": 1,
+      "accessibility": 1,
+      "best-practices": 1,
+      "seo": 1
+    }
+  }
+]

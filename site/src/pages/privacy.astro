@@ -1,0 +1,19 @@
+﻿---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+<BaseLayout title="Privacy — IXI" description="What IXI collects and how it is used." path="/privacy" noindex={true}>
+  <section class="container section">
+    <h1>Privacy notice</h1>
+    <div class="prose">
+      <h2>Who we are</h2><p>IXI is the data controller for this site.</p>
+      <h2>What we collect via the inquiry form</h2><p>Name, email, company, project description, budget, timeline, and an IP address (hashed with a per-deploy pepper, never stored in plain text). Timestamps and a honeypot field.</p>
+      <h2>Purpose and legal basis</h2><p>To respond to your inquiry and scope a potential engagement (contract performance / legitimate interest).</p>
+      <h2>Retention</h2><p>Inquiry emails are deleted after 24 months. Aggregate counters only are logged; message bodies and IPs are not sent to third-party analytics.</p>
+      <h2>Third parties</h2><p>Cloudflare Pages (hosting, WAF), Resend (email delivery), and cookieless analytics (Plausible/Umami). No third-party advertising cookies.</p>
+      <h2>Cookies</h2><p>None for analytics. Only strictly necessary browser storage if you opt into our scheduling tool (Calendly).</p>
+      <h2>Your rights</h2><p>Access, rectification, erasure, restriction, portability, objection. Email the address on the inquiry confirmation.</p>
+      <p class="muted">This is a working draft. Have legal review before launch.</p>
+    </div>
+  </section>
+</BaseLayout
+>

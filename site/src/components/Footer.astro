@@ -1,0 +1,43 @@
+﻿---
+import BrandMark from './BrandMark.astro';
+---
+<footer class="footer">
+  <div class="footer-grid">
+    <section>
+      <h2 class="footer-brand"><span class="brand-wordmark"><BrandMark variant="lockup" height={32} /></span><span class="sr-only">IXI</span></h2>
+      <p class="muted">Automations that still work in month six. We design, build and hand over systems your team owns from day one.</p>
+      <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-4);">All case studies labelled "sample" until a client consents to being named.</p>
+    </section>
+    <section>
+      <h3>Services</h3>
+      <ul>
+        <li><a href="/services/workflow-automation">Workflow automation</a></li>
+        <li><a href="/services/b2b-ai-agent">B2B AI agent</a></li>
+        <li><a href="/services/audit">Automation audit</a></li>
+        <li><a href="/services/integration">Integration services</a></li>
+      </ul>
+    </section>
+    <section>
+      <h3>Company</h3>
+      <ul>
+        <li><a href="/work">Work (sample)</a></li>
+        <li><a href="/process">Process</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/about">About</a></li>
+        <li><a href="/book">Book a call</a></li>
+      </ul>
+    </section>
+    <section>
+      <h3>Legal</h3>
+      <ul>
+        <li><a href="/privacy">Privacy</a></li>
+        <li><a href="/terms">Terms</a></li>
+        <li><a href="/sitemap-index.xml">Sitemap</a></li>
+      </ul>
+    </section>
+  </div>
+  <div class="container" style="margin-top:var(--space-8);border-top:1px solid var(--color-border);padding-top:var(--space-4);">
+    <p class="muted" style="font-size:var(--text-xs);">© {new Date().getFullYear()} IXI. All rights reserved.</p>
+  </div>
+</footer
+>

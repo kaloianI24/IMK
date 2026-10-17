@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="IXI">
+  <title>IXI</title>
+  <style>
+    @media (prefers-color-scheme: dark) { circle { fill: #121012; } g { fill: #E04B67; } }
+    @media (prefers-color-scheme: light) { circle { fill: #F7F1E8; } g { fill: #B01C3B; } }
+  </style>
+  <circle cx="16" cy="16" r="15" />
+  <g fill="#B01C3B" stroke="none">
+    <rect x="6" y="8" width="4" height="16" rx="1" />
+    <rect x="14" y="8" width="4" height="16" rx="1" />
+    <rect x="22" y="8" width="4" height="16" rx="1" />
+  </g>
+</svg>

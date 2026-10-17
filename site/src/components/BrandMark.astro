@@ -1,0 +1,37 @@
+---
+// Real owner artwork — path data traced from ../Logo exports by
+// scripts/gen-brand.mjs (see src/brand/logo.ts, the single source of truth).
+// Fill colours come from the --brand-* tokens so the mark follows the theme:
+//   light: symbol + wordmark both brand red #720606
+//   dark:  symbol native grey #CCCCCC, wordmark dark-safe red #EF7D7D
+// The symbol path has nested contours — fill-rule="evenodd" is required.
+import { WORDMARK, SYMBOL } from '../brand/logo';
+
+interface Props {
+  /** lockup = symbol + wordmark side by side (header/footer); symbol or wordmark alone otherwise. */
+  variant?: 'lockup' | 'symbol' | 'wordmark';
+  /** Rendered height in px: of the symbol (lockup/symbol) or of the wordmark (wordmark). */
+  height?: number;
+}
+
+const { variant = 'lockup', height = 28 } = Astro.props;
+
+// The owner's stacked FullLogo sets the wordmark cap-height at ~21% of the
+// symbol, tuned for a vertical stack. For a side-by-side web lockup that makes
+// "IXI" illegible at nav size, so the wordmark is scaled to 62% of the symbol
+// height — proportions of the artwork, arrangement adapted to a nav bar.
+const symbolHeight = variant === 'wordmark' ? 0 : height;
+const symbolWidth = (SYMBOL.width / SYMBOL.height) * symbolHeight;
+const wordHeight = variant === 'wordmark' ? height : Math.round(height * 0.62 * 10) / 10;
+const wordWidth = (WORDMARK.width / WORDMARK.height) * wordHeight;
+---
+{variant !== 'wordmark' && (
+  <svg width={symbolWidth} height={symbolHeight} viewBox={`0 0 ${SYMBOL.width} ${SYMBOL.height}`} aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <path d={SYMBOL.d} fill="var(--brand-mark)" fill-rule="evenodd" />
+  </svg>
+)}
+{variant !== 'symbol' && (
+  <svg width={wordWidth} height={wordHeight} viewBox={`0 0 ${WORDMARK.width} ${WORDMARK.height}`} aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <path d={WORDMARK.d} fill="var(--brand-word)" fill-rule="evenodd" />
+  </svg>
+)}

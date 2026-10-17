@@ -1,0 +1,22 @@
+﻿---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection } from 'astro:content';
+import CaseCard from '../../components/CaseCard.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+
+const cases = await getCollection('cases');
+cases.sort((a, b) => (a.data.order ?? 1) - (b.data.order ?? 1));
+---
+<BaseLayout title="Work — IXI" description="Sample case studies from IXI: hours reduced, agents, integrations." path="/work" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Work' }]} />
+    <h1>Work</h1>
+    <p style="max-width:60ch;">Everything below is labelled <strong>sample project</strong> until a client consents to being named. Numbers will be attested before the tag is removed.</p>
+    <div class="grid-3" style="margin-top:var(--space-6);">
+      {cases.map(c => (
+        <CaseCard href={`/work/${c.id}`} title={c.data.title} sector={c.data.sector} outcome={c.data.outcome} headingLevel="h2" />
+      ))}
+    </div>
+  </section>
+</BaseLayout
+>

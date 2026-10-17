@@ -1,0 +1,181 @@
+﻿---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ServiceCard from '../components/ServiceCard.astro';
+import CaseCard from '../components/CaseCard.astro';
+import Faq from '../components/Faq.astro';
+import CtaBand from '../components/CtaBand.astro';
+import Testimonials from '../components/Testimonials.astro';
+import ReviewForm from '../components/ReviewForm.astro';
+import BrandMark from '../components/BrandMark.astro';
+import { getCollection } from 'astro:content';
+
+const services = await getCollection('services');
+services.sort((a, b) => a.data.order - b.data.order);
+const cases = await getCollection('cases');
+cases.sort((a, b) => (a.data.order ?? 1) - (b.data.order ?? 1));
+
+const serviceIcons: Record<string, string> = {
+  'workflow-automation.md': 'workflow',
+  'b2b-ai-agent.md': 'bot',
+  'integration.md': 'plug',
+  'audit.md': 'search-check',
+};
+
+const globalFaq = [
+  { q: "What do you actually deliver?", a: "A working system, documentation (runbook), and ownership of every credential. Nothing is held hostage." },
+  { q: "Who owns the automations, accounts and data — and how do I leave or take them over?", a: "You do. Everything is built in your own accounts under your control; runbooks and credentials are handed over. If we stop working together, you keep running everything — nothing is held hostage." },
+  { q: "What happens if an automation breaks silently?", a: "Monitoring alerts you immediately. Under Automation Care we respond to tickets within 1 business day and ship critical fixes the same week." },
+  { q: "How much does it cost?", a: "Audit from £600, fixed-scope builds from £1,500, Automation Care monthly. Rough anchors on /pricing." },
+  { q: "Do you work outside the UK?", a: "Yes — async-friendly, English-speaking owners; delivery is remote." },
+];
+
+const sd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "ProfessionalService",
+    "name": "IXI",
+    "description": "Automation agency: workflow automation, B2B AI agents, integration, automation audit.",
+    "priceRange": "£600-£15,000+",
+  },
+];
+---
+<BaseLayout
+  title="IXI — Automations that still work in month six"
+  description="We design, build and hand over automation systems your team owns from day one: workflow automation, B2B AI agents, integrations and audits."
+  path="/"
+  structuredData={sd}
+  stickyCta={{ label: "Start an automation audit", href: "/pricing#apply?offer=audit" }}
+>
+  <section class="container section hero-section">
+    <div class="hero-section__glow" aria-hidden="true"></div>
+    <div
+      class="hero-section__logo-wrapper"
+      role="img"
+      aria-label="IXI logo"
+      style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-4)"
+    >
+      <BrandMark variant="symbol" height={160} />
+    </div>
+    <h1>Automations that still work in month six.</h1>
+    <p style="font-size:var(--text-xl);max-width:48ch;">
+      We design, build and hand over the repetitive systems your team uses — so you own them forever, and they stop working only when your business stops.
+    </p>
+    <div style="display:flex;gap:var(--space-3);flex-wrap:wrap;margin-top:var(--space-6);">
+      <a class="btn btn-primary" href="/pricing#apply?offer=audit">Start an automation audit</a>
+      <a class="btn btn-secondary" href="/book">Book a 15-minute call</a>
+    </div>
+    <div style="margin-top:var(--space-8);display:flex;gap:var(--space-6);flex-wrap:wrap;" class="muted">
+      <span>⚡ 4 services, all built in your own accounts</span>
+      <span>🛡️ Runbook + ownership handed over</span>
+      <span>📈 Same-week critical fixes (Automation Care)</span>
+    </div>
+  </section>
+
+  <section class="container section social-proof">
+    <p class="social-proof__text">Built for teams that need reliable automation.</p>
+  </section>
+
+  <Testimonials />
+
+  <section class="container section">
+    <p class="eyebrow">Services</p>
+    <h2>What we build</h2>
+    <div class="grid-2">
+      {services.map(s => (
+        <ServiceCard
+          href={`/services/${s.id.replaceAll('.md','')}`}
+          title={s.data.title}
+          tagline={s.data.tagline}
+          startingAt={s.data.startingAt}
+          icon={serviceIcons[s.id]}
+        />
+      ))}
+    </div>
+  </section>
+
+  <section class="container section">
+    <p class="eyebrow">How it works</p>
+    <h2>Five steps from hours to a system that runs itself.</h2>
+    <div class="grid-2">
+      <div><h3>1. Map it</h3><p class="muted">We meet the task owner, count hours, trace every step.</p></div>
+      <div><h3>2. Design it</h3><p class="muted">The simplest automation that works, agreed in writing.</p></div>
+      <div><h3>3. Build + test</h3><p class="muted">In a sandbox with real data, edge cases included.</p></div>
+      <div><h3>4. Go live softly</h3><p class="muted">Parallel run, then turn the manual process off.</p></div>
+      <div><h3>5. Hand over</h3><p class="muted">You own it. Care is optional after that.</p></div>
+    </div>
+  </section>
+
+  <section class="container section">
+    <p class="eyebrow">Work (sample)</p>
+    <h2>Recent projects</h2>
+    <p class="muted">Every case study is labelled "sample" until a client consents to being named.</p>
+    <div class="grid-3" style="margin-top:var(--space-4);">
+      {cases.map(c => (
+        <CaseCard href={`/work/${c.id.replaceAll('.md','')}`} title={c.data.title} sector={c.data.sector} outcome={c.data.outcome} />
+      ))}
+    </div>
+  </section>
+
+  <ReviewForm />
+
+  <Faq heading="Questions before you book a call" items={globalFaq} />
+
+  <CtaBand title="Want a written plan before you spend anything?" text="An automation audit costs from £600 and gives you a ranked roadmap plus one scoped quick win in 10 working days." ctaLabel="Start an automation audit" ctaHref="/pricing#apply?offer=audit" />
+</BaseLayout>
+
+<style>
+  .hero-section {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding-top: var(--space-8);
+    padding-bottom: var(--space-8);
+    overflow: hidden;
+  }
+
+  .hero-section__glow {
+    position: absolute;
+    top: 10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(680px, 80vw);
+    height: min(360px, 50vw);
+    background: radial-gradient(circle, rgba(114, 6, 6, 0.08) 0%, rgba(114, 6, 6, 0) 70%);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .hero-section__logo-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+    padding-inline: var(--space-4);
+    max-width: 100%;
+  }
+
+  .hero-section__logo-wrapper svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  :root[data-theme='dark'] .hero-section__glow {
+    background: radial-gradient(circle, rgba(239, 125, 125, 0.06) 0%, rgba(239, 125, 125, 0) 70%);
+  }
+
+  .social-proof {
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-2);
+    text-align: center;
+  }
+
+  .social-proof__text {
+    margin: 0;
+    color: var(--color-text-muted, var(--text-muted));
+    font-size: var(--text-lg);
+  }
+</style>
