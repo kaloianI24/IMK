@@ -1,0 +1,44 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import CtaBand from '../components/CtaBand.astro';
+---
+
+<BaseLayout title="Tools & stack — IMK" description="The software IMK uses to build automations: n8n and Python now, Make.com and Zapier on the exploring list." path="/automations">
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Tools & stack' }]} />
+    <h1>Tools & stack</h1>
+    <p style="max-width:60ch;">Here's the honest list of software we actually use to build automations — and what we're learning next. Nothing here is over-promised.</p>
+  </section>
+
+  <section class="container section" style="padding-top:0;">
+    <h2 style="font-size:var(--text-xl);margin-bottom:var(--space-4);">Working with now</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="margin:0 0 var(--space-3);font-size:var(--text-lg);">n8n</h3>
+        <p class="muted" style="margin:0;">Workflow automation. We use it to connect apps and move data between them — for example, watching an inbox, summarising new messages, and delivering a suggested reply to Telegram.</p>
+        <p style="margin-top:var(--space-4);font-size:var(--text-sm);"><a href="/work">See the email-triage case study →</a></p>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 var(--space-3);font-size:var(--text-lg);">Python</h3>
+        <p class="muted" style="margin:0;">Custom scripts and integrations. Small, ownable code for things a no-code tool can't do cleanly — data transforms, API glue, and scheduled jobs that run in your accounts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="container section">
+    <h2 style="font-size:var(--text-xl);margin-bottom:var(--space-4);">Exploring / on the roadmap</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="margin:0 0 var(--space-3);font-size:var(--text-lg);">Make.com</h3>
+        <p class="muted" style="margin:0;">We're learning Make's modules and comparing them against n8n's flexibility. Not yet offered as a delivery service — no client work runs on it yet.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 var(--space-3);font-size:var(--text-lg);">Zapier</h3>
+        <p class="muted" style="margin:0;">On the exploring list. We haven't built or sold a Zapier-based automation, so we won't claim we have.</p>
+      </div>
+    </div>
+  </section>
+
+  <CtaBand title="Have an automation in mind?" text="Tell us what you'd like to offload and we'll tell you honestly whether n8n, Python, or something else is the right fit." ctaLabel="Book a 15-minute call" ctaHref="/book" />
+</BaseLayout>

@@ -1,0 +1,282 @@
+IMK QA -- FULL RE-RUN, 2026-10-20
+started: 2026-10-21 20:10:59 +03:00
+repo:    C:\Users\Kalch\Documents\IXI
+node:    v20.19.5
+git HEAD: 8303af9
+
+========================================================================
+SUITE: qa-testimonials.mjs (API, real handlers)
+node qa\qa-testimonials.mjs --keep --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-testimonials-results.json
+========================================================================
+[qa] sandbox : C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-21T17-10-59-643Z
+[qa] endpoint: http://127.0.0.1:4399 (never 4321)
+[qa] server up on http://127.0.0.1:4399
+[qa] fixtures ready (sandbox only)
+  PASS  A1  POST /api/contact type=review (JSON) -> 410 review-moved
+  PASS  A2  POST /api/contact type=review (form) -> 410
+  PASS  A3  a refused review writes NOTHING (no record, no e-mail)
+  PASS  A4  control: a normal contact inquiry still works (200)
+  PASS  B1  GET without a session -> 401
+  PASS  B2  POST without a session -> 401
+  PASS  B3  GET another client's project -> 404 (no id probing)
+  PASS  B4  POST to another client's project -> 404
+  PASS  B5  POST for an unfinished project -> 409
+  PASS  B6  POST submit without consent.p1 -> 400 consent-required, nothing stored
+  PASS  B7  POST with a wrong Origin -> 403
+  PASS  B8  POST with no Origin at all -> 403
+  PASS  B9  POST as the owner (admin session) -> 403
+  PASS  B10  6th submission within the hour -> 429 rate-limit
+  PASS  B11  PATCH /api/portal/testimonials -> 405
+  PASS  B12  POST with an unknown action -> 400 validation
+  PASS  B13  POST with an out-of-range rating -> 400 fields
+  PASS  B14  POST with an empty quote -> 400 fields
+  PASS  B15  POST with a quote over 1000 chars -> 400 fields
+  PASS  B16  POST with a displayName over 80 chars -> 400 fields
+  PASS  B17  GET without projectId -> 400
+  PASS  B18  GET an unknown project -> 404
+  PASS  C1  submit -> 200, server-derived identity, client-safe view
+  PASS  C2  the owner IS notified with a signed one-click link
+  PASS  C3  spoofed body fields are ignored (verifiedClient / source / name / company / role)
+  PASS  C4  snooze -> 200, state snoozed, project marked snoozed
+  PASS  C5  owner re-requests -> GET shows no stale answer (the card returns)
+  PASS  C6  decline -> 200, state declined
+  PASS  C7  decline is final -> a second decline is 409 declined
+  PASS  C8  the client view never carries the e-mail or internal ids
+  PASS  C9  an approved quote is publishable: the owner approves it
+  PASS  D1  POST /api/portal/invites as a client -> 403
+  PASS  D2  POST /api/portal/invites without a session -> 403
+  PASS  D3  POST /api/portal/invites with a wrong Origin -> 403
+  PASS  D4  POST /api/portal/invites with an invalid e-mail -> 400
+  PASS  D5  the first sign-in creates the client record from the INVITE (not the e-mail local part)
+  PASS  D6  upsert: an omitted name is kept, a new company reaches the client record
+  PASS  D7  an over-cap company -> 400, nothing written
+  PASS  D8  an empty string clears the field on both records
+  PASS  D9  an over-cap name -> 400
+  PASS  D10  a second invite for the same e-mail does not duplicate the record
+  PASS  D11  GET /api/portal/invites -> 404 (owner-only POST endpoint)
+  PASS  E1  missing parameters -> 400
+  PASS  E2  an invalid decision -> 400
+  PASS  E3  an expired link -> 400 expired
+  PASS  E4  a timestamp far in the future -> 400 expired
+  PASS  E5  no FORM_WEBHOOK_SECRET -> 500 misconfigured (fails closed)
+  PASS  E6  a forged signature -> 400 signature
+  PASS  E7  a valid signature for an unknown ref -> 404
+  PASS  E8  a valid signature approves the record
+  PASS  E9  the one-click link is idempotent (no second decision, no new line)
+  PASS  E10  a reject decision is honoured
+  PASS  F1  a client who withdraws after approval produces a revoked record
+  PASS  F2  the revoked record is the newest line for the ref (later lines win)
+  PASS  F3  an anonymous quote (p2=false) is approved and stays anonymous in the store
+  PASS  G1  M1 FIXED ΓÇö no identity is stored when the client withheld naming consent (p2=false)
+  PASS  G2  M2 FIXED ΓÇö the stored record no longer carries session.email
+  PASS  G3  M3 FIXED ΓÇö one malformed line answers 500 storage instead of silently emptying the collection
+  PASS  G4  M4 FIXED ΓÇö no sign-in token is written to the log in production
+  PASS  G5  M5 FIXED ΓÇö the approve link may only approve the revision the owner was shown
+  PASS  G6  M6 FIXED ΓÇö the Cloudflare twin has a notification path
+  PASS  G7  m6 FIXED ΓÇö a malformed submission does not burn a rate-limit slot
+  PASS  G8  M3b FIXED - a malformed line in invited.jsonl answers 500 storage instead of locking a client out
+  PASS  G9  M3c FIXED - a malformed line in reviews.jsonl answers 500 storage instead of 404
+  PASS  G10  m6 FIXED ΓÇö snooze and decline are rate-limited
+  PASS  H1  P-7: an unknown e-mail gets the SAME generic answer and no sign-in token
+  PASS  H2  a magic-link token is single-use (a second verify is 400)
+  PASS  H3  the session cookie is HttpOnly + SameSite=Strict
+  PASS  H4  m4: with an http base URL the cookie carries no Secure flag
+  PASS  H5  every body-bearing response declares the correct Content-Length
+[qa] 81 passed, 0 failed, 81 checks
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-21T17-10-59-643Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-testimonials-results.json
+exit code: 0
+
+========================================================================
+SUITE: qa-testimonials-build.mjs (real astro build)
+node qa\qa-testimonials-build.mjs --sandbox C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-21T17-10-59-643Z
+========================================================================
+[qa] api sandbox  : C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-21T17-10-59-643Z
+[qa] build sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-21T17-11-00-373Z
+  PASS  BUILD-1  the pre-withdrawal store builds the site (exit 0) ΓÇö 7297 ms
+  PASS  BUILD-2  the approved, named quote is rendered with the client name and the verified badge ΓÇö Alice L
+  PASS  BUILD-3  a quote with consent.p2=false is rendered WITHOUT a name and WITHOUT a badge ΓÇö anonymous quote rendered, 4 badge(s) == 4 named quote(s)
+  PASS  BUILD-4  the set of rendered quotes is exactly the publishable set ΓÇö 5 published, 8 withheld
+  PASS  BUILD-5  the empty-state copy is absent while quotes exist ΓÇö ok
+  PASS  BUILD-6  the build emits no "collection does not exist or is empty" warning ΓÇö 0 warnings
+  PASS  BUILD-7  CONTROL: the not-yet-withdrawn quote IS published before the withdrawal ΓÇö control ok
+  PASS  BUILD-8  the published frontmatter honours p1/p2 (name and verified flag) ΓÇö frontmatter honours the consent flags
+  PASS  BUILD-9  the store with the withdrawal builds the site (exit 0) ΓÇö 6063 ms | cache before: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-21T17-11-00-373Z\site\node_modules\.astro\data-store.json ΓÇö 23784 bytes, mtime 2026-10-21T17:11:05.659Z ; C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-21T17-11-00-373Z\site\.astro\data-store.json ΓÇö absent | after: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-21T17-11-00-373Z\site\node_modules\.astro\data-store.json ΓÇö 23154 bytes, mtime 2026-10-21T17:11:11.310Z ; C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-21T17-11-00-373Z\site\.astro\data-store.json ΓÇö absent
+  PASS  BUILD-10  the withdrawn quote is GONE from the fresh build (RP-6.4 / RP-6.5) ΓÇö revoked ref rev_8a2308bfa6d8 is absent
+  PASS  BUILD-11  the set of rendered quotes after the withdrawal is exactly the publishable set ΓÇö 4 card(s)
+  PASS  BUILD-12  the published markdown files match the publishable refs ΓÇö 4 file(s)
+  PASS  BUILD-13  the build output contains no warning about the empty collection ΓÇö 0 warnings
+  PASS  BUILD-14  a site with no moderation store at all still builds (exit 0, quiet, empty state) ΓÇö 6004 ms
+[qa] 14 passed, 0 failed, 14 build checks
+[qa] build sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-21T17-11-00-373Z
+[qa] results: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-21T17-11-00-373Z\qa-build-results.json
+[qa] build sandbox removed
+exit code: 0
+
+========================================================================
+SUITE: qa-backend-hardening.mjs (Backend suite, re-run)
+node qa\qa-backend-hardening.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-backend-hardening-2026-10-21T17-11-20-170Z
+[qa] H ΓÇö data protection (audit M1/M2)
+  PASS  H1  p2=true: the store keeps the identity, so publishing still works ΓÇö name=Nora Named company=Named Ltd
+  PASS  H2  p2=false: the store keeps NO identity and NO e-mail ΓÇö name/company/role empty, no e-mail key
+  PASS  H3  p2=false: the client still sees their own name in their portal ΓÇö the client view falls back to the client record
+[qa] I ΓÇö moderation links (audit m1)
+  PASS  I1  the approve link points at SITE_BASE_URL, not the placeholder host ΓÇö http://127.0.0.1:4411/api/moderate/review?ref=rev_941ac142ee1b&aΓÇª
+[qa] J ΓÇö production configuration (audit M4)
+  PASS  J1  no RESEND_API_KEY in production answers 500 ΓÇö the same for every address ΓÇö both answered 500 internal, no token on stdout
+[qa] K ΓÇö corrupt store (audit M3)
+  PASS  K1  a corrupt store answers 500 {code:storage} on every portal read and write ΓÇö 3 endpoints answered 500 storage
+[qa] L ΓÇö fix wave 2 (audit M5/M6 + m2ΓÇôm7)
+  PASS  L1  M5: the approve link may only approve the revision it names ΓÇö stale link (revision 2) -> 409; current link -> revision 3 only
+  PASS  L2  M6: the Cloudflare twin notifies, and its module is edge-safe ΓÇö the CF tree has an edge-safe notification path
+  PASS  L3  m3: a project title is stored RAW (escaped once, at render time) ΓÇö stored: Tom & Jerry Ltd
+  PASS  L4  m4: a production instance without SITE_BASE_URL answers 500, not 403 origin ΓÇö 500 internal (misconfigured), not 403 origin
+  PASS  L5  m5: a stale admin cookie does not shadow a valid client cookie; logout clears both ΓÇö stale admin cookie skipped; both cookies cleared on logout
+  PASS  L6  m6: a malformed submission burns no slot; snooze and decline are limited ΓÇö 6 malformed posts consumed no slot; snooze limited after 10 accepted
+  PASS  L7  m7: the newest record for a project is client-scoped ΓÇö the new client sees no quote and gets a fresh ref
+  PASS  L8  m2: the publish script refuses a malformed store ΓÇö exit 1: [publish-testimonials] data/moderation/reviews.jsonl line 2 is not valid JSON ΓÇö refusing to publish 
+  PASS  L9  m2: a corrupt store is never rewritten ΓÇö the corrupt line survived; no lossy rewrite
+[qa] M ΓÇö the rate limiter (QA D7 follow-up: the counters moved behind a backend)
+  PASS  M1  the submit limit is 5 per client per hour; the 6th is 429 ΓÇö statuses=200,200,200,200,200,429
+  PASS  M2  the limit is per client: another client is unaffected ΓÇö the second client still has their full budget
+  PASS  M3  the sign-in link request is limited per IP: the 6th is 429 ΓÇö statuses=200,200,200,200,200,429
+[qa] N - the deploy route table (QA wave-3 F-1)
+  PASS  N1  the route manifest check passes: every called path has a function file in both trees ΓÇö 13 routes, both trees
+  PASS  N2  the route files exist in both trees and export a handler ΓÇö 5 route files in both trees, 5 handlers bundled
+[qa] 20 passed, 0 failed, 20 checks
+exit code: 0
+
+========================================================================
+SUITE: qa-wave2-independent.mjs (QA independent wave-2)
+node qa\qa-wave2-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave2-independent-results.json
+========================================================================
+[qa] SUITE ERROR Error: request-link for owner@imk.test should be 200 -- expected 200, got 500
+[qa] 0 passed, 1 failed, 1 checks
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave2-2026-10-21T17-11-20-976Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave2-independent-results.json
+[qa] sandbox removed
+exit code: 1
+
+========================================================================
+SUITE: qa-mutation-probe.mjs (mutation probe)
+node qa\qa-mutation-probe.mjs 
+========================================================================
+[qa] PROBE FAIL P1  M5 - the stale-revision guard is removed
+         expected: M1, M2 must FAIL
+         actual:   M1=MISSING M2=MISSING   (0 passed / 1 failed)
+         all failing checks: SUITE
+[qa] PROBE FAIL P2  m2 - the publish script skips a malformed line instead of failing
+         expected: N1, N2, N3 must FAIL
+         actual:   N1=MISSING N2=MISSING N3=MISSING   (0 passed / 1 failed)
+         all failing checks: SUITE
+[qa] PROBE FAIL P3  m6 - the rate-limit slot is consumed before validation
+         expected: O3 must FAIL
+         actual:   O3=MISSING   (0 passed / 1 failed)
+         all failing checks: SUITE
+[qa] PROBE FAIL P4  the rate limiter never blocks
+         expected: O4 must FAIL
+         actual:   O4=MISSING   (0 passed / 1 failed)
+         all failing checks: SUITE
+[qa] 0/4 mutation probes behaved as expected
+exit code: 1
+
+========================================================================
+SUITE: qa-rate-limit.mjs (Backend: the rate limiter backends)
+node qa\qa-rate-limit.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-rate-limit-2026-10-21T17-11-23-019Z
+[qa] R ΓÇö the limiter contract
+  PASS  R1  the in-memory backend counts hits and blocks past the limit ΓÇö ok:1 ok:2 ok:3 blocked:4
+  PASS  R2  the file backend is durable: a restart does not hand out free slots ΓÇö count=3, blocked after restart
+  PASS  R3  the file backend writes no client id and no IP address to disk ΓÇö keys are sha256 digests
+  PASS  R4  two limiters over the same file share one counter ΓÇö count=3
+  PASS  R5  a broken backend degrades to the in-memory fallback and never throws ΓÇö limit still enforced, degraded=true
+  PASS  R6  the edge KV backend is durable across a cold start and stores no raw key ΓÇö count=3, kv keys hashed
+  PASS  R7  the edge portal limiter uses KV when the binding exists, memory when it does not ΓÇö KV path and memory path both enforce the limit
+  PASS  R8  the node portal limiter is file-backed when a path is given, memory otherwise ΓÇö file backend chosen and durable
+[qa] 8 passed, 0 failed, 8 checks
+[qa] sandbox removed
+exit code: 0
+
+========================================================================
+SUITE: qa-cf-parity.mjs (Backend: the Cloudflare tree, executed)
+node qa\qa-cf-parity.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-cf-parity-2026-10-21T17-11-23-214Z
+[qa] C ΓÇö the Cloudflare tree, executed
+  FAIL  C1  the Cloudflare portal endpoints answer 501 on the edge
+  PASS  C2  the 501 is the missing store, not a broken handler ΓÇö runs, reaches the auth check (401) once a store exists
+  PASS  C3  the Cloudflare sign-in limiter is KV-backed and survives a cold start ΓÇö statuses=501,501,501,501,501,429, kv keys=1
+  PASS  C4  the Cloudflare moderation endpoint accepts a Vercel-signed link and rejects a forged one ΓÇö vercel link accepted, forged link rejected
+  PASS  C5  a corrupt Cloudflare moderation store answers 500 storage, never "review not found" ΓÇö unreachable store -> 501, corrupt store -> 500 storage
+[qa] D ΓÇö the moderation link contract, across both targets
+  PASS  D1  a Cloudflare-signed link verifies with the Vercel verifier ΓÇö sig=eb4678443bd5ΓÇª
+  PASS  D2  a Vercel-signed link verifies with the Cloudflare verifier ΓÇö sig=aee56322dd67ΓÇª
+  PASS  D3  both trees build the same link shape, from SITE_BASE_URL ΓÇö params=decision,ref,revision,sig,ts
+  PASS  D4  the Cloudflare notification mail carries the revision and a link that verifies ΓÇö revision carried and link verifies
+  PASS  D5  a link signed for revision 1 does not verify for revision 2 ΓÇö revision and decision are both covered by the signature
+[qa] 9 passed, 1 failed, 10 checks
+[qa] failing checks: C1
+[qa] sandbox removed
+exit code: 1
+
+========================================================================
+SUITE: qa-wave3-independent.mjs (QA independent wave-3)
+node qa\qa-wave3-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave3-independent-results.json
+========================================================================
+node.exe : [qa] suite crashed: Error: request-link for owner@imk.test should be 200 (got 500: 
+    + CategoryInfo          : NotSpecified: ([qa] suite cras...ed 200, got 500:String) [], RemoteException
+[qa] 0 passed, 1 failed, 1 checks
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave3-independent-results.json
+exit code: 1
+
+========================================================================
+SUITE: npm run check:routes (the route manifest check)
+npm run check:routes
+========================================================================
+[check-api-routes] route -> function file
+[check-api-routes]
+[check-api-routes] /api/contact                                 api/contact.ts                                 site/functions/api/contact.ts
+[check-api-routes] /api/moderate/review                         api/moderate/review.ts                         site/functions/api/moderate/review.ts
+[check-api-routes] /api/portal/auth/logout                      api/portal/auth/logout.ts                      site/functions/api/portal/auth/logout.ts
+[check-api-routes] /api/portal/auth/request-link                api/portal/auth/request-link.ts                site/functions/api/portal/auth/request-link.ts
+[check-api-routes] /api/portal/auth/verify                      api/portal/auth/verify.ts                      site/functions/api/portal/auth/verify.ts
+[check-api-routes] /api/portal/comments                         api/portal/comments.ts                         site/functions/api/portal/comments.ts
+[check-api-routes] /api/portal/invites                          api/portal/invites.ts                          site/functions/api/portal/invites.ts
+[check-api-routes] /api/portal/plan-items                       api/portal/plan-items.ts                       site/functions/api/portal/plan-items.ts
+[check-api-routes] /api/portal/plan-items/*                     api/portal/plan-items/[id].ts                  site/functions/api/portal/plan-items/[id].ts
+[check-api-routes] /api/portal/projects                         api/portal/projects.ts                         site/functions/api/portal/projects.ts
+[check-api-routes] /api/portal/projects/*                       api/portal/projects/[id].ts                    site/functions/api/portal/projects/[id].ts
+[check-api-routes] /api/portal/testimonials                     api/portal/testimonials.ts                     site/functions/api/portal/testimonials.ts
+[check-api-routes] /api/portal/updates                          api/portal/updates.ts                          site/functions/api/portal/updates.ts
+[check-api-routes]
+[check-api-routes] 13 route(s), 0 missing function file(s)
+[check-api-routes] OK: every called path has a function file in both trees.
+exit code: 0
+
+========================================================================
+SUITE: qa-wave4-independent.mjs (QA independent wave-4)
+node qa\qa-wave4-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave4-independent-results.json
+========================================================================
+node.exe : [qa] suite error Error: request-link for owner@imk.test should be 200 (got 500: 
+    + CategoryInfo          : NotSpecified: ([qa] suite erro...ed 200, got 500:String) [], RemoteException
+[qa] 0 passed, 1 failed, 1 checks
+[qa] results written: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave4-independent-results.json
+exit code: 1
+
+========================================================================
+SUMMARY
+========================================================================
+qa-testimonials.mjs           exit 0
+qa-testimonials-build.mjs     exit 0
+qa-backend-hardening.mjs      exit 0
+qa-wave2-independent.mjs      exit 1
+qa-mutation-probe.mjs         exit 1
+qa-rate-limit.mjs             exit 0
+qa-cf-parity.mjs              exit 1
+qa-wave3-independent.mjs      exit 1
+check:routes (npm run)        exit 0
+qa-wave4-independent.mjs      exit 1
+finished: 2026-10-21 20:11:24 +03:00

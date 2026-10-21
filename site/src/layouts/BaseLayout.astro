@@ -1,4 +1,4 @@
-﻿---
+---
 import '@fontsource-variable/inter';
 import '../styles/tokens.css';
 import '../styles/global.css';
@@ -12,11 +12,28 @@ interface Props {
   description: string;
   path?: string;
   noindex?: boolean;
+  /**
+   * Add `nofollow` to the robots directive.
+   *
+   * The private screens (spec/07 §7.3, invariant D-4) must not be indexed
+   * AND must not pass crawl equity on to the pages they link to. `noindex`
+   * alone leaves the links followable, so the owner-only screens opt in.
+   * Public pages are unaffected: the default stays `noindex, follow`.
+   */
+  nofollow?: boolean;
   structuredData?: Record<string, unknown> | Record<string, unknown>[];
   stickyCta?: { label: string; href: string } | null;
 }
-const { title, description, path = '/', noindex = false, structuredData, stickyCta = null } = Astro.props;
-const siteUrl = (import.meta.env.SITE_URL || 'https://www.ixi.example').replace(/\/$/, '');
+const {
+  title,
+  description,
+  path = '/',
+  noindex = false,
+  nofollow = false,
+  structuredData,
+  stickyCta = null,
+} = Astro.props;
+const siteUrl = (import.meta.env.SITE_URL || 'https://www.imk.example').replace(/\/$/, '');
 const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
 ---
 <!doctype html>
@@ -27,7 +44,7 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    {noindex && <meta name="robots" content="noindex, follow" />}
+    {noindex && <meta name="robots" content={nofollow ? 'noindex, nofollow' : 'noindex, follow'} />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <Seo title={title} description={description} canonical={canonical} structuredData={structuredData} image={`${siteUrl}/og.png`} />
   </head>

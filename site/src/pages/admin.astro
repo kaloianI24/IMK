@@ -1,0 +1,521 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+---
+
+{/*
+  /admin — the owner inbox (spec/07 §7.3, task T7.14).
+
+  A route of its own, separate from /portal: the client-facing portal must
+  never carry an admin capability. The owner session lives in its own cookie
+  (`imk_admin_session`), and the allow-list (`ADMIN_EMAILS`) is read on every
+  request by the API behind this page — a client session, a forged cookie and
+  an address that is no longer on the list all get the same 401.
+
+  This page is a shell: the shell is rendered for everyone but stays hidden
+  until the API confirms an owner session, exactly like portal.astro does for
+  the client portal. The site is a static build (output: 'static'), so the
+  page itself cannot answer 401 — the API it depends on does, and this page
+  shows that answer.
+
+  Both /admin and /portal are noindex and excluded from the sitemap
+  (invariant D-4); /admin additionally asks for nofollow, because a
+  crawlable owner screen must not pass crawl equity on to the pages it links
+  to.
+*/}
+
+<BaseLayout
+  title="Owner inbox — IMK"
+  description="Pending client quotes to approve or reject, and client notes to resolve."
+  path="/admin"
+  noindex={true}
+  nofollow={true}
+>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Owner inbox' }]} />
+
+    <p class="eyebrow">Owner tools</p>
+    <h1>Owner inbox</h1>
+    <p class="muted admin-lede">
+      The quotes that are waiting for a decision, and the client notes you have to answer.
+      Only the addresses on the owner allow-list can open this page.
+    </p>
+
+    {/* Loading state */}
+    <div id="admin-loading" class="banner" role="status" aria-live="polite">
+      Loading your inbox…
+    </div>
+
+    {/* Not an owner session — the API answered 401 */}
+    <div id="admin-not-auth" class="banner" role="alert" hidden>
+      <p style="margin:0 0 var(--space-2);"><strong>This page is for the site owner.</strong></p>
+      <p style="margin:0;">
+        The session is not an owner session, or it has expired.
+        <a href="/login" style="color:var(--color-link);">Sign in</a> with an owner address to continue.
+      </p>
+    </div>
+
+    {/* Something went wrong — with a way out */}
+    <div id="admin-error" class="banner" role="alert" hidden>
+      <p id="admin-error-text" style="margin:0 0 var(--space-3);"></p>
+      <button type="button" class="btn btn-secondary" id="admin-retry">Try again</button>
+    </div>
+
+    {/* The inbox */}
+    <div id="admin-shell" hidden>
+      <ul id="admin-counts" class="admin-counts" aria-label="Inbox counts"></ul>
+
+      <section aria-labelledby="admin-reviews-heading" style="margin-bottom:var(--space-12);">
+        <h2 id="admin-reviews-heading" tabindex="-1" style="margin:0 0 var(--space-4);font-size:var(--text-xl);">
+          Pending reviews
+        </h2>
+        <div id="admin-reviews-list" style="display:grid;gap:var(--space-4);"></div>
+      </section>
+
+      <section aria-labelledby="admin-notes-heading" style="margin-bottom:var(--space-12);">
+        <h2 id="admin-notes-heading" style="margin:0 0 var(--space-4);font-size:var(--text-xl);">
+          Client notes
+        </h2>
+        {/*
+          There is no annotation store in this project yet: the endpoint that
+          would store a note and the store itself were never built (spec/07
+          T7.8/T7.10). The panel says so instead of showing a made-up list or
+          a count of zero.
+        */}
+        <div id="admin-notes-panel" class="banner">
+          <p style="margin:0 0 var(--space-2);"><strong>Not implemented yet.</strong></p>
+          <p style="margin:0;">
+            Client notes are not built in this project: there is no note store, so there is
+            nothing to list and nothing to resolve. The panel will fill in when that store lands.
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="admin-recent-heading" style="margin-bottom:var(--space-12);">
+        <h2 id="admin-recent-heading" style="margin:0 0 var(--space-4);font-size:var(--text-xl);">
+          Recently decided
+        </h2>
+        <div id="admin-recent-list" style="display:grid;gap:var(--space-3);"></div>
+      </section>
+
+      {/* The live region every action reports into */}
+      <p id="admin-status" class="muted" role="status" aria-live="polite" style="min-height:1.5em;"></p>
+    </div>
+  </section>
+
+  <script>
+    const API = '/api/admin';
+
+    type Review = {
+      ref: string;
+      revision: number;
+      rating: string;
+      name: string;
+      company: string;
+      quote: string;
+      receivedAt: string;
+      state: string;
+      approvePath: string;
+      rejectPath: string;
+    };
+
+    type Inbox = {
+      ok: boolean;
+      counts: { pendingReviews: number; decidedToday: number; openNotes: number | null };
+      notesAvailable: boolean;
+      reviews: Review[];
+      recent: Array<{ ref: string; state: string; decidedAt: string; rating: string; name: string }>;
+    };
+
+    const loadingEl = document.getElementById('admin-loading');
+    const notAuthEl = document.getElementById('admin-not-auth');
+    const errorEl = document.getElementById('admin-error');
+    const errorTextEl = document.getElementById('admin-error-text');
+    const retryBtn = document.getElementById('admin-retry');
+    const shellEl = document.getElementById('admin-shell');
+    const countsEl = document.getElementById('admin-counts');
+    const reviewsEl = document.getElementById('admin-reviews-list');
+    const recentEl = document.getElementById('admin-recent-list');
+    const statusEl = document.getElementById('admin-status');
+    const reviewsHeading = document.getElementById('admin-reviews-heading');
+
+    function show(node: HTMLElement | null, visible: boolean): void {
+      if (!node) return;
+      node.hidden = !visible;
+    }
+
+    function setStatus(text: string): void {
+      if (statusEl) statusEl.textContent = text;
+    }
+
+    function setError(text: string): void {
+      if (errorTextEl) errorTextEl.textContent = text;
+      show(errorEl, true);
+    }
+
+    function node(tag: string, className?: string, text?: string): HTMLElement {
+      const element = document.createElement(tag);
+      if (className) element.className = className;
+      if (text !== undefined) element.textContent = text;
+      return element;
+    }
+
+    function formatDate(value: string): string {
+      if (!value) return '';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '';
+      return date.toLocaleDateString();
+    }
+
+    function formatRating(value: string): string {
+      const rating = Number(value);
+      if (!Number.isFinite(rating) || rating < 1) return 'No rating';
+      return `${rating} of 5`;
+    }
+
+    async function api(path: string): Promise<Response> {
+      return fetch(`${API}${path}`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+    }
+
+    function renderCounts(inbox: Inbox): void {
+      if (!countsEl) return;
+      countsEl.textContent = '';
+      const items: Array<{ value: string; label: string }> = [
+        { value: String(inbox.counts.pendingReviews), label: 'pending reviews' },
+        // The count of open client notes is unknown, not zero: the store does
+        // not exist yet, so it is shown as a dash with the reason.
+        {
+          value: inbox.counts.openNotes === null ? '—' : String(inbox.counts.openNotes),
+          label: 'open client notes (not implemented yet)',
+        },
+        { value: String(inbox.counts.decidedToday), label: 'decided today' },
+      ];
+      for (const item of items) {
+        const li = node('li', 'admin-count');
+        li.appendChild(node('span', 'admin-count-value', item.value));
+        li.appendChild(node('span', 'admin-count-label', item.label));
+        countsEl.appendChild(li);
+      }
+    }
+
+    function reviewCard(review: Review): HTMLElement {
+      const card = node('article', 'card admin-review');
+
+      const head = node('div', 'admin-review-head');
+      const who = node('div');
+      const name = node('strong');
+      // The client may have withheld the naming consent: the record then
+      // holds no name and no company (spec RP-6.2), so the card says so
+      // instead of showing a blank line.
+      name.textContent = review.name || 'Name not shared';
+      who.appendChild(name);
+      if (review.company) {
+        who.appendChild(document.createTextNode(` · ${review.company}`));
+      }
+      const meta = node('p', 'muted admin-review-meta');
+      meta.textContent = `${review.ref} · ${formatRating(review.rating)}${
+        review.receivedAt ? ` · ${formatDate(review.receivedAt)}` : ''
+      }`;
+      who.appendChild(meta);
+      head.appendChild(who);
+
+      const actions = node('div', 'admin-review-actions');
+      const approve = node('button', 'btn btn-primary') as HTMLButtonElement;
+      approve.type = 'button';
+      approve.textContent = 'Approve';
+      approve.setAttribute('aria-label', `Approve the quote ${review.ref}`);
+      approve.dataset.action = 'approve';
+      approve.dataset.path = review.approvePath;
+
+      const reject = node('button', 'btn btn-secondary') as HTMLButtonElement;
+      reject.type = 'button';
+      reject.textContent = 'Reject';
+      reject.setAttribute('aria-label', `Reject the quote ${review.ref}`);
+      reject.dataset.action = 'reject';
+      reject.dataset.path = review.rejectPath;
+
+      actions.appendChild(approve);
+      actions.appendChild(reject);
+      head.appendChild(actions);
+      card.appendChild(head);
+
+      if (review.quote) {
+        const quote = node('blockquote', 'admin-review-quote');
+        quote.textContent = review.quote;
+        card.appendChild(quote);
+      }
+
+      return card;
+    }
+
+    function renderReviews(inbox: Inbox): void {
+      if (!reviewsEl) return;
+      reviewsEl.textContent = '';
+
+      if (!inbox.reviews || inbox.reviews.length === 0) {
+        // The empty state says what an empty queue means, and it is different
+        // from "the queue could not be read" — that one is an error above.
+        reviewsEl.appendChild(
+          node(
+            'p',
+            'muted',
+            'No quotes are waiting for a decision. A new one shows up here as soon as a client sends it.',
+          ),
+        );
+        return;
+      }
+
+      for (const review of inbox.reviews) {
+        reviewsEl.appendChild(reviewCard(review));
+      }
+    }
+
+    function renderRecent(inbox: Inbox): void {
+      if (!recentEl) return;
+      recentEl.textContent = '';
+      const recent = inbox.recent || [];
+      if (recent.length === 0) {
+        recentEl.appendChild(node('p', 'muted', 'Nothing has been decided yet.'));
+        return;
+      }
+      for (const item of recent) {
+        const row = node('p', 'muted admin-recent-row');
+        const state = item.state === 'approved' ? 'Approved' : 'Rejected';
+        const name = item.name ? ` · ${item.name}` : '';
+        row.textContent = `${item.ref} · ${state}${name}${
+          item.decidedAt ? ` · ${formatDate(item.decidedAt)}` : ''
+        }`;
+        recentEl.appendChild(row);
+      }
+    }
+
+    function focusFirstAction(): void {
+      const first = reviewsEl?.querySelector('button[data-action]') as HTMLButtonElement | null;
+      if (first) {
+        first.focus({ preventScroll: true });
+        return;
+      }
+      reviewsHeading?.focus({ preventScroll: true });
+    }
+
+    /**
+     * Run one decision.
+     *
+     * The decision itself is made by the moderation endpoint, which verifies
+     * the signature the API minted for this quote. The answers are read
+     * separately, because they mean different things to the owner:
+     *   400 expired    — the link aged out; reload and try again
+     *   409            — the client changed the quote after it was listed
+     *   500 storage    — the decision was NOT stored
+     *   501            — this target cannot store decisions at all
+     */
+    async function decide(path: string, label: string, buttons: HTMLButtonElement[]): Promise<void> {
+      for (const button of buttons) button.disabled = true;
+      setStatus('Saving the decision…');
+      try {
+        const res = await fetch(path, { credentials: 'include' });
+        let data: { code?: string } = {};
+        try {
+          data = (await res.json()) as { code?: string };
+        } catch {
+          // A body that is not JSON is not a decision; the status code below
+          // is what decides what the owner is told.
+        }
+
+        if (res.ok) {
+          setStatus(`${label} — done. The list is up to date.`);
+          await loadInbox();
+          focusFirstAction();
+          return;
+        }
+        if (res.status === 400 && data.code === 'expired') {
+          setStatus('That decision link has expired. Reload the page and try again.');
+        } else if (res.status === 400 && data.code === 'signature') {
+          setStatus('That decision could not be verified. Nothing was changed.');
+        } else if (res.status === 409) {
+          setStatus(
+            'This quote changed after it was listed, so it was not decided. Reload the page to see the current text.',
+          );
+        } else if (res.status === 500) {
+          setStatus(
+            'The decision was not stored — the review store could not be written. Nothing was changed.',
+          );
+        } else if (res.status === 501) {
+          setStatus(
+            'This target cannot store moderation decisions, so nothing was changed. The queue is read-only here.',
+          );
+        } else {
+          setStatus('The decision could not be saved. Nothing was changed.');
+        }
+      } catch {
+        setStatus('Could not reach the moderation endpoint. Nothing was changed.');
+      } finally {
+        for (const button of buttons) button.disabled = false;
+      }
+    }
+
+    async function loadInbox(): Promise<void> {
+      show(loadingEl, true);
+      show(errorEl, false);
+
+      let session: Response;
+      try {
+        session = await api('/session');
+      } catch {
+        show(loadingEl, false);
+        setError('Could not reach the server. Check the connection and try again.');
+        return;
+      }
+
+      if (session.status === 401) {
+        show(loadingEl, false);
+        show(notAuthEl, true);
+        return;
+      }
+      if (!session.ok) {
+        show(loadingEl, false);
+        setError('The inbox could not be opened. Try again in a moment.');
+        return;
+      }
+
+      let res: Response;
+      try {
+        res = await api('/reviews');
+      } catch {
+        show(loadingEl, false);
+        setError('Could not reach the server. Check the connection and try again.');
+        return;
+      }
+
+      if (res.status === 401) {
+        show(loadingEl, false);
+        show(notAuthEl, true);
+        return;
+      }
+      if (res.status === 501) {
+        show(loadingEl, false);
+        setError(
+          'The moderation store cannot be reached on this target, so the queue cannot be shown. Nothing was changed.',
+        );
+        return;
+      }
+      if (res.status === 500) {
+        show(loadingEl, false);
+        setError('The moderation store could not be read. The queue was not shown, because an empty queue would be a lie.');
+        return;
+      }
+      if (!res.ok) {
+        show(loadingEl, false);
+        setError('The inbox could not be loaded. Try again in a moment.');
+        return;
+      }
+
+      const inbox = (await res.json()) as Inbox;
+      show(loadingEl, false);
+      show(notAuthEl, false);
+      show(errorEl, false);
+      show(shellEl, true);
+      renderCounts(inbox);
+      renderReviews(inbox);
+      renderRecent(inbox);
+    }
+
+    reviewsEl?.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest('button[data-action]') as HTMLButtonElement | null;
+      if (!button) return;
+      const path = button.dataset.path || '';
+      if (!path) return;
+      const label = button.dataset.action === 'approve' ? 'Approved' : 'Rejected';
+      const card = button.closest('.admin-review') as HTMLElement | null;
+      const buttons = card
+        ? (Array.from(card.querySelectorAll('button[data-action]')) as HTMLButtonElement[])
+        : [button];
+      void decide(path, label, buttons);
+    });
+
+    retryBtn?.addEventListener('click', () => {
+      void loadInbox();
+    });
+
+    void loadInbox();
+  </script>
+</BaseLayout>
+
+<style>
+  .admin-lede {
+    max-width: 60ch;
+  }
+
+  .admin-counts {
+    list-style: none;
+    margin: 0 0 var(--space-8);
+    padding: 0;
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 720px) {
+    .admin-counts {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  .admin-count {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .admin-count-value {
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    line-height: var(--leading-tight);
+    color: var(--color-text);
+  }
+
+  .admin-count-label {
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+  }
+
+  .admin-review-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .admin-review-meta {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-sm);
+  }
+
+  .admin-review-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .admin-review-quote {
+    margin: var(--space-4) 0 0;
+    padding: var(--space-3) 0 0;
+    border-top: 1px solid var(--color-border);
+    font-size: var(--text-sm);
+    max-width: 70ch;
+  }
+
+  .admin-recent-row {
+    margin: 0;
+    font-size: var(--text-sm);
+  }
+</style>

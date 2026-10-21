@@ -1,0 +1,22 @@
+{
+  // Typecheck gate for the Vercel handler tree (api/).
+  //
+  // WHY THIS EXISTS: the site tsconfig (site/tsconfig.json) reaches the api/
+  // tree only through site/scripts/api-index.ts — the dev-portal entry point.
+  // That pulls in api/portal/* and api/lib/*, but NOT api/contact.ts or
+  // api/moderate/review.ts, and `astro check` does not cover the api/ tree
+  // at all. So a type error in a handler could reach production undetected.
+  //
+  // `include` paths are resolved relative to THIS file (site/), so ../api/** is
+  // the repo-root handler tree. The Cloudflare Pages tree (functions/**) and the
+  // module both handler trees share (shared/portal-store/**) are checked here
+  // too: a broken import path in the CF tree would otherwise only surface at
+  // deploy time.
+  //
+  // The compilerOptions are inherited from ./tsconfig.json (astro strict) so the
+  // api/ tree is checked with the same settings as the site, and node types
+  // resolve from site/node_modules.
+  "extends": "./tsconfig.json",
+  "include": [".astro/types.d.ts", "../api/**/*.ts", "functions/**/*.ts", "shared/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

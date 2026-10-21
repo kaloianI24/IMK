@@ -1,0 +1,52 @@
+---
+// Renders a single plan item card. Action wiring is handled by portal.astro's script.
+interface Props {
+  item: Record<string, unknown>;
+  role: 'admin' | 'client';
+}
+const { item, role } = Astro.props;
+
+const id = String(item.id || '');
+const title = String(item.title || '');
+const description = String(item.description || '');
+const status = String(item.status || 'todo');
+const isDone = status === 'done';
+const selectedTodo = status === 'todo';
+const selectedInProgress = status === 'in-progress';
+const selectedDone = status === 'done';
+const selectedBlocked = status === 'blocked';
+---
+
+<div class="card" data-plan-item-id={id}>
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-3);">
+    <div>
+      <h3 style="margin:0 0 var(--space-2);font-size:var(--text-lg);">{title}</h3>
+      {description && (
+        <p class="muted" style="font-size:var(--text-sm);margin:0;max-width:none;">{description}</p>
+      )}
+    </div>
+    <span class="tag">{status}</span>
+  </div>
+  <div style="margin-top:var(--space-3);display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;">
+    {role === 'client' && (
+      <>
+        {isDone ? (
+          <>
+            <button type="button" class="btn btn-ghost" style="font-size:var(--text-xs);padding:6px 10px;" data-action="request-change" data-plan-item-id={id}>Request change</button>
+            <button type="button" class="btn btn-primary" style="font-size:var(--text-xs);padding:6px 10px;" data-action="approve" data-plan-item-id={id}>Approve</button>
+          </>
+        ) : (
+          <button type="button" class="btn btn-ghost" style="font-size:var(--text-xs);padding:6px 10px;" data-action="request-change" data-plan-item-id={id}>Request change</button>
+        )}
+      </>
+    )}
+    {role === 'admin' && (
+      <select style="width:auto;padding:6px 10px;font-size:var(--text-sm);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);" data-action="set-status" data-plan-item-id={id}>
+        <option value="todo" selected={selectedTodo}>To do</option>
+        <option value="in-progress" selected={selectedInProgress}>In progress</option>
+        <option value="done" selected={selectedDone}>Done</option>
+        <option value="blocked" selected={selectedBlocked}>Blocked</option>
+      </select>
+    )}
+  </div>
+</div>

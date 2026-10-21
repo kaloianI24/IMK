@@ -1,0 +1,18 @@
+{
+  "name": "imk",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IMK - the marketing site (site/) and the portal API (api/). This root package exists because the Vercel project root is the REPO root: the api/ functions live outside site/, so a project rooted at site/ would deploy no functions at all (QA wave-3, F-1).",
+  "engines": {
+    "node": ">=20.3.0"
+  },
+  "scripts": {
+    "build": "cd site && npm run build",
+    "check": "cd site && npm run check",
+    "check:routes": "cd site && npm run check:routes",
+    "typecheck:api": "cd site && npm run typecheck:api",
+    "test:store": "cd site && npm run test:store",
+    "dev:portal": "cd site && npm run dev:portal"
+  }
+}

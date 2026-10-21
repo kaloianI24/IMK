@@ -1,0 +1,211 @@
+{
+  "suite": "qa-wave5-independent",
+  "startedAt": "2026-10-21T19:01:51.112Z",
+  "apiDir": "C:\\Users\\Kalch\\Documents\\IXI\\api",
+  "sharedDir": "C:\\Users\\Kalch\\Documents\\IXI\\site\\shared",
+  "cfDir": "C:\\Users\\Kalch\\Documents\\IXI\\site\\functions",
+  "results": [
+    {
+      "id": "A1",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "CONTROL: inside ONE bundle/process the session is accepted",
+      "status": "PASS",
+      "ms": 63,
+      "detail": "one bundle: request-link 200, verify 200, projects 200"
+    },
+    {
+      "id": "A2",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "a session minted by one bundle is accepted by ANOTHER bundle (Vercel)",
+      "status": "PASS",
+      "ms": 118,
+      "detail": "role=admin, cross-bundle projects -> 200"
+    },
+    {
+      "id": "A3",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "the same cookie is accepted by a THIRD, freshly started process",
+      "status": "PASS",
+      "ms": 106,
+      "detail": "a client session minted in one process is accepted in another"
+    },
+    {
+      "id": "A4",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "a client session carries its clientId and the projects are filtered by it",
+      "status": "PASS",
+      "ms": 108,
+      "detail": "1 of 2 projects visible; the foreign one is filtered out"
+    },
+    {
+      "id": "A5",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "a FORGED cookie is refused by every bundle",
+      "status": "PASS",
+      "ms": 94,
+      "detail": "401 {code:unauthorized} for both cookie names"
+    },
+    {
+      "id": "A6",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "in production without a signing secret NO session can be minted",
+      "status": "PASS",
+      "ms": 91,
+      "detail": "createSession -> null, request-link -> 500 {code:internal}, no cookie"
+    },
+    {
+      "id": "A7",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "a token signed with another secret is refused; the right secret still works",
+      "status": "PASS",
+      "ms": 134,
+      "detail": "v1.<payload>.<sig>; another secret -> null, the right secret -> the session"
+    },
+    {
+      "id": "A8",
+      "group": "A -- the session survives a per-file bundle boundary (F-2)",
+      "name": "the shared session module is edge-safe and BOTH trees re-export it",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "no node: imports; both trees re-export site/shared/server/portal-session.ts"
+    },
+    {
+      "id": "B1",
+      "group": "B -- writeReviews fails closed (F-3)",
+      "name": "CONTROL: a valid moderation link approves and the store is updated",
+      "status": "PASS",
+      "ms": 53,
+      "detail": "approved and written to reviews.jsonl"
+    },
+    {
+      "id": "B2",
+      "group": "B -- writeReviews fails closed (F-3)",
+      "name": "a MISSING store answers 501, never 404 \"review not found\"",
+      "status": "PASS",
+      "ms": 49,
+      "detail": "501 {code:'unimplemented'}"
+    },
+    {
+      "id": "B3",
+      "group": "B -- writeReviews fails closed (F-3)",
+      "name": "a CORRUPT store answers 500 {code:storage} with no stack trace",
+      "status": "PASS",
+      "ms": 50,
+      "detail": "500 {code:'storage'}, the store is untouched"
+    },
+    {
+      "id": "B4",
+      "group": "B -- writeReviews fails closed (F-3)",
+      "name": "an UNWRITABLE store answers 500 {code:storage} and approves NOTHING",
+      "status": "PASS",
+      "ms": 48,
+      "detail": "500 {code:storage}, no throw, the record is still pending"
+    },
+    {
+      "id": "B5",
+      "group": "B -- writeReviews fails closed (F-3)",
+      "name": "the Cloudflare twin with NO filesystem answers 501 (the real edge runtime)",
+      "status": "PASS",
+      "ms": 32,
+      "detail": "501 {code:unimplemented} with no filesystem"
+    },
+    {
+      "id": "B6",
+      "group": "B -- writeReviews fails closed (F-3)",
+      "name": "the Cloudflare twin answers the SAME codes as the Vercel tree (tree parity)",
+      "status": "PASS",
+      "ms": 3,
+      "detail": "missing -> 501, corrupt -> 500 (the same codes as the Vercel tree)"
+    },
+    {
+      "id": "C1",
+      "group": "C -- the durable counter survives a lock race (F-4)",
+      "name": "CONTROL: one process, N keys -> N buckets with the exact counts",
+      "status": "PASS",
+      "ms": 72,
+      "detail": "10 buckets, all count 1"
+    },
+    {
+      "id": "C2",
+      "group": "C -- the durable counter survives a lock race (F-4)",
+      "name": "4 concurrent writer processes x 10 keys x 4 rounds -> nothing is lost",
+      "status": "PASS",
+      "ms": 534,
+      "detail": "4 writers x 10 keys x 4 rounds -> every bucket holds exactly 16"
+    },
+    {
+      "id": "C3",
+      "group": "C -- the durable counter survives a lock race (F-4)",
+      "name": "a lock file that EXISTS (EEXIST) is waited out, not treated as broken",
+      "status": "PASS",
+      "ms": 879,
+      "detail": "the writer waited for the lock and the durable counter was used"
+    },
+    {
+      "id": "C4",
+      "group": "C -- the durable counter survives a lock race (F-4)",
+      "name": "a DELETE-PENDING lock (EPERM) is waited out and the counter is NOT abandoned",
+      "status": "PASS",
+      "ms": 861,
+      "detail": "busy code EPERM (delete-pending) waited out; the durable counter still holds both hits"
+    },
+    {
+      "id": "C5",
+      "group": "C -- the durable counter survives a lock race (F-4)",
+      "name": "a genuinely broken backend degrades instead of failing the request",
+      "status": "PASS",
+      "ms": 48,
+      "detail": "degraded:true, one log line with a code: {\"ts\":1792609307171,\"outcome\":\"rate_limit_degraded\",\"backend\":\"durable\",\"code\":\"EEXIST\",\"reason\":\"the durable counter is"
+    },
+    {
+      "id": "C6",
+      "group": "C -- the durable counter survives a lock race (F-4)",
+      "name": "the durable counter holds no client id and no IP",
+      "status": "PASS",
+      "ms": 50,
+      "detail": "2 buckets, every key a 64-hex SHA-256"
+    },
+    {
+      "id": "C7",
+      "group": "C -- the durable counter survives a lock race (F-4)",
+      "name": "the edge twin degrades the same way (a throwing KV)",
+      "status": "PASS",
+      "ms": 10,
+      "detail": "degraded:true, one log line: {\"ts\":1792609307234,\"outcome\":\"rate_limit_degraded\",\"backend\":\"kv\",\"code\":\"ECONNREFUSED\",\"reason\":\"the durable counter i"
+    },
+    {
+      "id": "D1",
+      "group": "D -- mutation probes -- the checks are not vacuous",
+      "name": "F-2 reverted (a Map session) -> the cross-bundle check goes RED",
+      "status": "PASS",
+      "ms": 879,
+      "detail": "mutated copy: A1=PASS (one bundle still works), A2=FAIL (cross-bundle is broken again)"
+    },
+    {
+      "id": "D2",
+      "group": "D -- mutation probes -- the checks are not vacuous",
+      "name": "F-3 reverted (an unguarded writeReviews) -> the unwritable-store check goes RED",
+      "status": "PASS",
+      "ms": 404,
+      "detail": "mutated copy: B4=FAIL (the handler throws out of the write again)"
+    },
+    {
+      "id": "D3",
+      "group": "D -- mutation probes -- the checks are not vacuous",
+      "name": "F-4 reverted (only EEXIST is busy) -> the delete-pending check goes RED",
+      "status": "PASS",
+      "ms": 2587,
+      "detail": "mutated copy: C3=PASS (a merely busy lock is still fine), C4=FAIL (EPERM latches the backend again)"
+    },
+    {
+      "id": "D4",
+      "group": "D -- mutation probes -- the checks are not vacuous",
+      "name": "the repository is byte-identical after the probes",
+      "status": "PASS",
+      "ms": 8,
+      "detail": "the api/, site/shared/ and site/functions/ trees are byte-for-byte unchanged"
+    }
+  ],
+  "passed": 25,
+  "failed": 0
+}

@@ -1,0 +1,46 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Verify sign-in link — IMK"
+  description="Verify your magic-link sign-in and open your IMK portal."
+  path="/login/verify"
+  noindex={true}
+>
+  <section class="container section">
+    <h1>Signing you in…</h1>
+    <p id="verify-message" class="muted" style="max-width:60ch;">Validating your link, please wait.</p>
+  </section>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const messageEl = document.getElementById('verify-message') as HTMLParagraphElement | null;
+
+    if (!token) {
+      if (messageEl) { messageEl.textContent = 'No sign-in link provided. Please request a new one.'; messageEl.style.color = 'var(--color-text-muted)'; }
+      setTimeout(() => { window.location.href = '/login'; }, 2000);
+    } else {
+      fetch(`/api/portal/auth/verify?token=${encodeURIComponent(token)}`, {
+        credentials: 'include',
+        headers: { Origin: window.location.origin },
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          if (res.ok && data.ok) {
+            sessionStorage.setItem('imk_portal_role', String(data.role || 'client'));
+            sessionStorage.setItem('imk_portal_email', String(data.email || ''));
+            window.location.href = '/portal';
+          } else {
+            if (messageEl) { messageEl.textContent = data?.error || 'Link expired or invalid. Request a new one.'; messageEl.style.color = 'var(--color-text-muted)'; }
+            setTimeout(() => { window.location.href = '/login'; }, 2500);
+          }
+        })
+        .catch(() => {
+          if (messageEl) { messageEl.textContent = 'Unable to verify link. Please request a new one.'; messageEl.style.color = 'var(--color-text-muted)'; }
+          setTimeout(() => { window.location.href = '/login'; }, 2500);
+        });
+    }
+  </script>
+</BaseLayout>

@@ -1,10 +1,13 @@
 ---
 interface Testimonial {
-  name: string;
+  name?: string;
   role?: string;
   company?: string;
   rating?: number;
   quote: string;
+  /** Server-derived at publish time: only a verified client carries the badge. */
+  verified?: boolean;
+  source?: 'portal' | 'public';
 }
 
 interface Props {
@@ -27,20 +30,31 @@ const { items = [] } = Astro.props;
     <div class="testimonials__grid">
       {items.map((item) => (
         <article class="testimonial-card">
-          <div class="testimonial-card__stars" aria-label={`${item.rating ?? 5} out of 5 stars`}>
-            {Array.from({ length: item.rating ?? 5 }).map(() => (
-              <span aria-hidden="true">★</span>
-            ))}
-          </div>
+          {/* A rating is optional by design: an unrated quote publishes with
+              no star row at all — never a fabricated 5★. */}
+          {typeof item.rating === 'number' && item.rating >= 1 && (
+            <div class="testimonial-card__stars" aria-label={`${item.rating} out of 5 stars`}>
+              {Array.from({ length: item.rating }).map(() => (
+                <span aria-hidden="true">★</span>
+              ))}
+            </div>
+          )}
+          {item.verified && (
+            <p class="testimonial-card__badge">
+              <span aria-hidden="true">✓</span> Verified client
+            </p>
+          )}
           <p class="testimonial-card__quote">“{item.quote}”</p>
-          <div class="testimonial-card__meta">
-            <span class="testimonial-card__name">{item.name}</span>
-            {(item.role || item.company) && (
-              <span class="testimonial-card__role">
-                {[item.role, item.company].filter(Boolean).join(' · ')}
-              </span>
-            )}
-          </div>
+          {(item.name || item.role || item.company) && (
+            <div class="testimonial-card__meta">
+              {item.name && <span class="testimonial-card__name">{item.name}</span>}
+              {(item.role || item.company) && (
+                <span class="testimonial-card__role">
+                  {[item.role, item.company].filter(Boolean).join(' · ')}
+                </span>
+              )}
+            </div>
+          )}
         </article>
       ))}
     </div>
@@ -66,9 +80,24 @@ const { items = [] } = Astro.props;
   }
 
   .testimonial-card__stars {
-    color: var(--color-primary);
+    color: var(--color-accent-text);
     font-size: 1rem;
     letter-spacing: 2px;
+  }
+
+  .testimonial-card__badge {
+    margin: 0;
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px 10px;
+    border: 1px solid color-mix(in srgb, var(--color-accent-text) 35%, transparent);
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-accent-text) 8%, transparent);
+    color: var(--color-accent-text);
+    font-size: var(--text-xs);
+    font-weight: 600;
   }
 
   .testimonial-card__quote {

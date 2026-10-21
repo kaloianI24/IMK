@@ -1,0 +1,1372 @@
+{
+  "generatedAt": "2026-10-21T19:01:15.529Z",
+  "sandbox": "C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-testimonials-2026-10-21T19-01-15-136Z",
+  "origin": "http://127.0.0.1:4399",
+  "summary": {
+    "passed": 81,
+    "failed": 0,
+    "total": 81
+  },
+  "results": [
+    {
+      "id": "A1",
+      "group": "A — public review door (spec/08 §4.4, §5 \"Public review door\")",
+      "name": "POST /api/contact type=review (JSON) -> 410 review-moved",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "A2",
+      "group": "A — public review door (spec/08 §4.4, §5 \"Public review door\")",
+      "name": "POST /api/contact type=review (form) -> 410",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "A3",
+      "group": "A — public review door (spec/08 §4.4, §5 \"Public review door\")",
+      "name": "a refused review writes NOTHING (no record, no e-mail)",
+      "status": "PASS",
+      "ms": 0
+    },
+    {
+      "id": "A4",
+      "group": "A — public review door (spec/08 §4.4, §5 \"Public review door\")",
+      "name": "control: a normal contact inquiry still works (200)",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "B1",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "GET without a session -> 401",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B2",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST without a session -> 401",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B3",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "GET another client's project -> 404 (no id probing)",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "B4",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST to another client's project -> 404",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B5",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST for an unfinished project -> 409",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B6",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST submit without consent.p1 -> 400 consent-required, nothing stored",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "B7",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST with a wrong Origin -> 403",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B8",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST with no Origin at all -> 403",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B9",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST as the owner (admin session) -> 403",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B10",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "6th submission within the hour -> 429 rate-limit",
+      "status": "PASS",
+      "ms": 16
+    },
+    {
+      "id": "B11",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "PATCH /api/portal/testimonials -> 405",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B12",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST with an unknown action -> 400 validation",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B13",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST with an out-of-range rating -> 400 fields",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "B14",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST with an empty quote -> 400 fields",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "B15",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST with a quote over 1000 chars -> 400 fields",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B16",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "POST with a displayName over 80 chars -> 400 fields",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B17",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "GET without projectId -> 400",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "B18",
+      "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
+      "name": "GET an unknown project -> 404",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "C1",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "submit -> 200, server-derived identity, client-safe view",
+      "status": "PASS",
+      "ms": 3
+    },
+    {
+      "id": "C2",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "the owner IS notified with a signed one-click link",
+      "status": "PASS",
+      "ms": 0
+    },
+    {
+      "id": "C3",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "spoofed body fields are ignored (verifiedClient / source / name / company / role)",
+      "status": "PASS",
+      "ms": 3
+    },
+    {
+      "id": "C4",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "snooze -> 200, state snoozed, project marked snoozed",
+      "status": "PASS",
+      "ms": 3
+    },
+    {
+      "id": "C5",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "owner re-requests -> GET shows no stale answer (the card returns)",
+      "status": "PASS",
+      "ms": 4
+    },
+    {
+      "id": "C6",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "decline -> 200, state declined",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "C7",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "decline is final -> a second decline is 409 declined",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "C8",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "the client view never carries the e-mail or internal ids",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "C9",
+      "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
+      "name": "an approved quote is publishable: the owner approves it",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "D1",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "POST /api/portal/invites as a client -> 403",
+      "status": "PASS",
+      "ms": 0
+    },
+    {
+      "id": "D2",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "POST /api/portal/invites without a session -> 403",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "D3",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "POST /api/portal/invites with a wrong Origin -> 403",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "D4",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "POST /api/portal/invites with an invalid e-mail -> 400",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "D5",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "the first sign-in creates the client record from the INVITE (not the e-mail local part)",
+      "status": "PASS",
+      "ms": 0
+    },
+    {
+      "id": "D6",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "upsert: an omitted name is kept, a new company reaches the client record",
+      "status": "PASS",
+      "ms": 4
+    },
+    {
+      "id": "D7",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "an over-cap company -> 400, nothing written",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "D8",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "an empty string clears the field on both records",
+      "status": "PASS",
+      "ms": 4
+    },
+    {
+      "id": "D9",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "an over-cap name -> 400",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "D10",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "a second invite for the same e-mail does not duplicate the record",
+      "status": "PASS",
+      "ms": 3
+    },
+    {
+      "id": "D11",
+      "group": "D — invite flow and client profile (spec/08 §4.5)",
+      "name": "GET /api/portal/invites -> 404 (owner-only POST endpoint)",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E1",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "missing parameters -> 400",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E2",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "an invalid decision -> 400",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E3",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "an expired link -> 400 expired",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E4",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "a timestamp far in the future -> 400 expired",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E5",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "no FORM_WEBHOOK_SECRET -> 500 misconfigured (fails closed)",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E6",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "a forged signature -> 400 signature",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E7",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "a valid signature for an unknown ref -> 404",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "E8",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "a valid signature approves the record",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "E9",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "the one-click link is idempotent (no second decision, no new line)",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "E10",
+      "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
+      "name": "a reject decision is honoured",
+      "status": "PASS",
+      "ms": 5
+    },
+    {
+      "id": "F1",
+      "group": "F — withdrawal / revocation (spec/08 §4.4, RP-6.4 / RP-6.5)",
+      "name": "a client who withdraws after approval produces a revoked record",
+      "status": "PASS",
+      "ms": 11
+    },
+    {
+      "id": "F2",
+      "group": "F — withdrawal / revocation (spec/08 §4.4, RP-6.4 / RP-6.5)",
+      "name": "the revoked record is the newest line for the ref (later lines win)",
+      "status": "PASS",
+      "ms": 0
+    },
+    {
+      "id": "F3",
+      "group": "F — withdrawal / revocation (spec/08 §4.4, RP-6.4 / RP-6.5)",
+      "name": "an anonymous quote (p2=false) is approved and stays anonymous in the store",
+      "status": "PASS",
+      "ms": 7
+    },
+    {
+      "id": "G1-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G1-detail",
+      "status": "PASS",
+      "detail": "p2=false -> stored name=\"\" company=\"\" role=\"\" (all empty)"
+    },
+    {
+      "id": "G1",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M1 FIXED — no identity is stored when the client withheld naming consent (p2=false)",
+      "status": "PASS",
+      "ms": 0
+    },
+    {
+      "id": "G2-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G2-detail",
+      "status": "PASS",
+      "detail": "the moderation log holds 14 records, none with an e-mail field"
+    },
+    {
+      "id": "G2",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M2 FIXED — the stored record no longer carries session.email",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "G3-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G3-detail",
+      "status": "PASS",
+      "detail": "one malformed line -> GET answered 500 storage; PATCH answered 500 (the healthy store holds 10 projects)"
+    },
+    {
+      "id": "G3",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M3 FIXED — one malformed line answers 500 storage instead of silently emptying the collection",
+      "status": "PASS",
+      "ms": 4
+    },
+    {
+      "id": "G4-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G4-detail",
+      "status": "PASS",
+      "detail": "APP_ENV unset + no RESEND_API_KEY -> answered 500 internal; no token on stdout"
+    },
+    {
+      "id": "G4",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M4 FIXED — no sign-in token is written to the log in production",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "G5-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G5-detail",
+      "status": "PASS",
+      "detail": "a link for revision 1 answered 409 stale-revision (nothing approved); the link for revision 2 approved exactly revision 2 = \"REVISION TWO text\""
+    },
+    {
+      "id": "G5",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M5 FIXED — the approve link may only approve the revision the owner was shown",
+      "status": "PASS",
+      "ms": 13
+    },
+    {
+      "id": "G6",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M6 FIXED — the Cloudflare twin has a notification path",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "G7-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G7-detail",
+      "status": "PASS",
+      "detail": "6 malformed posts -> 6 × 400 and NO rate-limit slot consumed; the next valid post was accepted"
+    },
+    {
+      "id": "G7",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "m6 FIXED — a malformed submission does not burn a rate-limit slot",
+      "status": "PASS",
+      "ms": 11
+    },
+    {
+      "id": "G8-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G8-detail",
+      "status": "PASS",
+      "detail": "a malformed line in invited.jsonl -> 500 storage (the client is not silently denied a link)"
+    },
+    {
+      "id": "G8",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M3b FIXED - a malformed line in invited.jsonl answers 500 storage instead of locking a client out",
+      "status": "PASS",
+      "ms": 2
+    },
+    {
+      "id": "G9-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G9-detail",
+      "status": "PASS",
+      "detail": "a malformed line in reviews.jsonl -> the one-click approve link answers 500 storage, so the owner sees a broken store instead of \"review not found\""
+    },
+    {
+      "id": "G9",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "M3c FIXED - a malformed line in reviews.jsonl answers 500 storage instead of 404",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "G10-detail",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "G10-detail",
+      "status": "PASS",
+      "detail": "10 snoozes accepted, then 2 × 429 rate-limit — the append-only log can no longer grow without bound"
+    },
+    {
+      "id": "G10",
+      "group": "G — independent re-verification of the code-review MAJOR findings",
+      "name": "m6 FIXED — snooze and decline are rate-limited",
+      "status": "PASS",
+      "ms": 32
+    },
+    {
+      "id": "H1",
+      "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
+      "name": "P-7: an unknown e-mail gets the SAME generic answer and no sign-in token",
+      "status": "PASS",
+      "ms": 1
+    },
+    {
+      "id": "H2",
+      "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
+      "name": "a magic-link token is single-use (a second verify is 400)",
+      "status": "PASS",
+      "ms": 3
+    },
+    {
+      "id": "H3-detail",
+      "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
+      "name": "H3-detail",
+      "status": "PASS",
+      "detail": "cookie attributes: imk_session=…; Path=…; HttpOnly; SameSite=…; Max-Age=…"
+    },
+    {
+      "id": "H3",
+      "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
+      "name": "the session cookie is HttpOnly + SameSite=Strict",
+      "status": "PASS",
+      "ms": 3
+    },
+    {
+      "id": "H4-detail",
+      "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
+      "name": "H4-detail",
+      "status": "PASS",
+      "detail": "cookie attributes: imk_session=…; Path=…; HttpOnly; SameSite=…; Max-Age=…"
+    },
+    {
+      "id": "H4",
+      "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
+      "name": "m4: with an http base URL the cookie carries no Secure flag",
+      "status": "PASS",
+      "ms": 3
+    },
+    {
+      "id": "H5",
+      "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
+      "name": "every body-bearing response declares the correct Content-Length",
+      "status": "PASS",
+      "ms": 2
+    }
+  ],
+  "fixtures": {
+    "projects": [
+      {
+        "id": "prj_0768721d4fbe",
+        "title": "Acme Website",
+        "status": "completed",
+        "clientId": "cli_9fcce312",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_cff2a36c7a55",
+        "title": "Bob Website",
+        "status": "completed",
+        "clientId": "cli_16fa660e",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_ad5d99a86261",
+        "title": "Carol Website",
+        "status": "completed",
+        "clientId": "cli_cba8061d",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_e102b78d70f0",
+        "title": "Dave Website",
+        "status": "completed",
+        "clientId": "cli_73ed8f64",
+        "testimonialStatus": "declined"
+      },
+      {
+        "id": "prj_e20d1ba339aa",
+        "title": "Erin Website",
+        "status": "in-progress",
+        "clientId": "cli_36328ae7"
+      },
+      {
+        "id": "prj_2a2bf3a51d2a",
+        "title": "Frank Website",
+        "status": "completed",
+        "clientId": "cli_720afc60",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_2827b0eb4c7b",
+        "title": "Grace Website",
+        "status": "completed",
+        "clientId": "cli_fc0a4aed",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_277ba0df7f21",
+        "title": "Heidi Website",
+        "status": "completed",
+        "clientId": "cli_d1bd32dc",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_f409348bbe08",
+        "title": "Ivan Website",
+        "status": "completed",
+        "clientId": "cli_beb16941",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_62c7b2dcc9d9",
+        "title": "Acme Second Website",
+        "status": "completed",
+        "clientId": "cli_9fcce312",
+        "testimonialStatus": "declined"
+      },
+      {
+        "id": "prj_285c070163e7",
+        "title": "Erin Second Website",
+        "status": "completed",
+        "clientId": "cli_36328ae7",
+        "testimonialStatus": "requested"
+      },
+      {
+        "id": "prj_03c30201c28e",
+        "title": "Grace Append Website",
+        "status": "completed",
+        "clientId": "cli_fc0a4aed",
+        "testimonialStatus": "snoozed"
+      }
+    ],
+    "reviews": [
+      {
+        "ref": "rev_41dcc75b02f5",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_2827b0eb4c7b",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "rate limited quote 0",
+        "consent": {
+          "p1": true,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.349Z",
+        "updatedAt": "2026-10-21T19:01:15.349Z"
+      },
+      {
+        "ref": "rev_41dcc75b02f5",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_2827b0eb4c7b",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "rate limited quote 1",
+        "consent": {
+          "p1": true,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 2,
+        "receivedAt": "2026-10-21T19:01:15.349Z",
+        "updatedAt": "2026-10-21T19:01:15.352Z"
+      },
+      {
+        "ref": "rev_41dcc75b02f5",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_2827b0eb4c7b",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "rate limited quote 2",
+        "consent": {
+          "p1": true,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 3,
+        "receivedAt": "2026-10-21T19:01:15.349Z",
+        "updatedAt": "2026-10-21T19:01:15.355Z"
+      },
+      {
+        "ref": "rev_41dcc75b02f5",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_2827b0eb4c7b",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "rate limited quote 3",
+        "consent": {
+          "p1": true,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 4,
+        "receivedAt": "2026-10-21T19:01:15.349Z",
+        "updatedAt": "2026-10-21T19:01:15.358Z"
+      },
+      {
+        "ref": "rev_41dcc75b02f5",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_2827b0eb4c7b",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "rate limited quote 4",
+        "consent": {
+          "p1": true,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 5,
+        "receivedAt": "2026-10-21T19:01:15.349Z",
+        "updatedAt": "2026-10-21T19:01:15.361Z"
+      },
+      {
+        "ref": "rev_c6e14a7c5ff1",
+        "type": "review",
+        "state": "approved",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_9fcce312",
+        "projectId": "prj_0768721d4fbe",
+        "name": "Alice Longname",
+        "company": "Acme Ltd",
+        "role": "CTO",
+        "rating": "5",
+        "review": "The team rebuilt our site in three weeks and it doubled our inbound leads.",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": "Alice L"
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.375Z",
+        "updatedAt": "2026-10-21T19:01:15.375Z",
+        "decidedAt": "2026-10-21T19:01:15.393Z",
+        "decidedBy": "one-click-link"
+      },
+      {
+        "ref": "rev_74508533162b",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_720afc60",
+        "projectId": "prj_2a2bf3a51d2a",
+        "name": "Frank Spoof",
+        "company": "",
+        "role": "",
+        "rating": "4",
+        "review": "Spoofing attempt quote.",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": true,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.378Z",
+        "updatedAt": "2026-10-21T19:01:15.378Z"
+      },
+      {
+        "ref": "rev_cb0a1d9cbdf0",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_9fcce312",
+        "projectId": "prj_62c7b2dcc9d9",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.381Z",
+        "updatedAt": "2026-10-21T19:01:15.381Z"
+      },
+      {
+        "ref": "rev_cb0a1d9cbdf0",
+        "type": "review",
+        "state": "declined",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_9fcce312",
+        "projectId": "prj_62c7b2dcc9d9",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 2,
+        "receivedAt": "2026-10-21T19:01:15.381Z",
+        "updatedAt": "2026-10-21T19:01:15.388Z"
+      },
+      {
+        "ref": "rev_c102779997af",
+        "type": "review",
+        "state": "approved",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_beb16941",
+        "projectId": "prj_f409348bbe08",
+        "name": "Ivan Moderation",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "A quote waiting for the owner decision.",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.413Z",
+        "updatedAt": "2026-10-21T19:01:15.413Z",
+        "decidedAt": "2026-10-21T19:01:15.423Z",
+        "decidedBy": "one-click-link"
+      },
+      {
+        "ref": "rev_cbce3a091b22",
+        "type": "review",
+        "state": "rejected",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_16fa660e",
+        "projectId": "prj_cff2a36c7a55",
+        "name": "Bob Other",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "A quote the owner will reject.",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.427Z",
+        "updatedAt": "2026-10-21T19:01:15.427Z",
+        "decidedAt": "2026-10-21T19:01:15.429Z",
+        "decidedBy": "one-click-link"
+      },
+      {
+        "ref": "rev_1e88af2cabb2",
+        "type": "review",
+        "state": "approved",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_73ed8f64",
+        "projectId": "prj_e102b78d70f0",
+        "name": "Dave Withdrawn",
+        "company": "Dave Ltd",
+        "role": "COO",
+        "rating": "",
+        "review": "A quote the client will withdraw before it goes live.",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.432Z",
+        "updatedAt": "2026-10-21T19:01:15.432Z",
+        "decidedAt": "2026-10-21T19:01:15.436Z",
+        "decidedBy": "one-click-link"
+      },
+      {
+        "ref": "rev_1e88af2cabb2",
+        "type": "review",
+        "state": "declined",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_73ed8f64",
+        "projectId": "prj_e102b78d70f0",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 2,
+        "receivedAt": "2026-10-21T19:01:15.432Z",
+        "updatedAt": "2026-10-21T19:01:15.439Z",
+        "revoked": true,
+        "withdrawnAt": "2026-10-21T19:01:15.439Z"
+      },
+      {
+        "ref": "rev_10328ef3fcb9",
+        "type": "review",
+        "state": "approved",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_cba8061d",
+        "projectId": "prj_ad5d99a86261",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "An anonymous quote that must not identify anybody.",
+        "consent": {
+          "p1": true,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.444Z",
+        "updatedAt": "2026-10-21T19:01:15.444Z",
+        "decidedAt": "2026-10-21T19:01:15.447Z",
+        "decidedBy": "one-click-link"
+      },
+      {
+        "ref": "rev_f9be2556c86e",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_36328ae7",
+        "projectId": "prj_285c070163e7",
+        "name": "Erin Unfinished",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "REVISION ONE text",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.459Z",
+        "updatedAt": "2026-10-21T19:01:15.459Z"
+      },
+      {
+        "ref": "rev_f9be2556c86e",
+        "type": "review",
+        "state": "approved",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_36328ae7",
+        "projectId": "prj_285c070163e7",
+        "name": "Erin Unfinished",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "REVISION TWO text",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 2,
+        "receivedAt": "2026-10-21T19:01:15.459Z",
+        "updatedAt": "2026-10-21T19:01:15.463Z",
+        "decidedAt": "2026-10-21T19:01:15.468Z",
+        "decidedBy": "one-click-link"
+      },
+      {
+        "ref": "rev_146ed6723142",
+        "type": "review",
+        "state": "pending",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_d1bd32dc",
+        "projectId": "prj_277ba0df7f21",
+        "name": "Heidi Consent",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "A valid quote after six malformed ones.",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.478Z",
+        "updatedAt": "2026-10-21T19:01:15.478Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.487Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 2,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.489Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 3,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.492Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 4,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.496Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 5,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.499Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 6,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.501Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 7,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.504Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 8,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.506Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 9,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.509Z"
+      },
+      {
+        "ref": "rev_cfb886226aea",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_fc0a4aed",
+        "projectId": "prj_03c30201c28e",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 10,
+        "receivedAt": "2026-10-21T19:01:15.487Z",
+        "updatedAt": "2026-10-21T19:01:15.512Z"
+      }
+    ],
+    "clients": [
+      {
+        "id": "cli_9fcce312",
+        "email": "alice@client.test",
+        "name": "Alice Longname",
+        "company": "",
+        "role": "COO"
+      },
+      {
+        "id": "cli_16fa660e",
+        "email": "bob@client.test",
+        "name": "Bob Other",
+        "company": "",
+        "role": ""
+      },
+      {
+        "id": "cli_cba8061d",
+        "email": "carol@client.test",
+        "name": "Carol Anonymous",
+        "company": "Carol Corp",
+        "role": "CFO"
+      },
+      {
+        "id": "cli_73ed8f64",
+        "email": "dave@client.test",
+        "name": "Dave Withdrawn",
+        "company": "Dave Ltd",
+        "role": "COO"
+      },
+      {
+        "id": "cli_36328ae7",
+        "email": "erin@client.test",
+        "name": "Erin Unfinished",
+        "company": "",
+        "role": ""
+      },
+      {
+        "id": "cli_720afc60",
+        "email": "frank@client.test",
+        "name": "Frank Spoof",
+        "company": "",
+        "role": ""
+      },
+      {
+        "id": "cli_fc0a4aed",
+        "email": "grace@client.test",
+        "name": "Grace Rate",
+        "company": "",
+        "role": ""
+      },
+      {
+        "id": "cli_d1bd32dc",
+        "email": "heidi@client.test",
+        "name": "Heidi Consent",
+        "company": "",
+        "role": ""
+      },
+      {
+        "id": "cli_beb16941",
+        "email": "ivan@client.test",
+        "name": "Ivan Moderation",
+        "company": "",
+        "role": ""
+      }
+    ],
+    "keys": {
+      "aliceRef": "rev_c6e14a7c5ff1",
+      "revokedRef": "rev_1e88af2cabb2"
+    }
+  }
+}

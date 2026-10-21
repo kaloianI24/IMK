@@ -1,4 +1,4 @@
-# IXI
+# IMK
 
 Astro static marketing site. Cloudflare Pages + Pages Functions + Turnstile + Resend + KV rate limiter.
 

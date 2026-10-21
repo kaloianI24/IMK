@@ -1,0 +1,169 @@
+{
+  "suite": "qa-wave3-independent",
+  "startedFrom": "HEAD 8303af9",
+  "passed": 20,
+  "failed": 0,
+  "total": 20,
+  "results": [
+    {
+      "id": "A1",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "the durable counter file is really the backend in play",
+      "status": "PASS",
+      "ms": 3,
+      "detail": "counter file: rate-counters.json (227 bytes)"
+    },
+    {
+      "id": "A2",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "an invalid submission burns NO slot in the NEW code path",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "no submit bucket yet (2 bucket(s) in the file)"
+    },
+    {
+      "id": "A3",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "five valid submissions are allowed and the sixth is refused",
+      "status": "PASS",
+      "ms": 42,
+      "detail": "statuses=200,200,200,200,200,429"
+    },
+    {
+      "id": "A4",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "the counter file counts the valid requests and not the refused one",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "submit bucket count=6 of 7 requests (1 refused by validation)"
+    },
+    {
+      "id": "A5",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "no client id, email or IP address reaches the counter file",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "all bucket keys are sha256 digests (3 keys)"
+    },
+    {
+      "id": "A6",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "the edge KV backend stores no raw key either",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "kv keys: portal:c22db0284eb367261a5817173dc93d13d025906eea0d5268877045392e124049, portal:c22db0284eb367261a5817173dc93d13d025906eea0d5268877045392e124049, portal:e43051e75103a7fdd6114f31f505d1c8d1e6151b250d102bd85a9510c43368ec, portal:e43051e75103a7fdd6114f31f505d1c8d1e6151b250d102bd85a9510c43368ec"
+    },
+    {
+      "id": "A7",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "a backend that throws degrades instead of failing the request",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "degraded=true, the request still proceeded"
+    },
+    {
+      "id": "A8",
+      "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
+      "name": "a durable backend that cannot write degrades at the HANDLER level",
+      "status": "PASS",
+      "ms": 43,
+      "detail": "status=200 (no 500, the request was served)"
+    },
+    {
+      "id": "B1",
+      "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
+      "name": "every Cloudflare portal endpoint refuses to answer 200",
+      "status": "PASS",
+      "ms": 7,
+      "detail": "GET /api/portal/projects -> 501 unimplemented | GET /api/portal/projects/proj_1 -> 501 unimplemented | POST /api/portal/projects -> 403 forbidden | PATCH /api/portal/projects/proj_1 -> 403 forbidden | GET /api/portal/testimonials?projectId=proj_1 -> 501 unimplemented | POST /api/portal/testimonials -> 501 unimplemented | GET /api/portal/comments?projectId=proj_1 -> 501 unimplemented | POST /api/portal/comments -> 501 unimplemented | GET /api/portal/plan-items?projectId=proj_1 -> 501 unimplemented | POST /api/portal/plan-items -> 501 unimplemented | PATCH /api/portal/plan-items/pi_1 -> 501 unimplemented | GET /api/portal/updates?projectId=proj_1 -> 501 unimplemented | POST /api/portal/updates -> 501 unimplemented | POST /api/portal/invites -> 403 forbidden | POST /api/portal/auth/request-link -> 400 validation | GET /api/portal/auth/verify?token=abc -> 500 internal"
+    },
+    {
+      "id": "B2",
+      "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
+      "name": "the Cloudflare moderation endpoint accepts a Vercel-signed link",
+      "status": "PASS",
+      "ms": 4,
+      "detail": "the Vercel-signed link was accepted and the record was approved"
+    },
+    {
+      "id": "B3",
+      "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
+      "name": "the Cloudflare moderation endpoint rejects a forged link",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "status=400 code=signature"
+    },
+    {
+      "id": "B4",
+      "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
+      "name": "a link for a superseded revision approves nothing on Cloudflare",
+      "status": "PASS",
+      "ms": 2,
+      "detail": "status=409 code=stale-revision"
+    },
+    {
+      "id": "B5",
+      "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
+      "name": "a malformed moderation store must NOT read as \"review not found\" on Cloudflare",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "status=500 code=storage"
+    },
+    {
+      "id": "B6",
+      "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
+      "name": "the Vercel tree answers 500 storage for the SAME malformed store",
+      "status": "PASS",
+      "ms": 3,
+      "detail": "status=500 code=storage"
+    },
+    {
+      "id": "C1",
+      "group": "C -- the durable counter file under the production topology",
+      "name": "CONTROL: one process writing the counter file loses nothing",
+      "status": "PASS",
+      "ms": 114,
+      "detail": "25/25 buckets kept by one writer"
+    },
+    {
+      "id": "C2",
+      "group": "C -- the durable counter file under the production topology",
+      "name": "two serverless functions writing the SAME counter file do not lose counts",
+      "status": "PASS",
+      "ms": 716,
+      "detail": "4 concurrent write rounds, no lost bucket"
+    },
+    {
+      "id": "D1",
+      "group": "D -- the route table of the launch target (static analysis)",
+      "name": "the bare auth path has no route (404) while the sub-path answers",
+      "status": "PASS",
+      "ms": 6,
+      "detail": "bare path -> 404 (not-found), sub-path -> 200"
+    },
+    {
+      "id": "D2",
+      "group": "D -- the route table of the launch target (static analysis)",
+      "name": "the route table exists: the sub-path and by-id routes have a function file in BOTH trees",
+      "status": "PASS",
+      "ms": 3,
+      "detail": "5 route files in each tree, no catch-all, the deploy root is declared"
+    },
+    {
+      "id": "D3",
+      "group": "D -- the route table of the launch target (static analysis)",
+      "name": "the front-end calls the auth sub-paths that the route table lacks",
+      "status": "PASS",
+      "ms": 6,
+      "detail": "front-end calls: /api/portal/auth/request-link, /api/portal/auth/verify"
+    },
+    {
+      "id": "E1",
+      "group": "E -- housekeeping",
+      "name": "the repository site/data was never touched by this run",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "repo site/data/ untouched"
+    }
+  ]
+}

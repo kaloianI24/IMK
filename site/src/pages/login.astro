@@ -1,0 +1,71 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+---
+
+<BaseLayout
+  title="Sign in to your IMK portal"
+  description="Sign in to your IMK client/owner portal with a one-time magic link. No password required."
+  path="/login"
+  noindex={true}
+>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Sign in' }]} />
+    <h1>Sign in to your IMK portal</h1>
+    <p style="max-width:60ch;">No password. Enter your email and we'll send a one-time sign-in link to your inbox. It expires in 15 minutes.</p>
+
+    <form id="login-form" class="card" style="max-width:40ch;">
+      <div class="form-group">
+        <label for="email">Work email</label>
+        <input id="email" name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@yourcompany.com" />
+      </div>
+      <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-2);">
+        Not yet invited? Contact IMK to request access. Projects are connected to the email address you were invited with — if you need access with a different email, contact us at <a href="mailto:2imk4support@gmail.com">2imk4support@gmail.com</a> and send proof of our conversation.
+      </p>
+      <div style="margin-top:var(--space-4);">
+        <button type="submit" class="btn btn-primary" id="submit-btn">Send sign-in link</button>
+      </div>
+    </form>
+    <p id="login-message" class="muted" style="margin-top:var(--space-4);"></p>
+  </section>
+
+  <script>
+    const form = document.getElementById('login-form') as HTMLFormElement | null;
+    const messageEl = document.getElementById('login-message') as HTMLParagraphElement | null;
+    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement | null;
+    const emailInput = document.getElementById('email') as HTMLInputElement | null;
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = emailInput?.value.trim() || '';
+      if (!email) return;
+
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending…'; }
+      if (messageEl) messageEl.textContent = '';
+
+      try {
+        const res = await fetch('/api/portal/auth/request-link', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+
+        if (res.ok && data.ok) {
+          if (messageEl) { messageEl.style.color = 'var(--color-text)'; messageEl.textContent = data.message || 'If you have an invitation, a sign-in link has been sent.'; }
+          form?.reset();
+        } else {
+          if (messageEl) { messageEl.style.color = 'var(--color-text-muted)'; messageEl.textContent = data?.error || 'Something went wrong. Please try again.'; }
+        }
+      } catch {
+        if (messageEl) { messageEl.style.color = 'var(--color-text-muted)'; messageEl.textContent = 'Something went wrong. Please try again.'; }
+      } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Send sign-in link'; }
+      }
+    });
+  </script>
+</BaseLayout>

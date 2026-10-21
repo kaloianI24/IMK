@@ -1,0 +1,563 @@
+---
+// PortalTestimonialPrompt — the primary door for client testimonials
+// (spec RP-3): a signed-in client is asked once, in context, when their
+// project is finished. Nothing is published without explicit consent (RP-6).
+//
+// Server contract this component expects (Backend Developer):
+//   GET  /api/portal/testimonials?projectId=<id>
+//        200 { testimonial: { state, rating, review, consent: { p1, p2, p3, displayName } } | null }
+//        404 → the endpoint is not deployed; the card stays hidden.
+//   POST /api/portal/testimonials
+//        { action: 'submit',  projectId, rating?, review, displayName?, consent: { p1, p2, p3 } }
+//        { action: 'snooze',  projectId }
+//        { action: 'decline', projectId }
+//        200 { ok: true, testimonial?: {...} }
+// The server resolves clientId/projectId from the session (RP-3.6) and
+// derives verifiedClient itself (RP-3.8) — the client never sends it.
+import {
+  TESTIMONIAL_CONSENT,
+  TESTIMONIAL_INTRO,
+  TESTIMONIAL_NOTE,
+  SUPPORT_EMAIL,
+} from '../data/testimonial-consent';
+
+interface Props {
+  supportEmail?: string;
+}
+
+const { supportEmail = SUPPORT_EMAIL } = Astro.props;
+
+const MAX_QUOTE = 1000;
+const ratingValues = [1, 2, 3, 4, 5];
+---
+
+<section
+  id="testimonial-prompt"
+  class="card testimonial-prompt"
+  hidden
+  aria-labelledby="testimonial-prompt-title"
+>
+  <h3 id="testimonial-prompt-title" class="testimonial-prompt__title">
+    Your project is finished — how did we go?
+  </h3>
+  <p class="testimonial-prompt__intro muted">{TESTIMONIAL_INTRO}</p>
+
+  <div id="testimonial-done" class="testimonial-prompt__done" hidden>
+    <p class="testimonial-prompt__done-title">Thanks — we've got it.</p>
+    <p class="muted" id="testimonial-done-detail">
+      Your feedback is with us. We review every quote before it goes on the site.
+    </p>
+    <button type="button" class="btn btn-ghost" id="testimonial-edit" style="font-size:var(--text-sm);">
+      Change my feedback
+    </button>
+  </div>
+
+  <form id="testimonial-form" novalidate>
+    <fieldset class="testimonial-prompt__fieldset">
+      <legend class="testimonial-prompt__label">
+        Rating <span class="testimonial-prompt__optional">(optional)</span>
+      </legend>
+      <div class="star-rating" role="radiogroup" aria-label="Rating">
+        {ratingValues.map((n) => (
+          <>
+            <input type="radio" id={`tr-${n}`} name="rating" value={n} />
+            <label for={`tr-${n}`} aria-label={`${n} ${n === 1 ? 'star' : 'stars'}`}>★</label>
+          </>
+        ))}
+      </div>
+    </fieldset>
+
+    <div class="form-group">
+      <label for="testimonial-quote">Your feedback <span aria-label="required">*</span></label>
+      <textarea
+        id="testimonial-quote"
+        name="review"
+        rows="4"
+        maxlength={MAX_QUOTE}
+        required
+        aria-describedby="testimonial-quote-hint"
+      ></textarea>
+      <p id="testimonial-quote-hint" class="muted testimonial-prompt__counter">
+        <span id="testimonial-count">0</span> / {MAX_QUOTE} characters
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label for="testimonial-name">
+        Name to show <span class="testimonial-prompt__optional">(optional)</span>
+      </label>
+      <input type="text" id="testimonial-name" name="displayName" maxlength="80" autocomplete="name" />
+    </div>
+
+    <fieldset class="testimonial-prompt__fieldset testimonial-prompt__consent">
+      <legend class="testimonial-prompt__label">
+        Your consent — each box is separate, and all are off by default
+      </legend>
+
+      <label class="testimonial-prompt__check">
+        <input type="checkbox" id="consent-p1" name="p1" />
+        <span>{TESTIMONIAL_CONSENT.p1}</span>
+      </label>
+      <label class="testimonial-prompt__check">
+        <input type="checkbox" id="consent-p2" name="p2" />
+        <span>{TESTIMONIAL_CONSENT.p2}</span>
+      </label>
+      <label class="testimonial-prompt__check">
+        <input type="checkbox" id="consent-p3" name="p3" />
+        <span>{TESTIMONIAL_CONSENT.p3}</span>
+      </label>
+
+      <p class="muted testimonial-prompt__note">{TESTIMONIAL_NOTE}</p>
+      <p class="muted testimonial-prompt__note">
+        Questions about this? Email <a href={`mailto:${supportEmail}`}>{supportEmail}</a>.
+      </p>
+    </fieldset>
+
+    <div class="testimonial-prompt__actions">
+      <button type="submit" class="btn btn-primary" id="testimonial-submit">Send my feedback</button>
+      <button type="button" class="btn btn-ghost" id="testimonial-later">Maybe later</button>
+      <button type="button" class="btn btn-ghost" id="testimonial-decline">No thanks</button>
+    </div>
+  </form>
+
+  <p id="testimonial-message" class="testimonial-prompt__message" role="status" aria-live="polite" hidden></p>
+</section>
+
+<style>
+  .testimonial-prompt {
+    margin-bottom: var(--space-8);
+  }
+
+  /* The `hidden` attribute must beat the component's own display rules —
+     otherwise the "thanks" panel and the form show at the same time. */
+  .testimonial-prompt [hidden] {
+    display: none !important;
+  }
+
+  .testimonial-prompt__title {
+    margin: 0 0 var(--space-3);
+    font-size: var(--text-lg);
+    font-weight: 600;
+  }
+
+  .testimonial-prompt__intro {
+    margin: 0 0 var(--space-4);
+    max-width: 60ch;
+  }
+
+  .testimonial-prompt__fieldset {
+    border: 0;
+    margin: 0 0 var(--space-4);
+    padding: 0;
+  }
+
+  .testimonial-prompt__label {
+    display: block;
+    font-weight: 600;
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-2);
+    padding: 0;
+  }
+
+  .testimonial-prompt__optional {
+    font-weight: 400;
+    color: var(--color-text-muted);
+  }
+
+  .testimonial-prompt__counter {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-xs);
+  }
+
+  .testimonial-prompt__check {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-weight: 400;
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-2);
+    cursor: pointer;
+  }
+
+  .testimonial-prompt__consent {
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-4);
+  }
+
+  .testimonial-prompt__note {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-xs);
+    max-width: 62ch;
+  }
+
+  .testimonial-prompt__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .testimonial-prompt__done {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+
+  .testimonial-prompt__done-title {
+    margin: 0;
+    font-weight: 600;
+    color: var(--color-accent-text);
+  }
+
+  .testimonial-prompt__message {
+    margin: var(--space-4) 0 0;
+    font-size: var(--text-sm);
+  }
+
+  .testimonial-prompt__message--error {
+    color: var(--color-error, #b00020);
+    font-weight: 600;
+  }
+
+  /* The global input rule stretches every control to 100% width — undo it for
+     the radio/checkbox controls inside this card. */
+  .testimonial-prompt input[type='radio'],
+  .testimonial-prompt input[type='checkbox'] {
+    width: auto;
+    min-height: 0;
+    margin: 3px 0 0;
+    padding: 0;
+    accent-color: var(--color-primary);
+    flex: 0 0 auto;
+  }
+
+  .star-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .star-rating input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  .star-rating label {
+    display: inline-block;
+    margin: 0;
+    font-size: 1.8rem;
+    line-height: 1;
+    color: color-mix(in srgb, var(--color-text) 30%, transparent);
+    cursor: pointer;
+    transition: color 120ms ease;
+  }
+
+  .star-rating label.is-on {
+    color: var(--color-accent-text);
+  }
+
+  .star-rating input:focus-visible + label {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+</style>
+
+<script>
+  const API = '/api/portal';
+
+  const section = document.getElementById('testimonial-prompt');
+  const form = document.getElementById('testimonial-form');
+  const doneEl = document.getElementById('testimonial-done');
+  const doneDetail = document.getElementById('testimonial-done-detail');
+  const editBtn = document.getElementById('testimonial-edit');
+  const quoteEl = document.getElementById('testimonial-quote') as HTMLTextAreaElement | null;
+  const countEl = document.getElementById('testimonial-count');
+  const nameEl = document.getElementById('testimonial-name') as HTMLInputElement | null;
+  const p1El = document.getElementById('consent-p1') as HTMLInputElement | null;
+  const p2El = document.getElementById('consent-p2') as HTMLInputElement | null;
+  const p3El = document.getElementById('consent-p3') as HTMLInputElement | null;
+  const msgEl = document.getElementById('testimonial-message');
+  const submitBtn = document.getElementById('testimonial-submit') as HTMLButtonElement | null;
+  const laterBtn = document.getElementById('testimonial-later') as HTMLButtonElement | null;
+  const declineBtn = document.getElementById('testimonial-decline') as HTMLButtonElement | null;
+
+  let projectId: string | null = null;
+  let declineArmed = false;
+
+  // The owner's portal is a management view, not an invitation to answer the
+  // ask: GET /api/portal/testimonials answers 200 for an admin (owner view)
+  // and POST answers 403, so showing the form to the owner would be a dead
+  // end. The role is read the same way the portal reads it for its own
+  // admin-only reveals (sessionStorage `imk_portal_role`, set at sign-in).
+  const sessionRole = (sessionStorage.getItem('imk_portal_role') as 'admin' | 'client' | null) ?? 'client';
+
+  function setMessage(text: string, isError = false): void {
+    if (!msgEl) return;
+    msgEl.textContent = text;
+    msgEl.classList.toggle('testimonial-prompt__message--error', isError);
+    msgEl.hidden = text === '';
+  }
+
+  function setBusy(busy: boolean): void {
+    if (submitBtn) {
+      submitBtn.disabled = busy;
+      submitBtn.textContent = busy ? 'Sending…' : 'Send my feedback';
+    }
+    if (laterBtn) laterBtn.disabled = busy;
+    if (declineBtn) declineBtn.disabled = busy;
+  }
+
+  async function api(path: string, opts: RequestInit = {}): Promise<Response> {
+    return fetch(`${API}${path}`, {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Origin: window.location.origin },
+      ...opts,
+    });
+  }
+
+  function updateCount(): void {
+    if (countEl && quoteEl) countEl.textContent = String(quoteEl.value.length);
+  }
+
+  function paintStars(selected: number): void {
+    const labels = document.querySelectorAll<HTMLLabelElement>('#testimonial-prompt .star-rating label');
+    labels.forEach((label) => {
+      const input = document.getElementById(label.htmlFor) as HTMLInputElement | null;
+      const value = Number(input?.value ?? 0);
+      label.classList.toggle('is-on', value > 0 && value <= selected);
+    });
+  }
+
+  function currentRating(): number {
+    const checked = document.querySelector<HTMLInputElement>('#testimonial-prompt input[name="rating"]:checked');
+    const value = Number(checked?.value ?? 0);
+    return value >= 1 && value <= 5 ? value : 0;
+  }
+
+  function consentOf(t: Record<string, unknown>): Record<string, unknown> {
+    const raw = t.consent;
+    return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  }
+
+  function fillForm(t: Record<string, unknown>): void {
+    const consent = consentOf(t);
+    if (quoteEl) quoteEl.value = String(t.review ?? '');
+    if (nameEl) nameEl.value = String(consent.displayName ?? '');
+    if (p1El) p1El.checked = consent.p1 === true;
+    if (p2El) p2El.checked = consent.p2 === true;
+    if (p3El) p3El.checked = consent.p3 === true;
+
+    const rating = Number(t.rating);
+    const valid = Number.isFinite(rating) && rating >= 1 && rating <= 5 ? rating : 0;
+    if (valid > 0) {
+      const radio = document.getElementById(`tr-${valid}`) as HTMLInputElement | null;
+      if (radio) radio.checked = true;
+    }
+    paintStars(valid);
+    updateCount();
+  }
+
+  function showForm(): void {
+    if (form) form.hidden = false;
+    if (doneEl) doneEl.hidden = true;
+    if (submitBtn) submitBtn.textContent = 'Send my feedback';
+  }
+
+  function showDone(t: Record<string, unknown>): void {
+    if (form) form.hidden = true;
+    if (doneEl) doneEl.hidden = false;
+    if (doneDetail) {
+      doneDetail.textContent =
+        t.state === 'approved'
+          ? 'Your feedback is published on the IMK website.'
+          : 'Your feedback is with us. We review every quote before it goes on the site.';
+    }
+  }
+
+  function hide(): void {
+    if (section) section.hidden = true;
+  }
+
+  async function loadExisting(): Promise<void> {
+    if (!projectId) return;
+
+    let res: Response;
+    try {
+      res = await api(`/testimonials?projectId=${encodeURIComponent(projectId)}`);
+    } catch {
+      hide();
+      return;
+    }
+
+    // The endpoint is not deployed (or the session cannot see it) — do not
+    // show a card that cannot work.
+    if (!res.ok) {
+      hide();
+      return;
+    }
+
+    const data = (await res.json().catch(() => ({}))) as { testimonial?: Record<string, unknown> | null };
+    const t = data && data.testimonial ? data.testimonial : null;
+
+    if (t) {
+      const status = String(t.testimonialStatus ?? '');
+      if (status === 'snoozed' || status === 'declined') {
+        hide();
+        return;
+      }
+      fillForm(t);
+      if (t.state === 'pending' || t.state === 'approved') {
+        showDone(t);
+      } else {
+        showForm();
+      }
+    } else {
+      showForm();
+    }
+
+    if (section) section.hidden = false;
+  }
+
+  // The portal page tells us which project is loaded; the card decides
+  // whether the client is actually being asked (RP-3.2).
+  document.addEventListener('imk:portal-project', (event) => {
+    // Owner session: the card never opens, whatever the project says.
+    if (sessionRole === 'admin') {
+      hide();
+      return;
+    }
+
+    const detail = (event as CustomEvent).detail as
+      | { projectId?: string; status?: string; testimonialStatus?: string | null }
+      | undefined;
+    if (!detail || !detail.projectId) return;
+
+    projectId = detail.projectId;
+
+    const testimonialStatus = detail.testimonialStatus ?? null;
+    const eligible =
+      testimonialStatus === 'requested' ||
+      (testimonialStatus === null && detail.status === 'completed');
+
+    if (!eligible) {
+      hide();
+      return;
+    }
+
+    void loadExisting();
+  });
+
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!projectId) return;
+
+    const quote = (quoteEl?.value ?? '').trim();
+    if (quote.length === 0) {
+      setMessage('Please add a few words before sending.', true);
+      quoteEl?.focus();
+      return;
+    }
+    if (quote.length > 1000) {
+      setMessage('Please keep it under 1000 characters.', true);
+      quoteEl?.focus();
+      return;
+    }
+    if (!p1El?.checked) {
+      setMessage(
+        'Please tick the first box to let us publish the quote — or choose "No thanks" if you would rather not.',
+        true,
+      );
+      p1El?.focus();
+      return;
+    }
+
+    const rating = currentRating();
+    setBusy(true);
+    setMessage('');
+    try {
+      const res = await api('/testimonials', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'submit',
+          projectId,
+          rating: rating > 0 ? rating : undefined,
+          review: quote,
+          displayName: (nameEl?.value ?? '').trim() || undefined,
+          consent: {
+            p1: p1El?.checked === true,
+            p2: p2El?.checked === true,
+            p3: p3El?.checked === true,
+          },
+        }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as { error?: string; testimonial?: Record<string, unknown> };
+      if (!res.ok) {
+        setMessage(data?.error || 'Sorry — we could not send your feedback just now. Please try again in a moment.', true);
+        return;
+      }
+
+      showDone(data?.testimonial ?? { state: 'pending' });
+      setMessage('Thanks — your feedback is with us.');
+    } catch {
+      setMessage('Sorry — we could not send your feedback just now. Please try again in a moment.', true);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  async function dismiss(action: 'snooze' | 'decline'): Promise<void> {
+    if (!projectId) return;
+    setBusy(true);
+    try {
+      const res = await api('/testimonials', {
+        method: 'POST',
+        body: JSON.stringify({ action, projectId }),
+      });
+      if (!res.ok) {
+        setMessage('Sorry — that did not work. Please try again in a moment.', true);
+        return;
+      }
+      hide();
+    } catch {
+      setMessage('Sorry — that did not work. Please try again in a moment.', true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  laterBtn?.addEventListener('click', () => {
+    void dismiss('snooze');
+  });
+
+  // Declining is final (RP-3.5), so it asks once before it happens.
+  declineBtn?.addEventListener('click', () => {
+    if (!declineArmed) {
+      declineArmed = true;
+      if (declineBtn) {
+        declineBtn.textContent = 'Yes, don’t ask again';
+        declineBtn.focus();
+      }
+      setMessage('Click again if you really don’t want to leave feedback.');
+      return;
+    }
+    void dismiss('decline');
+  });
+
+  editBtn?.addEventListener('click', () => {
+    showForm();
+    setMessage('');
+    quoteEl?.focus();
+  });
+
+  quoteEl?.addEventListener('input', updateCount);
+
+  document.querySelectorAll<HTMLInputElement>('#testimonial-prompt input[name="rating"]').forEach((input) => {
+    input.addEventListener('change', () => paintStars(currentRating()));
+  });
+</script>

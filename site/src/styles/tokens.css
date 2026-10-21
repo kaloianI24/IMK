@@ -1,4 +1,4 @@
-/* IXI — Design tokens (single source of truth)
+/* IMK — Design tokens (single source of truth)
    Designer — UI/UX · Phase 1 file: research/03-designer-color-theming.md
    Values are copied verbatim from that research section. Do not override per-component.
    Themes follow prefers-color-scheme only (no toggle at launch). [data-theme="…"] hooks exist
@@ -7,6 +7,13 @@
    Brand-artwork revision (see design/brand.md §7c): the accent ramp and the
    --brand-* tokens were re-derived from the owner's own logo exports in ../Logo.
    Every pair is re-measured and gated by `npm run brand`.
+
+   IMK rebrand (2026-10-19): the owner replaced the artwork with the IMK wordmark
+   in the new brand red #EA0000 (measured from Logo/Text/4x/Asset-1@4x.png).
+   #EA0000 is used for graphics, logo, button fills and the focus ring. Where the
+   accent is rendered as TEXT it uses --color-accent-text (#C00000, a darker tint
+   of the same hue) because #EA0000 on the cream bg is 4.16:1 and on neutral-soft
+   3.57:1 — below the WCAG AA 4.5:1 text bar that `npm run brand` enforces.
 */
 
 :root {
@@ -20,25 +27,27 @@
   --color-text: #171315;
   --color-text-muted: #4F474A;
   --color-text-subtle: #6B6367;
-  --color-primary: #720606;
-  --color-primary-hover: #5E0505;
-  --color-primary-active: #4B0404;
+  --color-primary: #EA0000;
+  --color-primary-hover: #C00000;
+  --color-primary-active: #A80000;
   --color-on-primary: #FFFCF7;
-  --color-link: #5E0505;
+  --color-link: #C00000;
+  --color-link-hover: #A80000;
+  --color-accent-text: #C00000; /* the brand red as TEXT (WCAG AA 4.5:1) */
   --color-border: #D8CEC0;
   --color-border-strong: #BFB3A3;
-  --color-focus: #720606;
+  --color-focus: #EA0000;
   --color-success: #2E6F40;
   --color-warning: #8A4F00;
   --color-error: #C62828;
   --color-neutral-soft: #E8E0D4;
 
   /* ---- Brand artwork (measured from ../Logo, see design/brand.md §7c) ---- */
-  --brand-red: #720606;       /* wordmark colourway in the owner artwork */
+  --brand-red: #EA0000;       /* wordmark colourway in the owner artwork */
   --brand-grey: #CCCCCC;      /* symbol colourway in the owner artwork */
   --brand-charcoal: #222222;  /* FullLogo plate */
-  --brand-mark: #720606;      /* symbol fill on this theme (light bg) */
-  --brand-word: #720606;      /* wordmark fill on this theme (light bg) */
+  --brand-mark: #EA0000;      /* symbol fill on this theme (light bg) */
+  --brand-word: #EA0000;      /* wordmark fill on this theme (light bg) */
 
   /* ---- Typography ---- */
   --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -131,6 +140,8 @@
     --color-primary-active: #E87676;
     --color-on-primary: #171315;
     --color-link: #F79A9A;
+    --color-link-hover: #F79A9A;
+    --color-accent-text: #F79A9A;
     --color-border: #3A3338;
     --color-border-strong: #5A5058;
     --color-focus: #F79A9A;
@@ -152,7 +163,7 @@
   --color-bg: #121012; --color-surface: #1F1B1E; --color-surface-2: #2A2428;
   --color-text: #F6F1EA; --color-text-muted: #B7AEA7; --color-text-subtle: #9E9590;
   --color-primary: #EF7D7D; --color-primary-hover: #F79A9A; --color-primary-active: #E87676;
-  --color-on-primary: #171315; --color-link: #F79A9A;
+  --color-on-primary: #171315; --color-link: #F79A9A; --color-link-hover: #F79A9A; --color-accent-text: #F79A9A;
   --color-border: #3A3338; --color-border-strong: #5A5058; --color-focus: #F79A9A;
   --color-success: #5FBF7A; --color-warning: #FFC266; --color-error: #FF6B6B;
   --color-neutral-soft: #2F292D;

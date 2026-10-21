@@ -23,8 +23,15 @@ jobs:
         run: |
           test "$(grep -o "output:[[:space:]]*'static'" astro.config.mjs | head -1)" != ""
           ! grep -r "@astrojs/cloudflare" package.json
-          test -f api/contact.ts
-          test -f site/functions/api/contact.ts
+          # The api/ tree lives at the REPO root, outside this working
+          # directory, so the paths are relative to site/.
+          test -f ../api/contact.ts
+          test -f functions/api/contact.ts
+          test -f ../vercel.json
+      - name: Route manifest check
+        run: npm run check:routes
+      - name: API typecheck
+        run: npm run typecheck:api
       - name: Secrets-in-bundle check
         run: |
           if grep -R -nE "TURNSTILE_SECRET_KEY|RESEND_API_KEY" dist/ ; then echo "leak"; exit 1; fi
@@ -57,19 +64,26 @@ jobs:
     needs: [build, lighthouse]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    # The Vercel project root is the REPO root: the api/ functions live
+    # outside site/, and vercel.json (build/install/output) is at the root.
+    # A project rooted at site/ would deploy no functions at all.
+    defaults:
+      run:
+        working-directory: .
     steps:
       - name: 'Guard: VERCEL_TOKEN required'
         run: |
           if [ -z "${VERCEL_TOKEN:-}" ]; then
             echo "VERCEL_TOKEN secret is not set."
-            echo "Deploys are disabled: add VERCEL_TOKEN to repository secrets to enable automatic Vercel deploys of site/."
+            echo "Deploys are disabled: add VERCEL_TOKEN to repository secrets to enable automatic Vercel deploys of the repo root."
             exit 1
           fi
           echo "VERCEL_TOKEN is present. The deploy step is deliberately not wired yet:"
-          echo "link the project in the Vercel dashboard first, then uncomment the recipe below."
-          # Example deploy step (enable only after the Vercel project is linked):
+          echo "link the project in the Vercel dashboard first (Root Directory = the repo root), then uncomment the recipe below."
+          # Example deploy step (enable only after the Vercel project is linked
+          # with Root Directory = the repository root):
           # - uses: actions/setup-node@v4
-          #   with: { node-version-file: 'site/.node-version', cache: 'npm', cache-dependency-path: site/package-lock.json }
+          #   with: { node-version-file: 'site/.node-version' }
           # - run: npm ci
           # - run: npx vercel --prod --token $VERCEL_TOKEN
           #   env:

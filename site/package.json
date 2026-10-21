@@ -1,5 +1,5 @@
 {
-  "name": "ixi",
+  "name": "imk",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,10 +7,16 @@
     "node": ">=20.3.0"
   },
   "scripts": {
+    "brand": "node scripts/gen-brand.mjs",
     "dev": "astro dev",
+    "dev:portal": "npm run build && node scripts/dev-portal.js",
+    "prebuild": "node scripts/publish-testimonials.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
+    "check:routes": "node scripts/check-api-routes.mjs",
+    "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
+    "test:store": "node scripts/test-portal-store.mjs",
     "og": "node scripts/gen-og.mjs",
     "lhci": "lhci autorun"
   },
@@ -22,6 +28,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "@lhci/cli": "^0.14.0",
+    "esbuild": "^0.27.7",
     "sharp": "^0.33.5",
     "typescript": "^5.6.0"
   }

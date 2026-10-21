@@ -15,7 +15,7 @@ const d = service.data;
 const slug = service.id;
 const sd = { "@context": "https://schema.org", "@type": "Service", "name": d.title, "description": d.tagline, "offers": { "@type": "Offer", "priceSpecification": d.startingAt } };
 ---
-<BaseLayout title={`${d.title} — IXI`} description={d.summary} path={`/services/${slug}`} structuredData={sd} stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+<BaseLayout title={`${d.title} — IMK`} description={d.summary} path={`/services/${slug}`} structuredData={sd} stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Services', href: '/services' }, { label: d.title }]} />
     <p class="eyebrow">{d.whoFor}</p>

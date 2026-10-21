@@ -1,0 +1,36 @@
+---
+// Renders the comments list + comment form. Data fetching + posting handled by portal.astro script.
+interface Props {
+  comments: Array<Record<string, unknown>>;
+  role: 'admin' | 'client';
+  projectId: string;
+  planItemId?: string;
+}
+const { comments, role, projectId, planItemId } = Astro.props;
+---
+
+<div id="comments-section">
+  <div id="comments-list" style="display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-4);">
+    {comments.map((c) => (
+      <div style="border-bottom:1px solid var(--color-border);padding-bottom:var(--space-3);font-size:var(--text-sm);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);">
+          <span style="font-weight:600;">{c.authorName || c.authorId || 'Unknown'}</span>
+          <span class="muted" style="font-size:var(--text-xs);">{c.authorRole || ''}</span>
+          <span class="muted" style="font-size:var(--text-xs);">{new Date(String(c.createdAt || 0)).toLocaleDateString()}</span>
+        </div>
+        <p style="margin:var(--space-2) 0 0;max-width:none;">{c.body}</p>
+      </div>
+    ))}
+    {comments.length === 0 && <p class="muted" style="font-size:var(--text-sm);">No comments yet.</p>}
+  </div>
+
+  <div class="form-group">
+    <label for="comment-body">Add a comment</label>
+    <textarea id="comment-body" name="body" rows="3" required maxlength="2000"></textarea>
+  </div>
+  <div style="margin-top:var(--space-2);display:flex;gap:var(--space-2);">
+    <button type="button" class="btn btn-primary" style="font-size:var(--text-sm);" data-action="post-comment" data-project-id={projectId} {...(planItemId ? { 'data-plan-item-id': planItemId } : {})}>Post</button>
+    <button type="button" class="btn btn-ghost" style="font-size:var(--text-sm);" data-action="cancel-comment">Cancel</button>
+  </div>
+  <p id="comment-message" class="muted" style="font-size:var(--text-sm);margin-top:var(--space-2);"></p>
+</div>

@@ -1,6 +1,6 @@
 {
-  "name": "IXI",
-  "short_name": "IXI",
+  "name": "IMK",
+  "short_name": "IMK",
   "description": "Automations that still work in month six.",
   "icons": [
     {
@@ -16,7 +16,7 @@
       "purpose": "any maskable"
     }
   ],
-  "theme_color": "#720606",
+  "theme_color": "#EA0000",
   "background_color": "#F7F1E8",
   "display": "standalone",
   "start_url": "/"

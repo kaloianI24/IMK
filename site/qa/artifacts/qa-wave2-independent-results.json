@@ -1,0 +1,235 @@
+{
+  "suite": "qa-wave2-independent",
+  "generatedAt": "2026-10-21T19:01:29.759Z",
+  "port": 4421,
+  "sandbox": "C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-wave2-2026-10-21T19-01-29-389Z",
+  "passed": 28,
+  "failed": 0,
+  "total": 28,
+  "results": [
+    {
+      "id": "M1",
+      "group": "M -- A stale one-click link must NOT approve (audit M5)",
+      "name": "the owner's link for revision 1 cannot approve revision 2",
+      "status": "PASS",
+      "ms": 4,
+      "detail": "409 stale-revision"
+    },
+    {
+      "id": "M2",
+      "group": "M -- A stale one-click link must NOT approve (audit M5)",
+      "name": "the stale link approved NOTHING -- the quote is still pending",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "no approved line, newest = revision 2, pending"
+    },
+    {
+      "id": "M3",
+      "group": "M -- A stale one-click link must NOT approve (audit M5)",
+      "name": "a stale link does not overwrite the quote text either",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "text unchanged"
+    },
+    {
+      "id": "M4",
+      "group": "M -- A stale one-click link must NOT approve (audit M5)",
+      "name": "after the 409 the owner gets a fresh link for the CURRENT revision",
+      "status": "PASS",
+      "ms": 3,
+      "detail": "fresh link names revision 2"
+    },
+    {
+      "id": "M5",
+      "group": "M -- A stale one-click link must NOT approve (audit M5)",
+      "name": "the fresh (current-revision) link approves exactly revision 2",
+      "status": "PASS",
+      "ms": 5,
+      "detail": "revision 2 approved, revision 1 never approved"
+    },
+    {
+      "id": "M6",
+      "group": "M -- A stale one-click link must NOT approve (audit M5)",
+      "name": "tampering with the revision in a genuine link breaks the signature",
+      "status": "PASS",
+      "ms": 2,
+      "detail": "400 signature"
+    },
+    {
+      "id": "M7",
+      "group": "M -- A stale one-click link must NOT approve (audit M5)",
+      "name": "a link with the revision removed is refused (not approved)",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "400 validation"
+    },
+    {
+      "id": "N1",
+      "group": "N -- the publish script refuses a malformed store (audit m2)",
+      "name": "a malformed line makes the publish script exit 1",
+      "status": "PASS",
+      "ms": 58,
+      "detail": "exit 1"
+    },
+    {
+      "id": "N2",
+      "group": "N -- the publish script refuses a malformed store (audit m2)",
+      "name": "the failure names the file and the line",
+      "status": "PASS",
+      "ms": 53,
+      "detail": "[publish-testimonials] data/moderation/reviews.jsonl line 2 is not valid JSON — refusing to publish a partial set of tes"
+    },
+    {
+      "id": "N3",
+      "group": "N -- the publish script refuses a malformed store (audit m2)",
+      "name": "nothing is published -- no partial set of testimonials",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "0 published files"
+    },
+    {
+      "id": "N4",
+      "group": "N -- the publish script refuses a malformed store (audit m2)",
+      "name": "the corrupt store is NOT rewritten (no lossy rewrite)",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "corrupt line preserved"
+    },
+    {
+      "id": "N5",
+      "group": "N -- the publish script refuses a malformed store (audit m2)",
+      "name": "CONTROL: with the malformed line removed the publish succeeds",
+      "status": "PASS",
+      "ms": 52,
+      "detail": "exit 0, 1 file published"
+    },
+    {
+      "id": "O1",
+      "group": "O -- a malformed submission burns no rate-limit slot (audit m6)",
+      "name": "four valid submissions are accepted",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "4 accepted"
+    },
+    {
+      "id": "O2",
+      "group": "O -- a malformed submission burns no rate-limit slot (audit m6)",
+      "name": "an invalid submission (no consent p1) is refused with 400",
+      "status": "PASS",
+      "ms": 2,
+      "detail": "400 consent-required"
+    },
+    {
+      "id": "O3",
+      "group": "O -- a malformed submission burns no rate-limit slot (audit m6)",
+      "name": "the invalid submission consumed NO slot -- a 5th valid one still passes",
+      "status": "PASS",
+      "ms": 3,
+      "detail": "200 -- the slot was not consumed by the invalid request"
+    },
+    {
+      "id": "O4",
+      "group": "O -- a malformed submission burns no rate-limit slot (audit m6)",
+      "name": "the 6th valid submission is rate-limited",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "429 rate-limit"
+    },
+    {
+      "id": "O5",
+      "group": "O -- a malformed submission burns no rate-limit slot (audit m6)",
+      "name": "snooze has its OWN bucket -- the exhausted submit bucket does not block it",
+      "status": "PASS",
+      "ms": 2,
+      "detail": "200"
+    },
+    {
+      "id": "O6",
+      "group": "O -- a malformed submission burns no rate-limit slot (audit m6)",
+      "name": "the rate limit is PER CLIENT -- another client is unaffected",
+      "status": "PASS",
+      "ms": 2,
+      "detail": "200 -- buckets are independent"
+    },
+    {
+      "id": "P1",
+      "group": "P -- production without SITE_BASE_URL answers 500, not 403 (audit m4)",
+      "name": "a production instance without SITE_BASE_URL answers 500, not 403 origin",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "500 internal"
+    },
+    {
+      "id": "P2",
+      "group": "P -- production without SITE_BASE_URL answers 500, not 403 (audit m4)",
+      "name": "no session cookie is issued while the instance is misconfigured",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "no Set-Cookie"
+    },
+    {
+      "id": "P3",
+      "group": "P -- production without SITE_BASE_URL answers 500, not 403 (audit m4)",
+      "name": "CONTROL: with SITE_BASE_URL restored the same call works again",
+      "status": "PASS",
+      "ms": 3,
+      "detail": "200"
+    },
+    {
+      "id": "P4",
+      "group": "P -- production without SITE_BASE_URL answers 500, not 403 (audit m4)",
+      "name": "the moderation link follows SITE_BASE_URL, not the placeholder host",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "http://127.0.0.1:4421/api/moderate/review?ref=rev_d4a35707a0"
+    },
+    {
+      "id": "Q1",
+      "group": "Q -- wave-2 cross-checks (m3, m5, m7)",
+      "name": "m3: a project title is stored RAW (escaped once, at render time)",
+      "status": "PASS",
+      "ms": 2,
+      "detail": "stored: Tom & Jerry \"Ltd\" <Acme>"
+    },
+    {
+      "id": "Q2",
+      "group": "Q -- wave-2 cross-checks (m3, m5, m7)",
+      "name": "m7: a second client does not inherit the first client's quote",
+      "status": "PASS",
+      "ms": 6,
+      "detail": "404 -- no cross-client quote"
+    },
+    {
+      "id": "Q3",
+      "group": "Q -- wave-2 cross-checks (m3, m5, m7)",
+      "name": "m5: a stale admin cookie does not shadow a valid client cookie",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "client session resolved despite the stale admin cookie"
+    },
+    {
+      "id": "Q4",
+      "group": "Q -- wave-2 cross-checks (m3, m5, m7)",
+      "name": "m5: logout clears BOTH cookies",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "imk_admin_session, imk_session"
+    },
+    {
+      "id": "R1",
+      "group": "R -- housekeeping",
+      "name": "the repo's site/data/ was never touched by this run",
+      "status": "PASS",
+      "ms": 1,
+      "detail": "repo site/data/ untouched"
+    },
+    {
+      "id": "R2",
+      "group": "R -- housekeeping",
+      "name": "every fixture landed in the sandbox",
+      "status": "PASS",
+      "ms": 0,
+      "detail": "sandbox: C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-wave2-2026-10-21T19-01-29-389Z"
+    }
+  ]
+}

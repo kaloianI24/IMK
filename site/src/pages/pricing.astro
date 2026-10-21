@@ -1,9 +1,9 @@
-﻿---
+---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../types/contracts';
 ---
-<BaseLayout title="Pricing — IXI" description="Automation audit from £600. Fixed-scope builds, automation care monthly. No hourly billing, no surprise retainers." path="/pricing" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+<BaseLayout title="Pricing — IMK" description="Automation audit from £600. Fixed-scope builds, automation care monthly. No hourly billing, no surprise retainers." path="/pricing" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Pricing' }]} />
     <h1>Pricing</h1>
@@ -54,7 +54,7 @@ import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../t
   <section class="container section" id="apply">
     <h2>Apply (start an audit or scope a build)</h2>
     <p class="muted" style="max-width:60ch;">Free text. We reply within 2 business days. Quote "apply" gets you on the audit track. Client logos or case studies only appear with written consent (see privacy).</p>
-    <form id="ixi-contact" method="POST" action="/api/contact" accept-charset="UTF-8" style="max-width:640px;">
+    <form id="imk-contact" method="POST" action="/api/contact" accept-charset="UTF-8" style="max-width:640px;">
       <div class="form-group"><label for="name">Name *</label><input id="name" name="name" type="text" required maxlength="80" autocomplete="name" /></div>
       <div class="form-group"><label for="email">Email *</label><input id="email" name="email" type="email" required maxlength="254" autocomplete="email" /></div>
       <div class="form-group"><label for="company">Company</label><input id="company" name="company" type="text" maxlength="120" autocomplete="organization" /></div>
@@ -98,7 +98,7 @@ import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../t
   </section>
 
   <script>
-    const form = document.getElementById('ixi-contact') as HTMLFormElement | null;
+    const form = document.getElementById('imk-contact') as HTMLFormElement | null;
     const result = document.getElementById('form-result');
     const ts = document.getElementById('ts') as HTMLInputElement | null;
     if (ts) ts.value = String(Date.now());

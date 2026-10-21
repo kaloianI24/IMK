@@ -4,6 +4,7 @@ interface Env {
   RESEND_API_KEY?: string;
   RESEND_FROM?: string;
   RESEND_TO?: string;
+  CONTACT_TO?: string; // fallback destination, same as the Vercel tree (B8)
   FORM_WEBHOOK_URL?: string;
   FORM_WEBHOOK_SECRET?: string;
   LOG_PEPPER?: string;
@@ -18,6 +19,8 @@ interface ContactReq {
   project: string; budget: Budget; timeline: Timeline;
   website?: string; ts?: number;
   turnstileToken?: string;
+  type?: string;
+  linkedin?: string;
 }
 const BUDGETS = ['under-1k','1k-5k','5k-15k','15k+','not-sure'];
 const TIMELINES = ['asap','1-month','3-months','exploring'];
@@ -104,17 +107,32 @@ export const onRequestPost: any = async (ctx: any) => {
         name: params.get('name') || '',
         email: params.get('email') || '',
         company: params.get('company') || '',
+        linkedin: params.get('linkedin') || '',
         project: params.get('project') || '',
         budget: params.get('budget') as any,
         timeline: params.get('timeline') as any,
         website: params.get('website') || '',
         ts: params.get('ts') ? Number(params.get('ts')) : undefined,
+        type: params.get('type') || 'contact',
       };
     } else {
       return wantsJson ? json({ error: 'unsupported content type', code: 'validation' }, 400) : new Response('Bad request', { status: 400 });
     }
   } catch {
     return wantsJson ? json({ error: 'invalid payload', code: 'validation' }, 400) : new Response('Bad request', { status: 400 });
+  }
+
+  // Review submissions are closed here — they belong in the portal
+  // (POST /api/portal/testimonials). Mirrors api/contact.ts (Vercel): the
+  // public review form was removed and the endpoint is closed too.
+  // The comparison is case- and whitespace-insensitive: 'Review' / ' review'
+  // used to fall through into the contact pipeline as a normal inquiry
+  // (review finding B4), bypassing the refusal.
+  if (String(input.type ?? '').trim().toLowerCase() === 'review') {
+    console.log(JSON.stringify({ ts: Date.now(), outcome: 'review_refused', code: 'review-moved' }));
+    return wantsJson
+      ? json({ error: 'review submissions are not accepted here', code: 'review-moved', where: '/api/portal/testimonials' }, 410)
+      : new Response('Review submissions are not accepted here', { status: 410 });
   }
 
   // 3. Turnstile (only if secret configured)
@@ -172,9 +190,9 @@ export const onRequestPost: any = async (ctx: any) => {
   const day = new Date(now).toISOString().slice(0,10);
 
   // 8. Resend email
-  const from = env.RESEND_FROM || 'IXI <hello@example.com>';
-  const to = env.RESEND_TO || '';
-  const subject = 'New IXI inquiry';
+  const from = env.RESEND_FROM || 'IMK <2imk4support@gmail.com>';
+  const to = env.RESEND_TO || env.CONTACT_TO || '';
+  const subject = 'New IMK inquiry';
   const ipHashVal = ip ? await ipHash(ip, env.LOG_PEPPER || 'dev', day) : 'no-ip';
   const htmlBody = `<h2>New inquiry (${ref})</h2>
 <p><b>Name:</b> ${escapeHtml(name)}</p>

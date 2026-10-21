@@ -1,9 +1,9 @@
-// IXI — brand asset generator.
+// IMK — brand asset generator.
 //
 // Source artwork: ../Logo (owner-supplied PNG exports, 1x..4x).
-// The PNGs are too low-res to ship (wordmark is only 62x31 px), so the artwork
-// is vectorised with scripts/trace.mjs and everything downstream is built from
-// the resulting SVG paths.
+// The PNGs are too low-res to ship (the wordmark is only 34x19 px at 1x), so the
+// artwork is vectorised with scripts/trace.mjs and everything downstream is built
+// from the resulting SVG paths.
 //
 // Outputs:
 //   src/brand/logo.ts            traced path data (imported by BrandMark.astro)
@@ -30,12 +30,12 @@ const SRC_BRAND = new URL('../src/brand/', import.meta.url);
 
 // ---------------------------------------------------------------------------
 // 0. Colours — measured directly from the owner artwork (see design/brand.md).
-//    Wordmark "IXI"  = #720606  (deep red)
+//    Wordmark "IMK" = #EA0000  (brand red, sampled from Logo/Text/4x)
 //    Symbol mark     = #CCCCCC  (light grey)
 //    FullLogo plate  = #222222  (charcoal)
 // ---------------------------------------------------------------------------
 const BRAND = {
-  red: '#720606',      // wordmark colourway (light backgrounds)
+  red: '#EA0000',      // wordmark colourway (light backgrounds)
   grey: '#CCCCCC',     // symbol colourway (dark backgrounds)
   charcoal: '#222222', // FullLogo plate
   ink: '#F6F1EA',      // light-on-dark ink used by the site's dark theme
@@ -43,14 +43,50 @@ const BRAND = {
 
 // ---------------------------------------------------------------------------
 // 1. Vectorise the artwork.
+//
+//    The owner replaced ../Logo on 2026-10-19 with the IMK wordmark. The export
+//    layout changed: the files are now named Asset-1*.png and there is no
+//    Symbol/ folder any more (the symbol only ships inside the Full lockup).
+//    The symbol artwork itself is unchanged, so the already-traced SYMBOL path
+//    in src/brand/logo.ts is reused verbatim instead of being re-invented.
 // ---------------------------------------------------------------------------
-const textPng = readFileSync(new URL('Text/4x/Artboard 1@4x.png', LOGO));
-const symbolPng = readFileSync(new URL('Symbol/4x/Artboard 1@4x.png', LOGO));
+const textPng = readFileSync(new URL('Text/4x/Asset-1@4x.png', LOGO));
 
 const wordmark = await tracePath(textPng);
-const symbol = await tracePath(symbolPng);
 console.log(`wordmark: viewBox 0 0 ${wordmark.width} ${wordmark.height} (${wordmark.loops} loops, ${wordmark.points} pts)`);
+
+// Reuse the previously traced symbol: look for a standalone symbol export first,
+// otherwise fall back to the SYMBOL path already generated in src/brand/logo.ts.
+const SYMBOL_CANDIDATES = [
+  'Symbol/4x/Asset-1@4x.png',
+  'Symbol/4x/Artboard 1@4x.png',
+];
+const symbolFile = SYMBOL_CANDIDATES.find((rel) => existsSync(p(new URL(rel, LOGO))));
+
+let symbol;
+if (symbolFile) {
+  symbol = await tracePath(readFileSync(new URL(symbolFile, LOGO)));
+  console.log(`symbol  : traced from ${symbolFile}`);
+} else {
+  symbol = readTracedSymbol();
+  console.log('symbol  : reused from the existing traced SYMBOL path (no standalone symbol export)');
+}
 console.log(`symbol  : viewBox 0 0 ${symbol.width} ${symbol.height} (${symbol.loops} loops, ${symbol.points} pts)`);
+
+/** Pull the SYMBOL path data back out of the previously generated src/brand/logo.ts. */
+function readTracedSymbol() {
+  const file = new URL('logo.ts', SRC_BRAND);
+  if (!existsSync(p(file))) {
+    throw new Error(
+      'No standalone symbol export in ../Logo and no previous src/brand/logo.ts to reuse. ' +
+      'Restore the symbol artwork or the generated brand module, then re-run.'
+    );
+  }
+  const src = readFileSync(p(file), 'utf8');
+  const m = src.match(/export const SYMBOL: LogoPath = \{ d: ("(?:[^"\\]|\\.)*"), width: (\d+), height: (\d+) \}/);
+  if (!m) throw new Error('Could not parse the existing SYMBOL path from src/brand/logo.ts');
+  return { d: JSON.parse(m[1]), width: Number(m[2]), height: Number(m[3]), loops: 0, points: 0 };
+}
 
 // ---------------------------------------------------------------------------
 // 2. src/brand/logo.ts — single source of truth for the inline SVG components.
@@ -71,7 +107,7 @@ export interface LogoPath {
   height: number;
 }
 
-/** Wordmark "IXI" — brand red #720606 in the source artwork. */
+/** Wordmark "IMK" — brand red #EA0000 in the source artwork. */
 export const WORDMARK: LogoPath = { d: ${JSON.stringify(wordmark.d)}, width: ${wordmark.width}, height: ${wordmark.height} };
 
 /** Symbol mark — light grey #CCCCCC in the source artwork. */
@@ -112,8 +148,8 @@ console.log('favicon.svg + png icons 16/32/180/192/512 written');
 // 4. Web manifest.
 // ---------------------------------------------------------------------------
 const manifest = {
-  name: 'IXI',
-  short_name: 'IXI',
+  name: 'IMK',
+  short_name: 'IMK',
   description: 'Automations that still work in month six.',
   icons: [
     { src: '/android-chrome-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
@@ -163,7 +199,7 @@ const darkMedia = block(tokensCss, '@media (prefers-color-scheme: dark)');
 const darkPreview = block(tokensCss, ':root[data-theme="dark"]');
 
 // consistency: the preview override must mirror the OS-driven dark theme
-const MIRROR = ['color-primary', 'color-primary-hover', 'color-primary-active', 'color-on-primary', 'color-link', 'color-focus', 'color-bg', 'color-surface', 'brand-mark', 'brand-word'];
+const MIRROR = ['color-primary', 'color-primary-hover', 'color-primary-active', 'color-on-primary', 'color-link', 'color-link-hover', 'color-accent-text', 'color-focus', 'color-bg', 'color-surface', 'brand-mark', 'brand-word'];
 const drift = MIRROR.filter((k) => darkPreview[k] !== darkMedia[k]);
 if (drift.length) {
   console.error(`\n✗ dark theme drift between @media and [data-theme="dark"]: ${drift.join(', ')}`);
@@ -171,22 +207,31 @@ if (drift.length) {
 }
 
 // Every surface an accent can be painted on, and the required ratio.
+//  AA      4.5 — accent rendered as TEXT (links, small labels, body copy)
+//  GRAPHIC 3.0 — accent rendered as a graphic: logo, button fill, focus ring
 const AA = 4.5;
+const GRAPHIC = 3.0;
 const checks = [];
 const check = (label, fg, bg, min = AA) => checks.push({ label, fg, bg, min, ratio: contrast(fg, bg) });
 
 for (const [theme, t] of [['light', light], ['dark', darkMedia]]) {
+  // accent as text
   for (const surf of ['bg', 'surface', 'surface-2', 'neutral-soft']) {
-    check(`${theme} --color-primary on --color-${surf}`, t['color-primary'], t[`color-${surf}`]);
+    check(`${theme} --color-accent-text on --color-${surf}`, t['color-accent-text'], t[`color-${surf}`]);
     check(`${theme} --color-link on --color-${surf}`, t['color-link'], t[`color-${surf}`]);
+    check(`${theme} --color-link-hover on --color-${surf}`, t['color-link-hover'], t[`color-${surf}`]);
+  }
+  // accent as a graphic (brand red #EA0000 is fine here, not as text)
+  for (const surf of ['bg', 'surface', 'surface-2', 'neutral-soft']) {
+    check(`${theme} --color-primary on --color-${surf}`, t['color-primary'], t[`color-${surf}`], GRAPHIC);
   }
   check(`${theme} label on --color-primary`, t['color-on-primary'], t['color-primary']);
   check(`${theme} label on --color-primary-hover`, t['color-on-primary'], t['color-primary-hover']);
   check(`${theme} label on --color-primary-active`, t['color-on-primary'], t['color-primary-active']);
   if (theme === 'dark') check('--color-text-subtle on --color-surface', t['color-text-subtle'], t['color-surface']);
   // brand logo lockup on the surface it sits on (header = bg, footer = surface)
-  check(`${theme} brand mark on --color-bg`, t['brand-mark'], t['color-bg']);
-  check(`${theme} brand word on --color-surface`, t['brand-word'], t['color-surface']);
+  check(`${theme} brand mark on --color-bg`, t['brand-mark'], t['color-bg'], GRAPHIC);
+  check(`${theme} brand word on --color-surface`, t['brand-word'], t['color-surface'], GRAPHIC);
 }
 
 console.log('\nBrand / accent contrast audit (WCAG 2.2 AA):');
@@ -199,7 +244,7 @@ for (const c of checks) {
 
 // the brand lockup must also hold where the site actually paints it
 console.log(`\nBrand lockup: wordmark ${BRAND.red} / symbol ${BRAND.grey} / plate ${BRAND.charcoal}`);
-console.log(`  full logo as drawn (red on charcoal): ${contrast(BRAND.red, BRAND.charcoal).toFixed(2)}:1 — illegible, which is why the icon uses the symbol only`);
+console.log(`  full logo as drawn (red on charcoal): ${contrast(BRAND.red, BRAND.charcoal).toFixed(2)}:1 — low, which is why the app icon uses the symbol only`);
 console.log(`  symbol on plate: ${contrast(BRAND.grey, BRAND.charcoal).toFixed(2)}:1`);
 
 if (failures || drift.length) {

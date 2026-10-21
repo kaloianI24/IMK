@@ -1,4 +1,4 @@
-﻿---
+---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
 import ServiceCard from '../../components/ServiceCard.astro';
@@ -7,7 +7,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 const services = await getCollection('services');
 services.sort((a, b) => a.data.order - b.data.order);
 ---
-<BaseLayout title="Services — IXI" description="Workflow automation, B2B AI agents, integration services and automation audits. From £600." path="/services" stickyCta={{ label: "Start an automation audit", href: "/pricing#apply?offer=audit" }}>
+<BaseLayout title="Services — IMK" description="Workflow automation, B2B AI agents, integration services and automation audits. From £600." path="/services" stickyCta={{ label: "Start an automation audit", href: "/pricing#apply?offer=audit" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Services' }]} />
     <h1>Services</h1>

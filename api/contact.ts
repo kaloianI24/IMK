@@ -5,8 +5,11 @@
 //   Turnstile verify → field validation → honeypot → time trap → per-IP rate
 //   limit → Resend e-mail → redacted logging → JSON response.
 //
-// Extended with `type=review` (leave-a-review submissions). `type` defaults to
-// 'contact', so existing contact posts keep working unchanged.
+// Review submissions (`type=review`) are REFUSED with 410 'review-moved'.
+// Testimonials are only collected from signed-in clients, in the portal
+// (POST /api/portal/testimonials). The public review form was removed, and
+// the endpoint is closed too — hiding a form is not the same as closing the
+// door, and an open endpoint lets anyone write into the moderation queue.
 //
 // Environment (Vercel project settings or .env in local dev):
 //   TURNSTILE_SECRET_KEY  — when set, Turnstile challenge is required (unset locally degrades gracefully)
@@ -38,29 +41,13 @@ interface ContactReq {
   linkedin?: string;
 }
 
-interface ReviewReq {
-  name?: string;
-  email?: string;
-  company?: string;
-  linkedin?: string;
-  rating: string;
-  review: string;
-  website?: string;
-  ts?: number;
-  turnstileToken?: string;
-  type: 'review';
-}
-
-const RATINGS = ['1', '2', '3', '4', '5'];
 const BUDGETS = ['under-1k', '1k-5k', '5k-15k', '15k+', 'not-sure'];
 const TIMELINES = ['asap', '1-month', '3-months', 'exploring'];
 const MAX = {
   name: 80,
   email: 254,
   company: 120,
-  linkedin: 200,
   project: 500,
-  review: 2000,
   body: 8192,
   recent: 3000,
   stale: 4 * 60 * 60 * 1000,
@@ -80,6 +67,26 @@ function json(
     ...extra,
   });
   res.end(payload);
+}
+
+/**
+ * Plain-text response. The Content-Length is computed from the exact bytes we
+ * are about to send — never hand-written. A mismatch here (declaring 42 while
+ * sending 40) truncates the response and makes every fetch() client die with
+ * `TypeError: terminated` instead of reading the error body.
+ */
+function text(
+  res: ServerResponse,
+  body: string,
+  status = 200,
+  extra: Record<string, string> = {},
+): void {
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    ...extra,
+  });
+  res.end(body);
 }
 
 function escapeHtml(s: string): string {
@@ -155,6 +162,8 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export default async function handler(
   req: IncomingMessage,
   res: ServerResponse,
@@ -183,8 +192,7 @@ export default async function handler(
     return wantsJson
       ? json(res, { error: 'request too large', code: 'payload-too-large' }, 413)
       : (() => {
-          res.writeHead(413, { 'Content-Length': '0' });
-          res.end('Request too large');
+          text(res, 'Request too large', 413);
         })();
   }
   const raw = await readBody(req);
@@ -192,8 +200,7 @@ export default async function handler(
     return wantsJson
       ? json(res, { error: 'request too large', code: 'payload-too-large' }, 413)
       : (() => {
-          res.writeHead(413, { 'Content-Length': '0' });
-          res.end('Request too large');
+          text(res, 'Request too large', 413);
         })();
   }
 
@@ -232,16 +239,39 @@ export default async function handler(
       return wantsJson
         ? json(res, { error: 'unsupported content type', code: 'validation' }, 400)
         : (() => {
-            res.writeHead(400, { 'Content-Length': '9' });
-            res.end('Bad request');
+            text(res, 'Bad request', 400);
           })();
     }
   } catch {
     return wantsJson
       ? json(res, { error: 'invalid payload', code: 'validation' }, 400)
       : (() => {
-          res.writeHead(400, { 'Content-Length': '9' });
-          res.end('Bad request');
+          text(res, 'Bad request', 400);
+        })();
+  }
+
+  // 2b. review submissions are closed here — they belong in the portal.
+  // Answered before Turnstile, before the rate limit and before any write:
+  // nothing is stored, nothing is mailed, nothing is logged as accepted.
+  // The comparison is case- and whitespace-insensitive: 'Review' / ' review'
+  // used to fall through into the contact pipeline as a normal inquiry
+  // (review finding B4), bypassing the refusal.
+  if (String(input.type ?? '').trim().toLowerCase() === 'review') {
+    console.log(
+      JSON.stringify({ ts: Date.now(), outcome: 'review_refused', code: 'review-moved' }),
+    );
+    return wantsJson
+      ? json(
+          res,
+          {
+            error: 'review submissions are not accepted here',
+            code: 'review-moved',
+            where: '/api/portal/testimonials',
+          },
+          410,
+        )
+      : (() => {
+          text(res, 'Review submissions are not accepted here', 410);
         })();
   }
 
@@ -253,8 +283,7 @@ export default async function handler(
       return wantsJson
         ? json(res, { error: 'challenge required', code: 'challenge' }, 403)
         : (() => {
-            res.writeHead(403, { 'Content-Length': '16' });
-            res.end('Challenge required');
+            text(res, 'Challenge required', 403);
           })();
     }
     const ok = await turnstileVerify(process.env.TURNSTILE_SECRET_KEY, token, ip);
@@ -262,8 +291,7 @@ export default async function handler(
       return wantsJson
         ? json(res, { error: 'challenge failed', code: 'challenge' }, 403)
         : (() => {
-            res.writeHead(403, { 'Content-Length': '15' });
-            res.end('Challenge failed');
+            text(res, 'Challenge failed', 403);
           })();
     }
   } else if (process.env.TURNSTILE_SECRET_KEY === undefined) {
@@ -272,48 +300,19 @@ export default async function handler(
 
   // 4. validation
   const errors: string[] = [];
-  const isReview = input.type === 'review';
 
-  if (isReview) {
-    if (!RATINGS.includes((input as unknown as ReviewReq).rating)) errors.push('rating');
-    const review = (input as unknown as ReviewReq).review;
-    if (!review || typeof review !== 'string' || review.length < 1 || review.length > MAX.review) errors.push('review');
-    if ((input as unknown as ReviewReq).name && (typeof (input as unknown as ReviewReq).name !== 'string' || (input as unknown as ReviewReq).name.length > MAX.name)) errors.push('name');
-    if (
-      (input as unknown as ReviewReq).email &&
-      (typeof (input as unknown as ReviewReq).email !== 'string' ||
-        (input as unknown as ReviewReq).email.length > MAX.email ||
-        !isValidEmail((input as unknown as ReviewReq).email))
-    ) {
-      errors.push('email');
-    }
-    if (
-      (input as unknown as ReviewReq).company &&
-      (typeof (input as unknown as ReviewReq).company !== 'string' || (input as unknown as ReviewReq).company.length > MAX.company)
-    ) {
-      errors.push('company');
-    }
-    if (
-      (input as unknown as ReviewReq).linkedin &&
-      (typeof (input as unknown as ReviewReq).linkedin !== 'string' || (input as unknown as ReviewReq).linkedin.length > MAX.linkedin)
-    ) {
-      errors.push('linkedin');
-    }
-  } else {
-    if (!input.name || typeof input.name !== 'string' || input.name.length < 1 || input.name.length > MAX.name) errors.push('name');
-    if (!input.email || typeof input.email !== 'string' || input.email.length > MAX.email || !isValidEmail(input.email)) errors.push('email');
-    if (input.company && (typeof input.company !== 'string' || input.company.length > MAX.company)) errors.push('company');
-    if (!input.project || typeof input.project !== 'string' || input.project.length < 1 || input.project.length > MAX.project) errors.push('project');
-    if (!BUDGETS.includes(input.budget)) errors.push('budget');
-    if (!TIMELINES.includes(input.timeline)) errors.push('timeline');
-  }
+  if (!input.name || typeof input.name !== 'string' || input.name.length < 1 || input.name.length > MAX.name) errors.push('name');
+  if (!input.email || typeof input.email !== 'string' || input.email.length < 1 || input.email.length > MAX.email || !isValidEmail(input.email)) errors.push('email');
+  if (input.company && (typeof input.company !== 'string' || input.company.length > MAX.company)) errors.push('company');
+  if (!input.project || typeof input.project !== 'string' || input.project.length < 1 || input.project.length > MAX.project) errors.push('project');
+  if (!BUDGETS.includes(input.budget)) errors.push('budget');
+  if (!TIMELINES.includes(input.timeline)) errors.push('timeline');
 
   if (errors.length) {
     return wantsJson
       ? json(res, { error: 'validation failed', code: 'validation', fields: errors }, 400)
       : (() => {
-          res.writeHead(400, { 'Content-Length': String('Validation failed: ' + errors.join(', ')).length });
-          res.end('Validation failed: ' + errors.join(', '));
+          text(res, 'Validation failed: ' + errors.join(', '), 400);
         })();
   }
 
@@ -334,8 +333,7 @@ export default async function handler(
     return wantsJson
       ? json(res, { error: 'submission too fast', code: 'time-trap' }, 400)
       : (() => {
-          res.writeHead(400, { 'Content-Length': '33' });
-          res.end('Submission too fast, please retry.');
+          text(res, 'Submission too fast, please retry.', 400);
         })();
   }
 
@@ -346,8 +344,7 @@ export default async function handler(
     return wantsJson
       ? json(res, { error: 'too many requests', code: 'rate-limit' }, 429, { 'Retry-After': '3600' })
       : (() => {
-          res.writeHead(429, { 'Content-Length': '15', 'Retry-After': '3600' });
-          res.end('Too many requests');
+          text(res, 'Too many requests', 429, { 'Retry-After': '3600' });
         })();
   }
 
@@ -355,28 +352,16 @@ export default async function handler(
   const name = controlStrip((input as any).name || '');
   const email = controlStrip((input as any).email || '');
   const company = (input as any).company ? controlStrip((input as any).company) : '';
-  const linkedin = (input as any).linkedin ? controlStrip((input as any).linkedin) : '';
   const project = (input as any).project ? String((input as any).project).trim() : '';
-  const reviewText = isReview ? String((input as unknown as ReviewReq).review) : '';
-  const rating = isReview ? String((input as unknown as ReviewReq).rating) : '';
   const ref = refId();
   const day = new Date(now).toISOString().slice(0, 10);
 
   // 9. Resend e-mail
-  const from = process.env.RESEND_FROM || 'IXI <hello@example.com>';
+  const from = process.env.RESEND_FROM || 'IMK <2imk4support@gmail.com>';
   const to = process.env.RESEND_TO || process.env.CONTACT_TO || '';
-  const subject = isReview ? `New IXI review (rating ${rating})` : 'New IXI inquiry';
+  const subject = 'New IMK inquiry';
   const ipHashVal = ip ? await ipHash(ip, process.env.LOG_PEPPER || 'dev', day) : 'no-ip';
-  const htmlBody = isReview
-    ? `<h2>New review (${ref})</h2>
-<p><b>Name:</b> ${escapeHtml(name || '—')}</p>
-<p><b>Email:</b> ${escapeHtml(email || '—')}</p>
-<p><b>Company:</b> ${escapeHtml(company || '—')}</p>
-<p><b>LinkedIn/website:</b> ${escapeHtml(linkedin || '—')}</p>
-<p><b>Rating:</b> ${escapeHtml(rating)} / 5</p>
-<p><b>Review:</b></p><p>${escapeHtml(reviewText).replace(/\n/g, '<br>')}</p>
-<hr><p style="color:#888;font-size:12px;">ref ${ref} · ${new Date(now).toISOString()} · ip ${escapeHtml(ipHashVal)} · env ${escapeHtml(process.env.APP_ENV || 'production')}</p>`
-    : `<h2>New inquiry (${ref})</h2>
+  const htmlBody = `<h2>New inquiry (${ref})</h2>
 <p><b>Name:</b> ${escapeHtml(name)}</p>
 <p><b>Email:</b> ${escapeHtml(email)}</p>
 <p><b>Company:</b> ${escapeHtml(company || '—')}</p>
@@ -384,9 +369,7 @@ export default async function handler(
 <p><b>Timeline:</b> ${escapeHtml(input.timeline)}</p>
 <p><b>Project:</b></p><p>${escapeHtml(project).replace(/\n/g, '<br>')}</p>
 <hr><p style="color:#888;font-size:12px;">ref ${ref} · ${new Date(now).toISOString()} · ip ${escapeHtml(ipHashVal)} · env ${escapeHtml(process.env.APP_ENV || 'production')}</p>`;
-  const textBody = isReview
-    ? `New review (${ref})\n\nName: ${name || '—'}\nEmail: ${email || '—'}\nCompany: ${company || '—'}\nLinkedIn/website: ${linkedin || '—'}\nRating: ${rating} / 5\nReview: ${reviewText}\n\nref ${ref} env ${process.env.APP_ENV || 'production'}`
-    : `New inquiry (${ref})\n\nName: ${name}\nEmail: ${email}\nCompany: ${company || '—'}\nBudget: ${input.budget}\nTimeline: ${input.timeline}\nProject: ${project}\n\nref ${ref} env ${process.env.APP_ENV || 'production'}`;
+  const textBody = `New inquiry (${ref})\n\nName: ${name}\nEmail: ${email}\nCompany: ${company || '—'}\nBudget: ${input.budget}\nTimeline: ${input.timeline}\nProject: ${project}\n\nref ${ref} env ${process.env.APP_ENV || 'production'}`;
 
   if (process.env.RESEND_API_KEY && to) {
     try {
@@ -403,6 +386,34 @@ export default async function handler(
     }
   }
 
+  // 9b. webhook (optional) — signed, with retries. Mirrors the CF twin
+  // (site/functions/api/contact.ts §9): the same payload, the same
+  // `X-Signature = sha256=HMAC(FORM_WEBHOOK_SECRET, payload)` and the same
+  // 0s/2s/8s retry ladder, so an inquiry reaches the webhook identically on
+  // both targets (review finding B8). Runs only when FORM_WEBHOOK_URL is
+  // configured; the retries add latency only when the webhook is DOWN.
+  if (process.env.FORM_WEBHOOK_URL) {
+    const payload = JSON.stringify({
+      ref, name, email, company, project, budget: input.budget, timeline: input.timeline, submittedAt: new Date(now).toISOString(), ipHash: ipHashVal,
+    });
+    const webhookHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (process.env.FORM_WEBHOOK_SECRET) {
+      const sigBuf = await crypto.subtle.sign('HMAC', await crypto.subtle.importKey('raw', new TextEncoder().encode(process.env.FORM_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']), new TextEncoder().encode(payload));
+      const sig = Array.from(new Uint8Array(sigBuf)).map(x=>x.toString(16).padStart(2,'0')).join('');
+      webhookHeaders['X-Signature'] = `sha256=${sig}`;
+    }
+    const attempts = [0, 2000, 8000];
+    let ok = false;
+    for (const wait of attempts) {
+      if (wait) await delay(wait);
+      try {
+        const r = await fetch(process.env.FORM_WEBHOOK_URL, { method: 'POST', headers: webhookHeaders, body: payload });
+        if (r.ok) { ok = true; break; }
+      } catch {}
+    }
+    if (!ok) console.log(JSON.stringify({ ts: now, ref, outcome: 'webhook_fail', ipHash: ipHashVal }));
+  }
+
   // 10. redacted log (no bodies)
   console.log(
     JSON.stringify({
@@ -410,9 +421,8 @@ export default async function handler(
       ref,
       outcome: 'accepted',
       ipHash: ipHashVal,
-      type: isReview ? 'review' : 'contact',
+      type: 'contact',
       hasCompany: !!company,
-      rating: isReview ? rating : undefined,
     }),
   );
 

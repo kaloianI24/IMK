@@ -1,11 +1,10 @@
-﻿---
+---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import ServiceCard from '../components/ServiceCard.astro';
 import CaseCard from '../components/CaseCard.astro';
 import Faq from '../components/Faq.astro';
 import CtaBand from '../components/CtaBand.astro';
 import Testimonials from '../components/Testimonials.astro';
-import ReviewForm from '../components/ReviewForm.astro';
 import BrandMark from '../components/BrandMark.astro';
 import { getCollection } from 'astro:content';
 
@@ -13,6 +12,7 @@ const services = await getCollection('services');
 services.sort((a, b) => a.data.order - b.data.order);
 const cases = await getCollection('cases');
 cases.sort((a, b) => (a.data.order ?? 1) - (b.data.order ?? 1));
+const testimonials = await getCollection('testimonials');
 
 const serviceIcons: Record<string, string> = {
   'workflow-automation.md': 'workflow',
@@ -33,14 +33,14 @@ const sd = [
   {
     "@context": "https://schema.org",
     "@type": "ProfessionalService",
-    "name": "IXI",
+    "name": "IMK",
     "description": "Automation agency: workflow automation, B2B AI agents, integration, automation audit.",
     "priceRange": "£600-£15,000+",
   },
 ];
 ---
 <BaseLayout
-  title="IXI — Automations that still work in month six"
+  title="IMK — Automations that still work in month six"
   description="We design, build and hand over automation systems your team owns from day one: workflow automation, B2B AI agents, integrations and audits."
   path="/"
   structuredData={sd}
@@ -51,7 +51,7 @@ const sd = [
     <div
       class="hero-section__mark-wrapper"
       role="img"
-      aria-label="IXI logo"
+      aria-label="IMK logo"
     >
       <BrandMark variant="symbol" height={160} />
     </div>
@@ -74,7 +74,17 @@ const sd = [
     <p class="social-proof__text">Built for teams that need reliable automation.</p>
   </section>
 
-  <Testimonials />
+  <Testimonials
+    items={testimonials.map((t) => ({
+      name: t.data.name,
+      company: t.data.company,
+      role: t.data.role,
+      rating: t.data.rating,
+      quote: t.data.quote,
+      verified: t.data.verified,
+      source: t.data.source,
+    }))}
+  />
 
   <section class="container section">
     <p class="eyebrow">Services</p>
@@ -115,8 +125,6 @@ const sd = [
     </div>
   </section>
 
-  <ReviewForm />
-
   <Faq heading="Questions before you book a call" items={globalFaq} />
 
   <CtaBand title="Want a written plan before you spend anything?" text="An automation audit costs from £600 and gives you a ranked roadmap plus one scoped quick win in 10 working days." ctaLabel="Start an automation audit" ctaHref="/pricing#apply?offer=audit" />
@@ -141,7 +149,7 @@ const sd = [
     transform: translateX(-50%);
     width: min(680px, 80vw);
     height: min(360px, 50vw);
-    background: radial-gradient(circle, rgba(114, 6, 6, 0.08) 0%, rgba(114, 6, 6, 0) 70%);
+    background: radial-gradient(circle, rgba(234, 0, 0, 0.08) 0%, rgba(234, 0, 0, 0) 70%);
     pointer-events: none;
     z-index: -1;
   }

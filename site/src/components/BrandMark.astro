@@ -2,7 +2,7 @@
 // Real owner artwork — path data traced from ../Logo exports by
 // scripts/gen-brand.mjs (see src/brand/logo.ts, the single source of truth).
 // Fill colours come from the --brand-* tokens so the mark follows the theme:
-//   light: symbol + wordmark both brand red #720606
+//   light: symbol + wordmark both brand red #EA0000
 //   dark:  symbol native grey #CCCCCC, wordmark dark-safe red #EF7D7D
 // The symbol path has nested contours — fill-rule="evenodd" is required.
 import { WORDMARK, SYMBOL } from '../brand/logo';
@@ -16,10 +16,10 @@ interface Props {
 
 const { variant = 'lockup', height = 28 } = Astro.props;
 
-// The owner's stacked FullLogo sets the wordmark cap-height at ~21% of the
+// The owner's stacked FullLogo sets the wordmark cap-height at ~27% of the
 // symbol, tuned for a vertical stack. For a side-by-side web lockup that makes
-// "IXI" illegible at nav size, so the wordmark is scaled to 62% of the symbol
-// height — proportions of the artwork, arrangement adapted to a nav bar.
+// the wordmark illegible at nav size, so the wordmark is scaled to 62% of the
+// symbol height — proportions of the artwork, arrangement adapted to a nav bar.
 const symbolHeight = variant === 'wordmark' ? 0 : height;
 const symbolWidth = (SYMBOL.width / SYMBOL.height) * symbolHeight;
 const wordHeight = variant === 'wordmark' ? height : Math.round(height * 0.62 * 10) / 10;

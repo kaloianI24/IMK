@@ -1,0 +1,42 @@
+---
+// Owner-only invite-client form. POSTs to /api/portal/invites. Wiring handled by portal.astro script.
+//
+// The form is rendered for every visitor, exactly like PortalUpdateComposer
+// and PortalComments. The page is built once, so the build-time role is
+// always 'client' — a template-level admin branch would NEVER render and the
+// owner would get "Inviting clients is an owner-only action." instead of the
+// form. Visibility is decided client-side by portal.astro, which reveals the
+// container only after the session check says the visitor is the owner; the
+// API enforces the same rule (403 for anyone else).
+import { CLIENT_PROFILE_MAX } from '../types/contracts';
+---
+
+<div id="invite-form" style="margin-top:var(--space-6);padding:var(--space-4);background:var(--color-neutral-soft);border-radius:var(--radius-sm);">
+  <h3 style="margin:0 0 var(--space-3);font-size:var(--text-lg);font-weight:600;">Invite a client</h3>
+  <p class="muted" style="font-size:var(--text-sm);margin:0 0 var(--space-3);">Enter the client's email so they can sign in and view their project.</p>
+  <div class="form-group">
+    <label for="invite-email">Client email</label>
+    <input id="invite-email" name="email" type="email" required maxlength="254" placeholder="client@theircompany.com" />
+  </div>
+  <div class="form-group">
+    <label for="invite-name">Name (optional)</label>
+    <input id="invite-name" name="name" type="text" maxlength={CLIENT_PROFILE_MAX.name} placeholder="Client name" />
+  </div>
+  <div class="form-group">
+    <label for="invite-company">Company (optional)</label>
+    <input id="invite-company" name="company" type="text" maxlength={CLIENT_PROFILE_MAX.company} placeholder="Company name" aria-describedby="invite-profile-hint" />
+  </div>
+  <div class="form-group">
+    <label for="invite-role">Role (optional)</label>
+    <input id="invite-role" name="role" type="text" maxlength={CLIENT_PROFILE_MAX.role} placeholder="Job title" aria-describedby="invite-profile-hint" />
+  </div>
+  <p id="invite-profile-hint" class="muted" style="font-size:var(--text-sm);margin:0 0 var(--space-3);">
+    Company and role are shown on a client's published quote when they consent to being named.
+    Sending the form again for the same email updates their details — a blank company or role clears it.
+  </p>
+  <div style="margin-top:var(--space-2);display:flex;gap:var(--space-2);">
+    <button type="button" class="btn btn-primary" style="font-size:var(--text-sm);" data-action="invite-client">Send invite</button>
+    <button type="button" class="btn btn-ghost" style="font-size:var(--text-sm);" data-action="cancel-invite">Cancel</button>
+  </div>
+  <p id="invite-message" class="muted" style="font-size:var(--text-sm);margin-top:var(--space-2);"></p>
+</div>

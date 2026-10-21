@@ -1,0 +1,699 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import PortalUpdateComposer from '../components/PortalUpdateComposer.astro';
+import PortalComments from '../components/PortalComments.astro';
+import PortalInviteForm from '../components/PortalInviteForm.astro';
+import PortalTestimonialPrompt from '../components/PortalTestimonialPrompt.astro';
+
+// Default role for server-rendered HTML; client-side script corrects it after session validation.
+let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
+---
+
+<BaseLayout
+  title="Project Portal — IMK"
+  description="Your IMK project portal. View project status, plan items, updates and comments."
+  path="/portal"
+  noindex={true}
+>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Portal' }]} />
+    <h1>Project Portal</h1>
+
+    <div id="portal-loading" style="max-width:60ch;" role="status" aria-live="polite">Loading your portal…</div>
+    <div id="portal-not-auth" hidden style="max-width:60ch;color:var(--color-text-muted);">
+      Your session has expired or you're not signed in.
+      <a href="/login" style="color:var(--color-link);">Sign in</a> to continue.
+    </div>
+    {/* A failure that is NOT "you are signed out": a network error, a 500, a
+        store that cannot be read. This used to fall into the same branch as a
+        401 and say "your session has expired" — a wrong answer, and it hid
+        the fact that the portal could not be loaded at all. */}
+    <div id="portal-error" hidden style="max-width:60ch;" role="alert">
+      <p id="portal-error-text" style="margin:0 0 var(--space-3);"></p>
+      <button type="button" class="btn btn-secondary" id="portal-retry">Try again</button>
+    </div>
+    {/* Short announcements for the content that loads in, so a screen reader
+        hears that something arrived (or did not). */}
+    <p id="portal-status" class="muted" role="status" aria-live="polite" style="min-height:1.5em;max-width:60ch;"></p>
+
+    <div id="portal-shell" hidden>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-6); flex-wrap:wrap; gap:var(--space-4);">
+        <div>
+          <h2 id="portal-project-title" style="margin:0 0 var(--space-1);font-size:var(--text-xl);font-weight:600;">Project</h2>
+          <p id="portal-project-status" class="muted" style="margin:0;font-size:var(--text-sm);"></p>
+        </div>
+        <div id="portal-admin-controls" style="display:none; gap:var(--space-3);">
+          <button type="button" class="btn btn-secondary" id="invite-btn">Invite client</button>
+          <button type="button" class="btn btn-primary" id="post-update-btn">Post update</button>
+        </div>
+        <button type="button" class="btn btn-ghost" id="logout-btn" style="font-size:var(--text-sm);">Sign out</button>
+      </div>
+
+      {/* Rendered for everyone but revealed for admins only — the build-time
+          `role` is always 'client', so a template-level admin branch would
+          never render and the owner could not mark a project completed. */}
+      <div id="admin-status-card" class="card" style="margin-bottom:var(--space-6);" hidden>
+        <h3 style="margin:0 0 var(--space-3);font-size:var(--text-lg);font-weight:600;">Project status</h3>
+        <div class="form-group" style="margin-bottom:0;max-width:24ch;">
+          <label for="project-status">Status</label>
+          <select id="project-status" style="width:100%;padding:10px 12px;font-size:var(--text-sm);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);">
+            <option value="discovery">Discovery</option>
+            <option value="in-progress">In progress</option>
+            <option value="review">Review</option>
+            <option value="completed">Completed</option>
+            <option value="on-hold">On hold</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+        <p id="project-status-message" class="muted" role="status" aria-live="polite" style="margin:var(--space-2) 0 0;font-size:var(--text-sm);"></p>
+
+        {/* The backend already lets the owner re-request a testimonial
+            (PATCH /api/portal/projects/:id {testimonialStatus:'requested'},
+            spec RP-3.4/RP-3.5) — this is the control that makes the
+            "ask again" path reachable after a client snoozes or declines. */}
+        <div style="margin-top:var(--space-4);">
+          <span style="display:block;font-weight:600;font-size:var(--text-sm);margin-bottom:var(--space-2);">Testimonial request</span>
+          <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary" id="ask-again-btn" style="font-size:var(--text-sm);">Ask again</button>
+            <span id="testimonial-status-text" class="muted" style="font-size:var(--text-sm);"></span>
+          </div>
+          <p id="ask-again-message" class="muted" style="margin:var(--space-2) 0 0;font-size:var(--text-sm);"></p>
+        </div>
+      </div>
+
+      <PortalTestimonialPrompt />
+
+      <div class="card" style="margin-bottom:var(--space-8);">
+        <h3 style="margin:0 0 var(--space-4);font-size:var(--text-lg);font-weight:600;">Plan items</h3>
+        <div id="plan-items-list" style="display:grid;gap:var(--space-3);"></div>
+        <p id="plan-items-message" class="muted" role="status" aria-live="polite" style="margin:var(--space-3) 0 0;font-size:var(--text-sm);"></p>
+      </div>
+
+      <div class="card" style="margin-bottom:var(--space-8);">
+        <h3 style="margin:0 0 var(--space-4);font-size:var(--text-lg);font-weight:600;">Recent updates</h3>
+        <div id="updates-list" style="display:grid;gap:var(--space-3);margin-bottom:var(--space-4);"></div>
+        <p id="updates-message" class="muted" role="status" aria-live="polite" style="margin:var(--space-3) 0 0;font-size:var(--text-sm);"></p>
+        <PortalUpdateComposer role={role} projectId="" />
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 var(--space-4);font-size:var(--text-lg);font-weight:600;">Comments</h3>
+        <div id="comments-list" style="display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-4);"></div>
+        <PortalComments comments={[]} role={role} projectId="" />
+      </div>
+
+      <div id="invite-form-container" hidden style="margin-top:var(--space-8);max-width:40ch;">
+        {/* Rendered for everyone but revealed for admins only — the build-time
+            `role` is always 'client', so a template-level admin branch would
+            never render and the owner could never invite a client. The API
+            still enforces the owner-only rule (403 for anyone else). */}
+        <PortalInviteForm />
+      </div>
+    </div>
+  </section>
+
+  <script>
+    type Role = 'admin' | 'client';
+
+    const API = '/api/portal';
+    let role: Role = (sessionStorage.getItem('imk_portal_role') as Role | null) ?? 'client';
+    let projects: Array<Record<string, unknown>> = [];
+    let currentProjectId: string | null = null;
+
+    const loadingEl = document.getElementById('portal-loading') as HTMLDivElement | null;
+    const notAuthEl = document.getElementById('portal-not-auth') as HTMLDivElement | null;
+    const errorEl = document.getElementById('portal-error') as HTMLDivElement | null;
+    const errorTextEl = document.getElementById('portal-error-text') as HTMLParagraphElement | null;
+    const retryBtn = document.getElementById('portal-retry') as HTMLButtonElement | null;
+    const statusEl = document.getElementById('portal-status') as HTMLParagraphElement | null;
+    const shellEl = document.getElementById('portal-shell') as HTMLDivElement | null;
+    const adminControlsEl = document.getElementById('portal-admin-controls') as HTMLDivElement | null;
+    const adminStatusCard = document.getElementById('admin-status-card') as HTMLDivElement | null;
+    const projectTitleEl = document.getElementById('portal-project-title') as HTMLHeadingElement | null;
+    const projectStatusEl = document.getElementById('portal-project-status') as HTMLParagraphElement | null;
+    const projectStatusSelect = document.getElementById('project-status') as HTMLSelectElement | null;
+    const askAgainBtn = document.getElementById('ask-again-btn') as HTMLButtonElement | null;
+    const testimonialStatusText = document.getElementById('testimonial-status-text') as HTMLSpanElement | null;
+    const planItemsEl = document.getElementById('plan-items-list') as HTMLDivElement | null;
+    const updatesEl = document.getElementById('updates-list') as HTMLDivElement | null;
+    const commentsListEl = document.getElementById('comments-list') as HTMLDivElement | null;
+    const inviteFormContainer = document.getElementById('invite-form-container') as HTMLDivElement | null;
+    const logoutBtn = document.getElementById('logout-btn') as HTMLButtonElement | null;
+    const inviteBtn = document.getElementById('invite-btn') as HTMLButtonElement | null;
+    const postUpdateBtn = document.getElementById('post-update-btn') as HTMLButtonElement | null;
+
+    function escapeHtml(s: unknown): string {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function statusTag(status: string): string {
+      const colors: Record<string, string> = {
+        todo: 'var(--color-text-muted)',
+        'in-progress': 'var(--color-link)',
+        done: 'var(--color-accent-text)',
+        blocked: '#b00020',
+      };
+      return `<span class="tag" style="background:var(--color-neutral-soft);color:${colors[status] || 'var(--color-text)'};">${escapeHtml(status)}</span>`;
+    }
+
+    async function api(path: string, opts: RequestInit = {}): Promise<Response> {
+      const res = await fetch(`${API}${path}`, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Origin: window.location.origin, ...(opts.headers as Record<string, string>) },
+        ...opts,
+      });
+      return res;
+    }
+
+    function showMessage(elId: string, text: string, isError = false): void {
+      const el = document.getElementById(elId) as HTMLElement | null;
+      if (!el) return;
+      el.textContent = text;
+      el.style.color = isError ? 'var(--color-text-muted)' : 'var(--color-text)';
+    }
+
+    // A short announcement for a screen reader: what loaded, what failed.
+    function setStatus(text: string): void {
+      if (statusEl) statusEl.textContent = text;
+    }
+
+    /**
+     * The portal could not be loaded, and the reason is NOT "you are signed
+     * out". This used to be the same branch as a 401, so a network error or a
+     * 500 told the owner their session had expired — a wrong answer that also
+     * hid the fact that the portal was simply not loading.
+     */
+    function showError(text: string): void {
+      if (loadingEl) loadingEl.hidden = true;
+      if (notAuthEl) notAuthEl.hidden = true;
+      if (errorTextEl) errorTextEl.textContent = text;
+      if (errorEl) errorEl.hidden = false;
+      setStatus('');
+    }
+
+    /**
+     * Say a section could not be loaded, inside that section.
+     *
+     * A failed request used to leave the section looking empty, which reads
+     * as "you have no plan items" — a wrong answer when the truth is "we could
+     * not ask the server".
+     */
+    function renderListError(container: HTMLElement | null, text: string): void {
+      if (!container) return;
+      container.textContent = '';
+      const p = document.createElement('p');
+      p.className = 'muted';
+      p.style.fontSize = 'var(--text-sm)';
+      p.textContent = text;
+      container.appendChild(p);
+    }
+
+    // Turn an invite failure into something the owner can act on. The API
+    // answers 400 with the offending field names, so name them instead of
+    // showing a generic "failed".
+    async function inviteErrorText(res: Response): Promise<string> {
+      let data: { error?: string; fields?: string[] } = {};
+      try {
+        data = (await res.json()) as { error?: string; fields?: string[] };
+      } catch {
+        /* no JSON body — fall through to the generic message */
+      }
+      const labels: Record<string, string> = {
+        email: 'Email', name: 'Name', company: 'Company', role: 'Role',
+      };
+      if (data.error === 'invalid email') return 'That email address does not look valid.';
+      if (Array.isArray(data.fields) && data.fields.length > 0) {
+        const names = data.fields.map((f) => labels[f] || f).join(' and ');
+        const verb = data.fields.length > 1 ? 'were' : 'was';
+        return `${names} ${verb} not accepted — check the length limit.`;
+      }
+      if (data.error === 'store unreadable') return 'The client store could not be read, so nothing was saved.';
+      if (res.status === 403) return 'Only the owner can invite clients.';
+      return 'Failed to send invite.';
+    }
+
+    // Human text for the owner-facing testimonial status (RP-3.4 / RP-3.5).
+    function testimonialStatusLabel(status: unknown): string {
+      switch (String(status ?? '')) {
+        case 'requested':
+          return 'Requested — the client has the card.';
+        case 'snoozed':
+          return 'Snoozed — the client chose “maybe later”.';
+        case 'declined':
+          return 'Declined — the client said no.';
+        default:
+          return 'Not requested yet.';
+      }
+    }
+
+    function setTestimonialStatus(status: unknown): void {
+      if (testimonialStatusText) testimonialStatusText.textContent = testimonialStatusLabel(status);
+    }
+
+    async function init(): Promise<void> {
+      if (loadingEl) loadingEl.hidden = false;
+      if (notAuthEl) notAuthEl.hidden = true;
+      if (errorEl) errorEl.hidden = true;
+      try {
+        const res = await api('/projects');
+        if (res.status === 401) {
+          // Signed out — the ONLY answer that says so.
+          if (loadingEl) loadingEl.hidden = true;
+          if (notAuthEl) notAuthEl.hidden = false;
+          return;
+        }
+        if (!res.ok) {
+          showError(
+            res.status === 500
+              ? 'The portal store could not be read, so nothing is shown.'
+              : 'The portal could not be loaded. Please try again.',
+          );
+          return;
+        }
+        const data = await res.json();
+        projects = (data.projects || []) as Array<Record<string, unknown>>;
+
+        if (loadingEl) loadingEl.hidden = true;
+        if (shellEl) shellEl.hidden = false;
+
+        if (role === 'admin') {
+          if (adminControlsEl) adminControlsEl.style.display = 'flex';
+          if (adminStatusCard) adminStatusCard.hidden = false;
+          if (inviteFormContainer) inviteFormContainer.hidden = false;
+        }
+
+        if (projects.length > 0) {
+          currentProjectId = String(projects[0].id);
+          const project = projects[0] as Record<string, unknown>;
+          if (projectTitleEl) projectTitleEl.textContent = escapeHtml(project.title || 'Untitled project');
+          if (projectStatusEl) projectStatusEl.textContent = `Status: ${escapeHtml(project.status)}`;
+          if (projectStatusSelect) projectStatusSelect.value = String(project.status || 'discovery');
+          setTestimonialStatus(project.testimonialStatus);
+          await loadProjectData();
+
+          // Tell the testimonial card which project is loaded and whether it is
+          // asking for a testimonial (spec RP-3.2).
+          document.dispatchEvent(
+            new CustomEvent('imk:portal-project', {
+              detail: {
+                projectId: currentProjectId,
+                status: String(project.status ?? ''),
+                testimonialStatus: (project.testimonialStatus as string | undefined) ?? null,
+              },
+            }),
+          );
+        } else {
+          if (planItemsEl) planItemsEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No plan items yet.</p>';
+          if (updatesEl) updatesEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No updates yet. Projects are connected to the email address you were given access with. If you signed in with a different email than the one we invited, contact IMK and send proof of our conversation so we can link it for you.</p>';
+          if (commentsListEl) commentsListEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">Projects are connected to the email address you were given access with. If you want to connect this email to your project, contact us at <a href="mailto:2imk4support@gmail.com">2imk4support@gmail.com</a> with proof of our conversation.</p>';
+          setStatus('No project is linked to this email address.');
+        }
+      } catch {
+        // The request never completed: the server was unreachable.
+        showError('Could not reach the server. Check the connection and try again.');
+      }
+    }
+
+    async function loadProjectData(): Promise<void> {
+      if (!currentProjectId) return;
+
+      const [piRes, updRes, cmtRes] = await Promise.all([
+        api(`/plan-items?projectId=${encodeURIComponent(currentProjectId)}`),
+        api(`/updates?projectId=${encodeURIComponent(currentProjectId)}`),
+        api(`/comments?projectId=${encodeURIComponent(currentProjectId)}`),
+      ]);
+
+      // Every section answers for itself. A failed request used to leave the
+      // section looking EMPTY, which reads as "you have no plan items" — a
+      // wrong answer when the truth is "we could not ask the server".
+      if (piRes.ok) {
+        const piData = await piRes.json();
+        renderPlanItems((piData.planItems || []) as Array<Record<string, unknown>>);
+      } else {
+        renderListError(planItemsEl, 'Plan items could not be loaded.');
+      }
+      if (updRes.ok) {
+        const updData = await updRes.json();
+        renderUpdates((updData.updates || []) as Array<Record<string, unknown>>);
+      } else {
+        renderListError(updatesEl, 'Updates could not be loaded.');
+      }
+      if (cmtRes.ok) {
+        const cmtData = await cmtRes.json();
+        renderComments((cmtData.comments || []) as Array<Record<string, unknown>>);
+      } else {
+        renderListError(commentsListEl, 'Comments could not be loaded.');
+      }
+    }
+
+    function renderPlanItems(items: Array<Record<string, unknown>>): void {
+      if (!planItemsEl) return;
+      planItemsEl.innerHTML = items.map((item) => `
+        <div class="card" data-plan-item-id="${escapeHtml(String(item.id))}">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-3);">
+            <div>
+              <h3 style="margin:0 0 var(--space-2);font-size:var(--text-lg);">${escapeHtml(item.title || '')}</h3>
+              ${item.description ? `<p class="muted" style="font-size:var(--text-sm);margin:0;max-width:none;">${escapeHtml(item.description)}</p>` : ''}
+            </div>
+            ${statusTag(String(item.status || 'todo'))}
+          </div>
+          <div style="margin-top:var(--space-3);display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;">
+            ${role === 'client'
+              ? (item.status === 'done'
+                  ? `<button type="button" class="btn btn-ghost" style="font-size:var(--text-xs);padding:6px 10px;" data-action="request-change" data-plan-item-id="${escapeHtml(String(item.id))}">Request change</button>
+                     <button type="button" class="btn btn-primary" style="font-size:var(--text-xs);padding:6px 10px;" data-action="approve" data-plan-item-id="${escapeHtml(String(item.id))}">Approve</button>`
+                  : `<button type="button" class="btn btn-ghost" style="font-size:var(--text-xs);padding:6px 10px;" data-action="request-change" data-plan-item-id="${escapeHtml(String(item.id))}">Request change</button>`)
+              : `<select style="width:auto;padding:6px 10px;font-size:var(--text-sm);border:1px solid var(--color-border-strong);border-radius:var(--radius-sm);background:var(--color-surface);color:var(--color-text);" data-action="set-status" data-plan-item-id="${escapeHtml(String(item.id))}">
+                     <option value="todo" ${item.status === 'todo' ? 'selected' : ''}>To do</option>
+                     <option value="in-progress" ${item.status === 'in-progress' ? 'selected' : ''}>In progress</option>
+                     <option value="done" ${item.status === 'done' ? 'selected' : ''}>Done</option>
+                     <option value="blocked" ${item.status === 'blocked' ? 'selected' : ''}>Blocked</option>
+                   </select>`}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderUpdates(updates: Array<Record<string, unknown>>): void {
+      if (!updatesEl) return;
+      if (updates.length === 0) {
+        updatesEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No updates yet.</p>';
+        return;
+      }
+      updatesEl.innerHTML = updates.map((u) => `
+        <div style="border-bottom:1px solid var(--color-border);padding-bottom:var(--space-3);font-size:var(--text-sm);">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);">
+            <span style="font-weight:600;">${escapeHtml(u.createdBy || 'Unknown')}</span>
+            <span class="muted" style="font-size:var(--text-xs);"></span>
+            <span class="muted" style="font-size:var(--text-xs);">${new Date(String(u.createdAt || 0)).toLocaleDateString()}</span>
+          </div>
+          <h4 style="margin:var(--space-2) 0 var(--space-1);font-size:var(--text-sm);font-weight:600;">${escapeHtml(u.title || '')}</h4>
+          <p style="margin:0;max-width:none;">${escapeHtml(u.body || '')}</p>
+        </div>
+      `).join('');
+    }
+
+    function renderComments(comments: Array<Record<string, unknown>>): void {
+      if (!commentsListEl) return;
+      if (comments.length === 0) {
+        commentsListEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No comments yet.</p>';
+        return;
+      }
+      commentsListEl.innerHTML = comments.map((c) => `
+        <div style="border-bottom:1px solid var(--color-border);padding-bottom:var(--space-3);font-size:var(--text-sm);">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);">
+            <span style="font-weight:600;">${escapeHtml(c.authorName || c.authorId || 'Unknown')}</span>
+            <span class="muted" style="font-size:var(--text-xs);">${escapeHtml(String(c.authorRole || ''))}</span>
+            <span class="muted" style="font-size:var(--text-xs);">${new Date(String(c.createdAt || 0)).toLocaleDateString()}</span>
+          </div>
+          <p style="margin:var(--space-2) 0 0;max-width:none;">${escapeHtml(c.body || '')}</p>
+        </div>
+      `).join('');
+    }
+
+    document.body.addEventListener('click', async (e) => {
+      const target = e.target as HTMLElement | null;
+      const el = target?.closest('[data-action]') as HTMLElement | null;
+      if (!el) return;
+      const action = el.dataset.action;
+      const planItemId = el.dataset.planItemId;
+      const projectId = el.dataset.projectId;
+
+      try {
+        switch (action) {
+          case 'set-status': {
+            const select = el as HTMLSelectElement;
+            const newStatus = select.value;
+            const res = await api(`/plan-items/${encodeURIComponent(planItemId ?? '')}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: newStatus }),
+            });
+            if (res.ok) showMessage('plan-items-message', 'Status updated.', false);
+            else showMessage('plan-items-message', 'Failed to update status.', true);
+            await loadProjectData();
+            break;
+          }
+          case 'approve': {
+            const res = await api(`/plan-items/${encodeURIComponent(planItemId ?? '')}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: 'done' }),
+            });
+            if (res.ok) {
+              showMessage('plan-items-message', 'Plan item approved.', false);
+              await loadProjectData();
+            } else {
+              showMessage('plan-items-message', 'Failed to approve.', true);
+            }
+            break;
+          }
+          case 'request-change': {
+            const res = await api(`/plan-items/${encodeURIComponent(planItemId ?? '')}`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: 'in-progress' }),
+            });
+            if (res.ok) {
+              showMessage('plan-items-message', 'Change requested.', false);
+              await loadProjectData();
+            } else {
+              showMessage('plan-items-message', 'Failed to request change.', true);
+            }
+            break;
+          }
+          case 'post-comment': {
+            const textarea = document.getElementById('comment-body') as HTMLTextAreaElement | null;
+            const body = textarea?.value.trim() || '';
+            if (!body) return;
+            const res = await api('/comments', {
+              method: 'POST',
+              body: JSON.stringify({ projectId: currentProjectId, planItemId: planItemId ?? undefined, body }),
+            });
+            if (res.ok) {
+              if (textarea) textarea.value = '';
+              await loadProjectData();
+            } else {
+              showMessage('comment-message', 'Failed to post comment.', true);
+            }
+            break;
+          }
+          case 'cancel-comment': {
+            const textarea = document.getElementById('comment-body') as HTMLTextAreaElement | null;
+            if (textarea) textarea.value = '';
+            showMessage('comment-message', '', false);
+            break;
+          }
+          case 'post-update': {
+            const titleInput = document.getElementById('update-title') as HTMLInputElement | null;
+            const bodyInput = document.getElementById('update-body') as HTMLTextAreaElement | null;
+            const title = titleInput?.value.trim() || '';
+            const body = bodyInput?.value.trim() || '';
+            if (!title || !body) return;
+            const res = await api('/updates', {
+              method: 'POST',
+              body: JSON.stringify({ projectId: currentProjectId, title, body }),
+            });
+            if (res.ok) {
+              if (titleInput) titleInput.value = '';
+              if (bodyInput) bodyInput.value = '';
+              await loadProjectData();
+            } else {
+              showMessage('update-message', 'Failed to post update.', true);
+            }
+            break;
+          }
+          case 'cancel-update': {
+            const ti = document.getElementById('update-title') as HTMLInputElement | null;
+            const bi = document.getElementById('update-body') as HTMLTextAreaElement | null;
+            if (ti) ti.value = '';
+            if (bi) bi.value = '';
+            showMessage('update-message', '', false);
+            break;
+          }
+          case 'invite-client': {
+            const emailInput = document.getElementById('invite-email') as HTMLInputElement | null;
+            const nameInput = document.getElementById('invite-name') as HTMLInputElement | null;
+            const companyInput = document.getElementById('invite-company') as HTMLInputElement | null;
+            const roleInput = document.getElementById('invite-role') as HTMLInputElement | null;
+            const emailVal = emailInput?.value.trim() || '';
+            const nameVal = nameInput?.value.trim() || '';
+            const companyVal = companyInput?.value.trim() || '';
+            const roleVal = roleInput?.value.trim() || '';
+            if (!emailVal) {
+              showMessage('invite-message', 'Enter the client email first.', true);
+              return;
+            }
+            // The endpoint is an UPSERT: an omitted field keeps its current
+            // value, a field sent empty clears it. Name is therefore omitted
+            // when it is blank — re-inviting a client to add a company must
+            // not wipe the name the owner typed earlier, and for a brand-new
+            // invite the server falls back to the email local part itself.
+            const payload: Record<string, string> = {
+              email: emailVal,
+              company: companyVal,
+              role: roleVal,
+            };
+            if (nameVal) payload.name = nameVal;
+            const res = await api('/invites', {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+            if (res.ok) {
+              let text = 'Invite sent.';
+              try {
+                const data = (await res.json()) as { updated?: boolean; clientUpdated?: boolean };
+                if (data.updated) {
+                  text = data.clientUpdated
+                    ? 'Client details updated.'
+                    : 'Client details updated — the client has not signed in yet.';
+                }
+              } catch {
+                /* the response body is extra detail, not the result itself */
+              }
+              if (emailInput) emailInput.value = '';
+              if (nameInput) nameInput.value = '';
+              if (companyInput) companyInput.value = '';
+              if (roleInput) roleInput.value = '';
+              showMessage('invite-message', text, false);
+            } else {
+              showMessage('invite-message', await inviteErrorText(res), true);
+            }
+            break;
+          }
+          case 'cancel-invite': {
+            const ei = document.getElementById('invite-email') as HTMLInputElement | null;
+            const ni = document.getElementById('invite-name') as HTMLInputElement | null;
+            const ci = document.getElementById('invite-company') as HTMLInputElement | null;
+            const ri = document.getElementById('invite-role') as HTMLInputElement | null;
+            if (ei) ei.value = '';
+            if (ni) ni.value = '';
+            if (ci) ci.value = '';
+            if (ri) ri.value = '';
+            showMessage('invite-message', '', false);
+            break;
+          }
+        }
+      } catch {
+        const msgElId = action === 'post-comment' ? 'comment-message' : action === 'post-update' ? 'update-message' : 'plan-items-message';
+        showMessage(msgElId, 'Request failed.', true);
+      }
+    });
+
+    projectStatusSelect?.addEventListener('change', async (e) => {
+      if (!currentProjectId) return;
+      const select = e.target as HTMLSelectElement;
+      const newStatus = select.value;
+      const res = await api(`/projects/${encodeURIComponent(currentProjectId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        if (projectStatusEl) projectStatusEl.textContent = `Status: ${newStatus}`;
+        showMessage('project-status-message', 'Project status updated.', false);
+      } else {
+        // An inline message, not an alert(): a modal dialog interrupts what the
+        // owner is doing and is not announced reliably by a screen reader.
+        showMessage('project-status-message', 'Failed to update the project status.', true);
+        select.value = String(projects.find((p) => p.id === currentProjectId)?.status || 'discovery');
+      }
+    });
+
+    // Re-request a testimonial after a client snoozed or declined (RP-3.4 /
+    // RP-3.5). PATCH /api/portal/projects/:id whitelists testimonialStatus,
+    // and the server answers 403 for anyone who is not the owner.
+    askAgainBtn?.addEventListener('click', async () => {
+      if (!currentProjectId || askAgainBtn.disabled) return;
+      askAgainBtn.disabled = true;
+      try {
+        const res = await api(`/projects/${encodeURIComponent(currentProjectId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ testimonialStatus: 'requested' }),
+        });
+        if (!res.ok) {
+          showMessage(
+            'ask-again-message',
+            res.status === 403
+              ? 'Only the owner can ask again.'
+              : 'Could not re-request the testimonial — please try again.',
+            true,
+          );
+          return;
+        }
+        const data = (await res.json().catch(() => ({}))) as { project?: Record<string, unknown> };
+        const updated = data.project;
+        if (updated) {
+          const idx = projects.findIndex((p) => p.id === currentProjectId);
+          if (idx !== -1) projects[idx] = { ...projects[idx], ...updated };
+          setTestimonialStatus(updated.testimonialStatus);
+        } else {
+          setTestimonialStatus('requested');
+        }
+        showMessage('ask-again-message', 'Asked again — the client’s card is back.', false);
+
+        // Let the prompt card re-evaluate (it listens for this event).
+        document.dispatchEvent(
+          new CustomEvent('imk:portal-project', {
+            detail: {
+              projectId: currentProjectId,
+              status: String(projects.find((p) => p.id === currentProjectId)?.status ?? ''),
+              testimonialStatus: 'requested',
+            },
+          }),
+        );
+      } catch {
+        showMessage('ask-again-message', 'Could not re-request the testimonial — please try again.', true);
+      } finally {
+        askAgainBtn.disabled = false;
+      }
+    });
+
+    // Plan-item status select change (admin)
+    document.body.addEventListener('change', async (e) => {
+      const target = e.target as HTMLElement | null;
+      const select = target?.closest('select[data-action="set-status"]') as HTMLSelectElement | null;
+      if (!select) return;
+      const planItemId = select.dataset.planItemId;
+      const newStatus = select.value;
+      const res = await api(`/plan-items/${encodeURIComponent(planItemId ?? '')}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) showMessage('plan-items-message', 'Status updated.', false);
+      else showMessage('plan-items-message', 'Failed to update status.', true);
+      await loadProjectData();
+    });
+
+    retryBtn?.addEventListener('click', () => {
+      void init();
+    });
+
+    logoutBtn?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      await api('/auth/logout', { method: 'POST' });
+      sessionStorage.removeItem('imk_portal_role');
+      sessionStorage.removeItem('imk_portal_email');
+      window.location.href = '/';
+    });
+
+    inviteBtn?.addEventListener('click', () => {
+      if (!inviteFormContainer) return;
+      // Show-and-focus, never toggle: the form is already revealed for the
+      // owner when the portal loads, so a toggle would hide it.
+      inviteFormContainer.hidden = false;
+      inviteFormContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      (document.getElementById('invite-email') as HTMLInputElement | null)?.focus({ preventScroll: true });
+    });
+
+    postUpdateBtn?.addEventListener('click', () => {
+      // The composer is always on the page; this button just takes you to it.
+      const composer = document.getElementById('update-composer');
+      composer?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      (document.getElementById('update-title') as HTMLInputElement | null)?.focus({ preventScroll: true });
+    });
+
+    init();
+  </script>
+</BaseLayout>

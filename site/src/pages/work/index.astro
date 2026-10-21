@@ -1,4 +1,4 @@
-﻿---
+---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getCollection } from 'astro:content';
 import CaseCard from '../../components/CaseCard.astro';
@@ -7,7 +7,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 const cases = await getCollection('cases');
 cases.sort((a, b) => (a.data.order ?? 1) - (b.data.order ?? 1));
 ---
-<BaseLayout title="Work — IXI" description="Sample case studies from IXI: hours reduced, agents, integrations." path="/work" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+<BaseLayout title="Work — IMK" description="Sample case studies from IMK: hours reduced, agents, integrations." path="/work" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Work' }]} />
     <h1>Work</h1>
@@ -17,6 +17,31 @@ cases.sort((a, b) => (a.data.order ?? 1) - (b.data.order ?? 1));
         <CaseCard href={`/work/${c.id}`} title={c.data.title} sector={c.data.sector} outcome={c.data.outcome} headingLevel="h2" />
       ))}
     </div>
+
+    <section class="container section" style="margin-top:var(--space-24);">
+      <h2 style="font-size:var(--text-2xl);margin-bottom:var(--space-4);">Automation case study</h2>
+      <p style="max-width:60ch;color:var(--color-text-muted);margin-bottom:var(--space-6);">
+        IMK also builds inbox automations. Shown here as a case study of what we can build for you — this is an internal workflow, not client work.
+      </p>
+      <div class="card" style="display:flex;flex-direction:column;gap:var(--space-6);">
+        <div>
+          <h3 style="font-size:var(--text-xl);margin:0 0 var(--space-3);">Email triage — n8n + Telegram</h3>
+          <ul style="margin:0 0 var(--space-4);padding-left:var(--space-6);">
+            <li style="margin-bottom:var(--space-2);"><strong>Problem:</strong> Client emails land across three inboxes; each needs reading, summarising, and a suggested reply before anything can move.</li>
+            <li style="margin-bottom:var(--space-2);"><strong>Built with:</strong> n8n watches the inbox, an LLM summarises each email in three lines with a suggested reply, and the result lands in Telegram.</li>
+            <li style="margin-bottom:var(--space-0);"><strong>Result:</strong> Actionable triage from one screen — read the summary, decide, and send.</li>
+          </ul>
+        </div>
+        {/* Video placeholder — replace this div with the n8n demo recording (email → summary → Telegram) when ready. */}
+        <div class="placeholder as-hero" style="width:100%;min-height:0;">
+          Demo video coming soon
+        </div>
+        <p style="font-size:var(--text-xs);color:var(--color-text-subtle);margin:var(--space-2) 0 0;">
+          Placeholder for the n8n demo video. Drop a <code>&lt;video src="/assets/n8n-demo.mp4"&gt;</code> or an embed here once the recording exists.
+        </p>
+        <p style="margin-top:var(--space-4);"><a href="/automations">Full tools & stack →</a></p>
+      </div>
+    </section>
   </section>
 </BaseLayout
 >

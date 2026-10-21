@@ -1,0 +1,25 @@
+---
+// Renders the "post update" composer. Posting handled by portal.astro script.
+interface Props {
+  role: 'admin' | 'client';
+  projectId: string;
+}
+const { role, projectId } = Astro.props;
+---
+
+<div id="update-composer" style="margin-top:var(--space-6);padding-top:var(--space-4);border-top:1px solid var(--color-border);">
+  <h3 style="margin:0 0 var(--space-3);font-size:var(--text-lg);font-weight:600;">Post an update</h3>
+  <div class="form-group">
+    <label for="update-title">Title</label>
+    <input id="update-title" name="title" type="text" required maxlength="120" placeholder="e.g. First draft delivered" />
+  </div>
+  <div class="form-group">
+    <label for="update-body">Body</label>
+    <textarea id="update-body" name="body" rows="4" required maxlength="2000" placeholder="What changed?"></textarea>
+  </div>
+  <div style="margin-top:var(--space-2);display:flex;gap:var(--space-2);">
+    <button type="button" class="btn btn-primary" style="font-size:var(--text-sm);" data-action="post-update" data-project-id={projectId}>Post update</button>
+    <button type="button" class="btn btn-ghost" style="font-size:var(--text-sm);" data-action="cancel-update">Cancel</button>
+  </div>
+  <p id="update-message" class="muted" style="font-size:var(--text-sm);margin-top:var(--space-2);"></p>
+</div>

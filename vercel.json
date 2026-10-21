@@ -1,5 +1,9 @@
 {
   "version": 3,
+  "framework": null,
+  "installCommand": "npm install --no-audit --no-fund && cd site && npm ci",
+  "buildCommand": "cd site && npm run build",
+  "outputDirectory": "site/dist",
   "headers": [
     {
       "source": "/(.*)",
@@ -10,6 +14,18 @@
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
         { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://challenges.cloudflare.com https://assets.calendly.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://assets.calendly.com https://calendly.com; font-src 'self'; connect-src 'self' https://calendly.com https://challenges.cloudflare.com; frame-src https://calendly.com https://challenges.cloudflare.com; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" }
       ]
+    },
+    {
+      "source": "/login/(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/portal/(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/admin/(.*)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
     },
     {
       "source": "/assets/(.*)",

@@ -16,6 +16,13 @@ site/.lighthouseci/
 .env.*
 !.env.example
 
+# Portal runtime data — client PII (emails, names, companies), sessions and
+# invite records. These are created on first write and must never be committed:
+# `git add .` would otherwise sweep live client records into the repo.
+# site/data/moderation/ is NOT ignored: the build-time publisher reads it.
+site/data/portal/
+site/data/snapshot/
+
 # Logs and OS junk
 *.log
 .DS_Store
@@ -24,3 +31,10 @@ desktop.ini
 
 # Editor workspace state
 .obsidian/workspace*.json
+
+# Wrangler / miniflare state (Cloudflare local dev)
+site/.wrangler/
+
+# Scratch dumps — site/jar.txt contains a session cookie (treat as secret)
+site/headers.txt
+site/jar.txt
