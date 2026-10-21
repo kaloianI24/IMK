@@ -16,7 +16,9 @@
 //   TURNSTILE_SITE_KEY    — parity only; the client reads PUBLIC_TURNSTILE_SITE_KEY
 //   RESEND_API_KEY        — when set + a destination exists, submission is e-mailed
 //   RESEND_FROM / RESEND_TO / CONTACT_TO  — e-mail envelope (CONTACT_TO is the fallback destination)
-//   APP_ENV               — 'production' turns on strict guards
+//   APP_ENV               — 'production' turns on strict guards. UNSET means
+//                            production; 'development' is only honoured on a
+//                            machine that is not deployed (H-2, wave-8A)
 //   DEV_STUB              — must never be '1' in production (500 if it is)
 //
 // Rate limiting: Cloudflare Pages KV_COUNTER binding is not available here, so
@@ -24,6 +26,7 @@
 // revisit if spam volume grows).
 
 import { IncomingMessage, ServerResponse } from 'node:http';
+import { isProductionEnv } from '../site/shared/server/portal-session.js';
 
 type Kind = 'contact' | 'review';
 
@@ -178,7 +181,14 @@ export default async function handler(
     return;
   }
 
-  const isProd = (process.env.APP_ENV || 'production') === 'production';
+  // H-2 (wave-8A): the production test used to be
+  // `(process.env.APP_ENV || 'production') === 'production'`, so
+  // `APP_ENV=development` alone switched every guard off — including the
+  // DEV_STUB guard below. The shared rule is used instead, and it is ONE
+  // definition for the whole project: a deployment is PRODUCTION when APP_ENV
+  // is unset or unknown, or when NODE_ENV=production, or VERCEL=1, or the
+  // base URL is an https:// URL.
+  const isProd = isProductionEnv(process.env);
   if (isProd && process.env.DEV_STUB === '1') {
     json(res, { error: 'misconfigured', code: 'internal' }, 500);
     return;

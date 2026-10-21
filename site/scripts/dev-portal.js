@@ -93,6 +93,10 @@ const ROUTES = [
   ['/api/portal/comments', 'comments'],
   ['/api/portal/invites', 'invites'],
   ['/api/portal/testimonials', 'testimonials'],
+  // The server-truth role endpoint (Architect §4.2, wave-8A). The portal page
+  // asks it who the requester is; without the route in the local bundle the
+  // answer is a 404 and the UI falls back to the client view.
+  ['/api/portal/session', 'portalSession'],
   // The owner inbox (spec/07 §7.3, T7.14). Two separate handlers, so two
   // prefixes: the local server matches by prefix, and the deployed targets
   // match by file path.

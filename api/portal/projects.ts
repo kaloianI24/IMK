@@ -7,21 +7,25 @@
 
 import { IncomingMessage, ServerResponse } from 'node:http';
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { readJsonlFile, guardStorage } from '../lib/jsonl.js';
 import {
-  resolveSession,
-  baseUrl,
+  getPortalStore,
+  guardStore,
+  storageFailureLog,
+} from '../../site/shared/server/portal-store-access.js';
+import {
+  resolveAccess,
+  resolveOwnerSession,
+  canReadClient,
   expectedOrigin,
-  isSecureBaseUrl,
-  sessionCookieString,
   baseUrlConfigured,
 } from './session.js';
 
-const PORTAL_DATA_DIR = path.resolve(process.cwd(), 'site/data/portal');
-const PROJECTS_FILE = path.join(PORTAL_DATA_DIR, 'projects.jsonl');
-const CLIENTS_FILE = path.join(PORTAL_DATA_DIR, 'clients.jsonl');
+// THE STORE (wave 9)
+//   The collections come from the PortalStore contract
+//   (site/shared/portal-store/**), not from a JSONL file: with
+//   PORTAL_STORE=libsql the portal persists on a read-only filesystem
+//   (Vercel), and with PORTAL_STORE=file the very same records land in the
+//   very same site/data/portal/*.jsonl files as before.
 
 const PROJECT_STATUSES = [
   'discovery',
@@ -66,22 +70,11 @@ function json(
  * Read a store file. A malformed line is an ERROR (audit M3 / QA D3): it must
  * not turn the collection into an empty list, because "empty" reads as "no
  * project" — a silent outage wearing the costume of a normal answer.
+ *
+ * The store itself enforces that rule (a corrupt store raises, it never
+ * returns an empty list), so the handler only has to let the error through
+ * to guardStore(), which answers 500 {code:'storage'}.
  */
-function readJsonl(file: string): Array<Record<string, any>> {
-  return readJsonlFile(file);
-}
-
-function appendJsonl(file: string, record: Record<string, any>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
-}
-
-function rewriteJsonl(file: string, records: Array<Record<string, any>>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const content = records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '');
-  fs.writeFileSync(file, content, 'utf8');
-}
-
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -97,18 +90,6 @@ function projectPath(id: string): string {
   return segments[segments.length - 1];
 }
 
-function clientIdOf(session: { email: string; role: 'admin' | 'client'; clientId?: string }): string | undefined {
-  return session.role === 'client' ? session.clientId : undefined;
-}
-
-function projectAccessible(
-  project: Record<string, any>,
-  session: { email: string; role: 'admin' | 'client'; clientId?: string },
-): boolean {
-  if (session.role === 'admin') return true;
-  return project.clientId === session.clientId;
-}
-
 async function handler(
   req: IncomingMessage,
   res: ServerResponse,
@@ -117,20 +98,38 @@ async function handler(
   const pathname = url.pathname;
   const method = req.method || 'GET';
 
-  // The owner-only endpoints prefer the admin cookie, so a stale client
-  // cookie can never shadow it (audit m5).
-  const session = resolveSession(req, method === 'GET' ? undefined : 'admin');
-  if (!session) {
+  // ONE reading of the cookies, TWO decisions (M-4, M-5).
+  //
+  //   access.session — the READ session: the client cookie first, so a live
+  //                   admin cookie can never widen a client's read scope
+  //                   (Architect §4.3). The owner (no client cookie) reads
+  //                   every project.
+  //   access.owner  — the WRITE gate: the admin cookie, the role claim AND
+  //                   the live allow-list. An owner-only action needs it,
+  //                   so taking an address off ADMIN_EMAILS revokes the
+  //                   owner's powers at once (M-4).
+  const access = resolveAccess(req);
+  const session = access.session;
+
+  // Nobody is signed in at all -> 401, on every path.
+  if (!access.any) {
+    json(res, { error: 'authentication required', code: 'unauthorized' }, 401);
+    return;
+  }
+
+  // The READ scope: a client session, or the owner gate. A session that is
+  // neither — an owner whose address was just taken off the allow-list — has
+  // no read scope at all (Architect §4.3).
+  if (method === 'GET' && !session) {
     json(res, { error: 'authentication required', code: 'unauthorized' }, 401);
     return;
   }
 
   // ---- GET /api/portal/projects ----
   if (pathname === '/api/portal/projects' && method === 'GET') {
-    const projects = readJsonl(PROJECTS_FILE);
-    const visible = session.role === 'admin'
-      ? projects
-      : projects.filter((p) => projectAccessible(p, session));
+    const store = getPortalStore();
+    const projects = await store.list('projects');
+    const visible = projects.filter((p) => canReadClient(access, p.clientId));
     json(res, { ok: true, projects: visible }, 200);
     return;
   }
@@ -148,13 +147,13 @@ async function handler(
   const projectId = projectIdMatch ? projectIdMatch[1] : projectIdParam;
 
   if (projectId && method === 'GET') {
-    const projects = readJsonl(PROJECTS_FILE);
-    const project = projects.find((p) => p.id === projectId);
+    const store = getPortalStore();
+    const project = await store.get('projects', { field: 'id', value: projectId });
     if (!project) {
       json(res, { error: 'project not found', code: 'not-found' }, 404);
       return;
     }
-    if (!projectAccessible(project, session)) {
+    if (!canReadClient(access, project.clientId)) {
       json(res, { error: 'forbidden', code: 'forbidden' }, 403);
       return;
     }
@@ -164,7 +163,11 @@ async function handler(
 
   // ---- PATCH /api/portal/projects/:id ----
   if (projectId && method === 'PATCH') {
-    if (session.role !== 'admin') {
+    // The OWNER gate: the role claim AND the live allow-list (M-4). A
+    // session that was minted while the address was still on the list stops
+    // working the moment it is removed — not at the next token expiry.
+    const owner = resolveOwnerSession(req, process.env);
+    if (!owner) {
       json(res, { error: 'forbidden', code: 'forbidden' }, 403);
       return;
     }
@@ -191,22 +194,26 @@ async function handler(
       return;
     }
 
-    const projects = readJsonl(PROJECTS_FILE);
-    const idx = projects.findIndex((p) => p.id === projectId);
-    if (idx === -1) {
+    const store = getPortalStore();
+    const project = await store.get('projects', { field: 'id', value: projectId });
+    if (!project) {
       json(res, { error: 'project not found', code: 'not-found' }, 404);
       return;
     }
 
-    const project = projects[idx];
+    // The patch holds ONLY the fields this request changes: the store writes
+    // exactly these (an undefined value REMOVES the field, the way the old
+    // `delete project.testimonialStatus` did).
+    const patch: Record<string, any> = {};
+
     if (body.status !== undefined) {
       if (!PROJECT_STATUSES.includes(body.status)) {
         json(res, { error: 'invalid status', code: 'validation', fields: ['status'] }, 400);
         return;
       }
-      project.status = body.status;
-      project.updatedBy = session.email;
-      project.updatedAt = new Date().toISOString();
+      patch.status = body.status;
+      patch.updatedBy = owner.email;
+      patch.updatedAt = new Date().toISOString();
     }
     if (body.title !== undefined) {
       const title = String(body.title).trim();
@@ -214,16 +221,16 @@ async function handler(
         json(res, { error: 'invalid title', code: 'validation', fields: ['title'] }, 400);
         return;
       }
-      project.title = title;
+      patch.title = title;
     }
     if (body.testimonialStatus !== undefined) {
       // The owner can ask again ('requested') or close the request. A client
       // who snoozed or declined gets the card back when the owner re-requests.
       const value = body.testimonialStatus;
       if (value === null) {
-        delete project.testimonialStatus;
+        patch.testimonialStatus = undefined; // the field is removed
       } else if (typeof value === 'string' && TESTIMONIAL_STATUSES.includes(value)) {
-        project.testimonialStatus = value;
+        patch.testimonialStatus = value;
       } else {
         json(res, {
           error: 'invalid testimonialStatus',
@@ -232,30 +239,33 @@ async function handler(
         }, 400);
         return;
       }
-      project.updatedBy = session.email;
-      project.updatedAt = new Date().toISOString();
+      patch.updatedBy = owner.email;
+      patch.updatedAt = new Date().toISOString();
     }
 
-    projects[idx] = project;
-    rewriteJsonl(PROJECTS_FILE, projects);
+    await store.update('projects', { id: projectId }, patch);
+
+    const updated = { ...project, ...patch };
 
     console.log(
       JSON.stringify({
         ts: Date.now(),
         outcome: 'project_updated',
         projectId,
-        status: project.status,
-        updatedBy: session.email,
+        status: updated.status,
+        updatedBy: owner.email,
       }),
     );
 
-    json(res, { ok: true, project }, 200);
+    json(res, { ok: true, project: updated }, 200);
     return;
   }
 
   // ---- POST /api/portal/projects ----
   if (pathname === '/api/portal/projects' && method === 'POST') {
-    if (session.role !== 'admin') {
+    // The OWNER gate (M-4): the role claim AND the live allow-list.
+    const owner = resolveOwnerSession(req, process.env);
+    if (!owner) {
       json(res, { error: 'forbidden', code: 'forbidden' }, 403);
       return;
     }
@@ -288,10 +298,11 @@ async function handler(
       return;
     }
 
-    // Resolve client: admin-supplied clientId must exist in clients.jsonl
+    // Resolve client: admin-supplied clientId must exist in the client store
     let targetClientId: string | undefined;
     if (body.clientId) {
-      const clients = readJsonl(CLIENTS_FILE);
+      const store = getPortalStore();
+      const clients = await store.list('clients');
       const client = clients.find((c) => c.id === body.clientId || c.email === body.clientId);
       if (!client) {
         json(res, { error: 'client not found', code: 'not-found' }, 404);
@@ -307,10 +318,11 @@ async function handler(
       status: body.status && PROJECT_STATUSES.includes(body.status) ? body.status : 'discovery',
       startedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
-      updatedBy: session.email,
+      updatedBy: owner.email,
     };
 
-    appendJsonl(PROJECTS_FILE, project);
+    const store = getPortalStore();
+    await store.append('projects', project);
 
     console.log(
       JSON.stringify({
@@ -318,7 +330,7 @@ async function handler(
         outcome: 'project_created',
         projectId: project.id,
         clientId: targetClientId,
-        createdBy: session.email,
+        createdBy: owner.email,
       }),
     );
 
@@ -335,17 +347,10 @@ export default function (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  return guardStorage(
+  return guardStore(
     () => handler(req, res),
     (err) => {
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          outcome: 'storage_corrupt',
-          file: err.file,
-          line: err.line,
-        }),
-      );
+      console.log(JSON.stringify(storageFailureLog(err)));
       json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     },
   );

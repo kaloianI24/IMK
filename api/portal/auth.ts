@@ -7,8 +7,6 @@
 
 import { IncomingMessage, ServerResponse } from 'node:http';
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {
   createSession,
   destroySession,
@@ -21,9 +19,15 @@ import {
   expectedOrigin,
   baseUrlConfigured,
   isProductionEnv,
+  sessionSecretProblem,
 } from './session.js';
-import { readJsonlFile, guardStorage } from '../lib/jsonl.js';
+import {
+  getPortalStore,
+  guardStore,
+  storageFailureLog,
+} from '../../site/shared/server/portal-store-access.js';
 import { portalRateLimiter } from '../lib/rate-limit.js';
+import { secretProblem } from '../../site/shared/server/secret.js';
 import {
   createMagicToken,
   verifyMagicToken,
@@ -42,9 +46,12 @@ const RATE_LIMIT_WINDOW_MS = 3600 * 1000;
 // bearer token to its log (audit M4).
 const isProd = isProductionEnv;
 
-const PORTAL_DATA_DIR = path.resolve(process.cwd(), 'site/data/portal');
-const INVITED_FILE = path.join(PORTAL_DATA_DIR, 'invited.jsonl');
-const CLIENTS_FILE = path.join(PORTAL_DATA_DIR, 'clients.jsonl');
+// THE STORE (wave 9)
+//   The invite and client collections come from the PortalStore contract
+//   (site/shared/portal-store/**), not from a JSONL file: with
+//   PORTAL_STORE=libsql the portal persists on a read-only filesystem
+//   (Vercel), and with PORTAL_STORE=file the very same records land in the
+//   very same site/data/portal/*.jsonl files as before.
 
 // NOTE: there is NO magic-token table here any more.
 //
@@ -87,27 +94,19 @@ function isValidEmail(s: string): boolean {
 }
 
 /**
- * Read a store file. A malformed line is an ERROR (audit M3): it must not
- * turn the invite list into an empty list, because "empty" reads as "this
- * client is not invited" — a silent sign-in outage for a real client.
+ * Is this address invited?
+ *
+ * The invite list comes from the store. A corrupt store is an ERROR (audit
+ * M3): it must not turn the invite list into an empty list, because "empty"
+ * reads as "this client is not invited" — a silent sign-in outage for a real
+ * client. The store raises in that case and the handler's guard answers
+ * 500 {code:'storage'}.
  */
-function readJsonl(file: string): Array<Record<string, any>> {
-  return readJsonlFile(file);
-}
-
-function appendJsonl(file: string, record: Record<string, any>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
-}
-
-function rewriteJsonl(file: string, records: Array<Record<string, any>>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const content = records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '');
-  fs.writeFileSync(file, content, 'utf8');
-}
-
-function isInvited(email: string): boolean {
-  const invited = readJsonl(INVITED_FILE);
+async function isInvited(
+  store: { list: (coll: 'invites') => Promise<Array<Record<string, any>>> },
+  email: string,
+): Promise<boolean> {
+  const invited = await store.list('invites');
   return invited.some((r) => String(r.email).toLowerCase() === email.toLowerCase());
 }
 
@@ -304,7 +303,10 @@ async function handler(
         JSON.stringify({
           ts: Date.now(),
           outcome: 'magic_link_misconfigured',
-          reason: 'PORTAL_MAGIC_LINK_SECRET missing',
+          // The precise reason (H-1): 'missing', 'placeholder' or
+          // 'too-short'. The operator needs to know whether to paste a new
+          // value or to generate one.
+          reason: `PORTAL_MAGIC_LINK_SECRET ${secretProblem(process.env.PORTAL_MAGIC_LINK_SECRET)}`,
         }),
       );
       json(res, { error: 'misconfigured', code: 'internal' }, 500);
@@ -321,7 +323,9 @@ async function handler(
         JSON.stringify({
           ts: Date.now(),
           outcome: 'session_misconfigured',
-          reason: 'PORTAL_SESSION_SECRET missing',
+          // The precise reason (H-1): 'missing', 'placeholder' or
+          // 'too-short'.
+          reason: `PORTAL_SESSION_SECRET ${sessionSecretProblem(process.env)}`,
         }),
       );
       json(res, { error: 'misconfigured', code: 'internal' }, 500);
@@ -329,7 +333,7 @@ async function handler(
     }
 
     // Generic response regardless of whether email is invited — no enumeration (P-7)
-    const allowed = isInvited(email) || isAdmin(email);
+    const allowed = (await isInvited(getPortalStore(), email)) || isAdmin(email);
 
     if (allowed) {
       const token = await createMagicToken(email, PORTAL_MAGIC_PURPOSE, process.env);
@@ -447,7 +451,9 @@ async function handler(
     // Resolve / create client record for clients
     let clientId: string | undefined;
     if (role === 'client') {
-      const invited = readJsonl(INVITED_FILE).find(
+      const store = getPortalStore();
+      const invites = await store.list('invites');
+      const invited = invites.find(
         (r) => String(r.email).toLowerCase() === email.toLowerCase(),
       );
       clientId = invited?.clientId;
@@ -465,7 +471,7 @@ async function handler(
       };
 
       const existingClient = clientId
-        ? readJsonl(CLIENTS_FILE).find((c) => c.id === clientId)
+        ? await store.get('clients', { field: 'id', value: clientId })
         : null;
 
       if (!existingClient) {
@@ -475,16 +481,16 @@ async function handler(
           // exists, so a crash in between leaves a state the next sign-in
           // repairs (invite -> clientId, client record missing) rather than
           // an orphan client record nothing points at.
-          const invites = readJsonl(INVITED_FILE);
-          const idx = invites.findIndex(
-            (r) => String(r.email).toLowerCase() === email.toLowerCase(),
-          );
-          if (idx !== -1) {
-            invites[idx].clientId = clientId;
-            rewriteJsonl(INVITED_FILE, invites);
+          //
+          // The invite has no id of its own: the e-mail address is its
+          // identity, and the invitation time narrows it to one record.
+          const inviteKey: Record<string, any> = { email: invited?.email ?? email };
+          if (typeof invited?.invitedAt === 'string') {
+            inviteKey.invitedAt = invited.invitedAt;
           }
+          await store.update('invites', inviteKey, { clientId });
         }
-        appendJsonl(CLIENTS_FILE, {
+        await store.append('clients', {
           id: clientId,
           email,
           name: profile.name,
@@ -553,17 +559,10 @@ export default function (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  return guardStorage(
+  return guardStore(
     () => handler(req, res),
     (err) => {
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          outcome: 'storage_corrupt',
-          file: err.file,
-          line: err.line,
-        }),
-      );
+      console.log(JSON.stringify(storageFailureLog(err)));
       json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     },
   );

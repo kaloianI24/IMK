@@ -1,16 +1,16 @@
 {
   "suite": "qa-wave3-independent",
-  "startedFrom": "HEAD 8303af9",
-  "passed": 20,
+  "startedFrom": "HEAD a4b10a8",
+  "passed": 21,
   "failed": 0,
-  "total": 20,
+  "total": 21,
   "results": [
     {
       "id": "A1",
       "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
       "name": "the durable counter file is really the backend in play",
       "status": "PASS",
-      "ms": 3,
+      "ms": 4,
       "detail": "counter file: rate-counters.json (227 bytes)"
     },
     {
@@ -26,7 +26,7 @@
       "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
       "name": "five valid submissions are allowed and the sixth is refused",
       "status": "PASS",
-      "ms": 42,
+      "ms": 39,
       "detail": "statuses=200,200,200,200,200,429"
     },
     {
@@ -42,7 +42,7 @@
       "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
       "name": "no client id, email or IP address reaches the counter file",
       "status": "PASS",
-      "ms": 1,
+      "ms": 0,
       "detail": "all bucket keys are sha256 digests (3 keys)"
     },
     {
@@ -50,7 +50,7 @@
       "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
       "name": "the edge KV backend stores no raw key either",
       "status": "PASS",
-      "ms": 1,
+      "ms": 0,
       "detail": "kv keys: portal:c22db0284eb367261a5817173dc93d13d025906eea0d5268877045392e124049, portal:c22db0284eb367261a5817173dc93d13d025906eea0d5268877045392e124049, portal:e43051e75103a7fdd6114f31f505d1c8d1e6151b250d102bd85a9510c43368ec, portal:e43051e75103a7fdd6114f31f505d1c8d1e6151b250d102bd85a9510c43368ec"
     },
     {
@@ -66,7 +66,7 @@
       "group": "A -- the pluggable limiter through the REAL handlers (durable file backend)",
       "name": "a durable backend that cannot write degrades at the HANDLER level",
       "status": "PASS",
-      "ms": 43,
+      "ms": 41,
       "detail": "status=200 (no 500, the request was served)"
     },
     {
@@ -75,30 +75,38 @@
       "name": "every Cloudflare portal endpoint refuses to answer 200",
       "status": "PASS",
       "ms": 7,
-      "detail": "GET /api/portal/projects -> 501 unimplemented | GET /api/portal/projects/proj_1 -> 501 unimplemented | POST /api/portal/projects -> 403 forbidden | PATCH /api/portal/projects/proj_1 -> 403 forbidden | GET /api/portal/testimonials?projectId=proj_1 -> 501 unimplemented | POST /api/portal/testimonials -> 501 unimplemented | GET /api/portal/comments?projectId=proj_1 -> 501 unimplemented | POST /api/portal/comments -> 501 unimplemented | GET /api/portal/plan-items?projectId=proj_1 -> 501 unimplemented | POST /api/portal/plan-items -> 501 unimplemented | PATCH /api/portal/plan-items/pi_1 -> 501 unimplemented | GET /api/portal/updates?projectId=proj_1 -> 501 unimplemented | POST /api/portal/updates -> 501 unimplemented | POST /api/portal/invites -> 403 forbidden | POST /api/portal/auth/request-link -> 400 validation | GET /api/portal/auth/verify?token=abc -> 500 internal"
+      "detail": "GET /api/portal/projects -> 501 unimplemented | GET /api/portal/projects/proj_1 -> 501 unimplemented | POST /api/portal/projects -> 403 forbidden | PATCH /api/portal/projects/proj_1 -> 403 forbidden | GET /api/portal/testimonials?projectId=proj_1 -> 501 unimplemented | POST /api/portal/testimonials -> 501 unimplemented | GET /api/portal/comments?projectId=proj_1 -> 501 unimplemented | POST /api/portal/comments -> 501 unimplemented | GET /api/portal/plan-items?projectId=proj_1 -> 501 unimplemented | POST /api/portal/plan-items -> 403 forbidden | PATCH /api/portal/plan-items/pi_1 -> 403 forbidden | GET /api/portal/updates?projectId=proj_1 -> 501 unimplemented | POST /api/portal/updates -> 501 unimplemented | POST /api/portal/invites -> 403 forbidden | POST /api/portal/auth/request-link -> 400 validation | GET /api/portal/auth/verify?token=abc -> 500 internal"
     },
     {
       "id": "B2",
       "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
       "name": "the Cloudflare moderation endpoint accepts a Vercel-signed link",
       "status": "PASS",
-      "ms": 4,
+      "ms": 3,
       "detail": "the Vercel-signed link was accepted and the record was approved"
+    },
+    {
+      "id": "B2b",
+      "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
+      "name": "M-1: a GET on the Cloudflare moderation link decides NOTHING",
+      "status": "PASS",
+      "ms": 5,
+      "detail": "the GET left the quote pending; the POST approved it"
     },
     {
       "id": "B3",
       "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
       "name": "the Cloudflare moderation endpoint rejects a forged link",
       "status": "PASS",
-      "ms": 1,
-      "detail": "status=400 code=signature"
+      "ms": 2,
+      "detail": "status=400 code=signature (the POST is refused too)"
     },
     {
       "id": "B4",
       "group": "B -- the Cloudflare tree, executed in a Web-standard runtime",
       "name": "a link for a superseded revision approves nothing on Cloudflare",
       "status": "PASS",
-      "ms": 2,
+      "ms": 3,
       "detail": "status=409 code=stale-revision"
     },
     {
@@ -122,7 +130,7 @@
       "group": "C -- the durable counter file under the production topology",
       "name": "CONTROL: one process writing the counter file loses nothing",
       "status": "PASS",
-      "ms": 114,
+      "ms": 107,
       "detail": "25/25 buckets kept by one writer"
     },
     {
@@ -130,7 +138,7 @@
       "group": "C -- the durable counter file under the production topology",
       "name": "two serverless functions writing the SAME counter file do not lose counts",
       "status": "PASS",
-      "ms": 716,
+      "ms": 747,
       "detail": "4 concurrent write rounds, no lost bucket"
     },
     {
@@ -154,7 +162,7 @@
       "group": "D -- the route table of the launch target (static analysis)",
       "name": "the front-end calls the auth sub-paths that the route table lacks",
       "status": "PASS",
-      "ms": 6,
+      "ms": 5,
       "detail": "front-end calls: /api/portal/auth/request-link, /api/portal/auth/verify"
     },
     {

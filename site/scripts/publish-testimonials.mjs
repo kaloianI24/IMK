@@ -1,9 +1,21 @@
 // scripts/publish-testimonials.mjs — prebuild script (T7.3)
 //
-// Runs from `site/` (npm prebuild). Reads data/moderation/reviews.jsonl,
-// finds records with state === 'approved', and writes them into
+// Runs from `site/` (npm prebuild). Reads the moderation log FROM THE PORTAL
+// STORE, finds the records with state === 'approved', and writes them into
 // src/content/testimonials/{ref}.md so Astro's content layer can render them
 // via Testimonials.astro.
+//
+// THE STORE, NOT A FILE (wave 9)
+//   The publisher used to read data/moderation/reviews.jsonl directly. It now
+//   reads the store, exactly like the handlers do:
+//
+//     PORTAL_STORE=file    -> the JSONL file (the file adapter's view of the
+//                             store). The same file, the same records.
+//     PORTAL_STORE=libsql  -> the database, over the libSQL HTTP v2 pipeline.
+//
+//   A build that cannot reach the store FAILS LOUDLY (exit 1). A build that
+//   published an empty testimonials page would look like a successful deploy
+//   while the owner's quotes quietly disappeared (spec §3.7).
 //
 // CONSENT IS ENFORCED HERE, AT PUBLISH TIME (spec RP-6) — not at approval time:
 //   - a record without consent.p1 === true is never written (RP-6.1 / E15)
@@ -18,7 +30,7 @@
 // The published `verified` flag is derived from the server-side
 // `verifiedClient` field — never from anything the submitter sent (RP-5.1).
 //
-// Safe to run when the moderation log doesn't exist yet (writes nothing).
+// Safe to run when the store is empty (writes nothing).
 // Idempotent: clears the testimonials directory and rewrites all approved records,
 // so rejected/removed reviews never linger as published content.
 //
@@ -28,8 +40,24 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 const ROOT = process.cwd();
-const REVIEWS_FILE = path.join(ROOT, 'data/moderation/reviews.jsonl');
 const TESTIMONIALS_DIR = path.join(ROOT, 'src/content/testimonials');
+
+/**
+ * The data root of the portal store.
+ *
+ * PORTAL_DATA_DIR wins (the store honours it too). Without it the publisher
+ * looks for the data directory next to the package it runs in: `data/` when
+ * it runs from site/ (the normal case), `site/data/` when it runs from the
+ * repository root.
+ */
+export function resolveDataDir(env = process.env) {
+  if (env.PORTAL_DATA_DIR) return path.resolve(env.PORTAL_DATA_DIR);
+  const candidates = [path.join(ROOT, 'data'), path.join(ROOT, 'site', 'data')];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
+}
 
 /** JSON string literals are valid YAML double-quoted scalars — safest escape. */
 function yamlString(value) {
@@ -139,7 +167,7 @@ function toMarkdown(record) {
 }
 
 /**
- * Read the moderation log.
+ * Read the moderation log FROM THE FILE (the file adapter's view).
  *
  * A malformed line is NOT skipped: it makes the whole publish refuse to run
  * (audit m2). Skipping it silently deleted the record from the published set
@@ -148,11 +176,12 @@ function toMarkdown(record) {
  * the store is small, hand-edited sometimes, and a broken line is an operator
  * problem that must be seen.
  */
-function readReviews() {
-  if (!fs.existsSync(REVIEWS_FILE)) return [];
+function readReviewsFromFile(dataDir) {
+  const file = path.join(dataDir, 'moderation', 'reviews.jsonl');
+  if (!fs.existsSync(file)) return [];
   // Strip a UTF-8 BOM — a hand-edited store (Notepad) would otherwise lose
   // its first record.
-  const content = fs.readFileSync(REVIEWS_FILE, 'utf8').replace(/^\uFEFF/, '');
+  const content = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
   const records = [];
   content.split('\n').forEach((line, index) => {
     if (line.trim() === '') return;
@@ -160,7 +189,7 @@ function readReviews() {
       records.push(JSON.parse(line));
     } catch {
       throw new Error(
-        `data/moderation/reviews.jsonl line ${index + 1} is not valid JSON — ` +
+        `${file} line ${index + 1} is not valid JSON — ` +
           'refusing to publish a partial set of testimonials. Fix or remove that line.',
       );
     }
@@ -168,8 +197,144 @@ function readReviews() {
   return records;
 }
 
-function main() {
-  const reviews = readReviews();
+/**
+ * Read the moderation log FROM THE DATABASE (the libSQL adapter's view).
+ *
+ * The wire format is the libSQL HTTP v2 pipeline API — the same one the
+ * handlers use (site/shared/portal-store/libsql-transport.ts). This script is
+ * plain JavaScript on purpose: it runs in the prebuild step, where the
+ * TypeScript store cannot be imported without a build step of its own.
+ *
+ * THE TRAP (the reason this function exists): a failed statement comes back
+ * as { "type": "error" } INSIDE results[] while the HTTP status is still
+ * 200. A reader that only looks at the status code would treat a broken
+ * query as an empty store and publish an empty testimonials page. So the
+ * results are inspected, and an error is an error.
+ *
+ * The token is never echoed: not in the error, not in the log.
+ */
+async function readReviewsFromDatabase(env) {
+  const url = String(env.LIBSQL_URL || '').trim();
+  const token = String(env.LIBSQL_TOKEN || '').trim();
+  if (!url) {
+    throw new Error(
+      'PORTAL_STORE=libsql requires LIBSQL_URL (the libSQL/Turso database URL) — ' +
+        'refusing to publish a partial set of testimonials.',
+    );
+  }
+  if (!token) {
+    throw new Error(
+      'PORTAL_STORE=libsql requires LIBSQL_TOKEN (the database auth token) — ' +
+        'refusing to publish a partial set of testimonials.',
+    );
+  }
+  const base = url.replace(/\/+$/, '');
+  const endpoint = /\/v2\/pipeline$/.test(base) ? base : `${base}/v2/pipeline`;
+
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        baton: null,
+        requests: [
+          {
+            type: 'execute',
+            stmt: { sql: 'SELECT data FROM moderation_reviews ORDER BY seq ASC', args: [] },
+          },
+          { type: 'close' },
+        ],
+      }),
+    });
+  } catch (err) {
+    throw new Error(
+      `the portal store is unreachable (${err && err.message ? err.message : String(err)}) — ` +
+        'refusing to publish a partial set of testimonials.',
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `the portal store answered HTTP ${response.status} — ` +
+        'refusing to publish a partial set of testimonials.',
+    );
+  }
+
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error(
+      'the portal store did not answer with JSON — ' +
+        'refusing to publish a partial set of testimonials.',
+    );
+  }
+
+  const results = Array.isArray(body && body.results) ? body.results : null;
+  if (!results) {
+    throw new Error(
+      'the portal store answer had no results array — ' +
+        'refusing to publish a partial set of testimonials.',
+    );
+  }
+
+  const first = results[0];
+  if (!first || first.type === 'error') {
+    const message = String(
+      (first && first.error && first.error.message) || 'unknown database error',
+    );
+    // A database whose schema was never created holds no quotes: that is an
+    // empty store, not an outage. Anything else is a failure.
+    if (/no such table/i.test(message)) return [];
+    throw new Error(
+      `the portal store refused the query (${message}) — ` +
+        'refusing to publish a partial set of testimonials.',
+    );
+  }
+
+  const rows = (first.response && first.response.result && first.response.result.rows) || [];
+  return rows.map((row) => {
+    const raw = row && row[0];
+    const text = raw && typeof raw === 'object' ? raw.value : raw;
+    if (typeof text !== 'string') {
+      throw new Error(
+        'the portal store holds a record that is not JSON — ' +
+          'refusing to publish a partial set of testimonials.',
+      );
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('not a JSON object');
+      }
+      return parsed;
+    } catch {
+      throw new Error(
+        'the portal store holds a record that is not JSON — ' +
+          'refusing to publish a partial set of testimonials.',
+      );
+    }
+  });
+}
+
+/**
+ * The moderation log, from whichever backend this deployment uses.
+ *
+ * This is the publisher's whole view of the store. It throws when the store
+ * cannot be reached: the build must fail loudly rather than publish an
+ * empty testimonials page.
+ */
+export async function readReviewsFromStore(env = process.env) {
+  const mode = String(env.PORTAL_STORE || 'file').trim();
+  if (mode === 'libsql') {
+    return readReviewsFromDatabase(env);
+  }
+  return readReviewsFromFile(resolveDataDir(env));
+}
+
+async function main() {
+  const reviews = await readReviewsFromStore();
   const current = latestByRef(reviews);
 
   let revoked = 0;
@@ -229,7 +394,7 @@ function main() {
 }
 
 try {
-  main();
+  await main();
 } catch (err) {
   // A loud, clean failure: the build must not continue with a partial set of
   // testimonials.

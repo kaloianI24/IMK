@@ -64,7 +64,9 @@ const SANDBOX = path.join(
   `qa-wave4-${new Date().toISOString().replace(/[:.]/g, '-')}`,
 );
 
-const SECRET = 'qa-wave4-form-webhook-secret';
+// H-1 (wave-8A): a secret shorter than 32 characters is refused in
+// production, so the fixture has to be a usable one (32+ characters).
+const SECRET = 'qa-wave4-form-webhook-secret-0123456789';
 const ADMIN_EMAIL = 'owner@imk.test';
 const IP_A = '203.0.113.21';
 const IP_B = '203.0.113.22';
@@ -130,8 +132,13 @@ process.env.ADMIN_EMAILS = ADMIN_EMAIL;
 // signed token (wave 6, F-2). In production BOTH secrets are mandatory: a
 // missing one is a misconfiguration and the endpoint answers 500. These are
 // QA-local test secrets, not credentials.
-process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-wave4-magic-link-secret';
-process.env.PORTAL_SESSION_SECRET = 'qa-wave4-session-secret';
+//
+// H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE -- the
+// published placeholder, or shorter than MIN_SECRET_LENGTH (32) -- is refused
+// exactly like a missing one. The fixtures below are therefore 32+ characters
+// long.
+process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-wave4-magic-link-secret-0123456789';
+process.env.PORTAL_SESSION_SECRET = 'qa-wave4-session-secret-0123456789';
 
 const emails = [];
 const REAL_FETCH = globalThis.fetch;

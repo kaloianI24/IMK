@@ -100,6 +100,10 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
 
       {/* The live region every action reports into */}
       <p id="admin-status" class="muted" role="status" aria-live="polite" style="min-height:1.5em;"></p>
+
+      {/* The role announcement. Visually hidden, so it costs no space and
+          moves nothing on the page. */}
+      <p id="admin-role-status" class="sr-only" role="status" aria-live="polite"></p>
     </div>
   </section>
 
@@ -137,6 +141,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
     const reviewsEl = document.getElementById('admin-reviews-list');
     const recentEl = document.getElementById('admin-recent-list');
     const statusEl = document.getElementById('admin-status');
+    const roleStatusEl = document.getElementById('admin-role-status');
     const reviewsHeading = document.getElementById('admin-reviews-heading');
 
     function show(node: HTMLElement | null, visible: boolean): void {
@@ -373,11 +378,22 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
       if (session.status === 401) {
         show(loadingEl, false);
         show(notAuthEl, true);
+        // The owner state is "not the owner" — say it where a screen reader
+        // will hear it.
+        if (roleStatusEl) roleStatusEl.textContent = 'This session is not an owner session.';
         return;
       }
       if (!session.ok) {
         show(loadingEl, false);
-        setError('The inbox could not be opened. Try again in a moment.');
+        // The API answers 500 {code:'internal'} for exactly one reason here:
+        // the owner allow-list (ADMIN_EMAILS) is not configured on this
+        // target. That is a different answer from "the inbox could not be
+        // loaded", and the owner needs to know which one it is.
+        setError(
+          session.status === 500
+            ? 'Owner access is not configured on this target, so the inbox cannot be opened: the owner allow-list (ADMIN_EMAILS) is not set.'
+            : 'The inbox could not be opened. Try again in a moment.',
+        );
         return;
       }
 
@@ -421,6 +437,16 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
       renderCounts(inbox);
       renderReviews(inbox);
       renderRecent(inbox);
+      // The owner state was confirmed by the server (GET /api/admin/session
+      // answered 200 for an allow-listed address). Announce it, so the change
+      // from "loading" to "the inbox" is heard and not only seen.
+      if (roleStatusEl) {
+        roleStatusEl.textContent = `Owner inbox opened. ${
+          inbox.counts.pendingReviews === 1
+            ? 'One quote is waiting for a decision.'
+            : `${inbox.counts.pendingReviews} quotes are waiting for a decision.`
+        }`;
+      }
     }
 
     reviewsEl?.addEventListener('click', (event) => {

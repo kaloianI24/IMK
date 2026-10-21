@@ -1,6 +1,6 @@
 {
   "suite": "qa-admin-independent",
-  "at": "2026-10-21T19:01:52.470Z",
+  "at": "2026-10-21T22:20:29.060Z",
   "checks": 16,
   "passed": 16,
   "failed": 0,
@@ -10,7 +10,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "CONTROL: the owner signs in through the real flow and is the owner",
       "status": "PASS",
-      "ms": 3,
+      "ms": 4,
       "detail": "owner owner@imk.test -> 200 {\"ok\":true,\"role\":\"admin\",\"email\":\"owner@imk.test\"}"
     },
     {
@@ -18,7 +18,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "no cookie at all -> 401 {code:unauthorized}",
       "status": "PASS",
-      "ms": 1,
+      "ms": 0,
       "detail": "401 {\"error\":\"unauthorized\",\"code\":\"unauthorized\"}"
     },
     {
@@ -34,7 +34,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "a forged admin cookie -> 401",
       "status": "PASS",
-      "ms": 0,
+      "ms": 1,
       "detail": "401 {\"error\":\"unauthorized\",\"code\":\"unauthorized\"}"
     },
     {
@@ -50,7 +50,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "an admin-role token for an email that is NOT on the allow-list -> 401",
       "status": "PASS",
-      "ms": 2,
+      "ms": 1,
       "detail": "401 {\"error\":\"unauthorized\",\"code\":\"unauthorized\"}"
     },
     {
@@ -66,7 +66,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "an unset ADMIN_EMAILS is a MISCONFIGURATION -> 500, not \"everybody is the owner\"",
       "status": "PASS",
-      "ms": 44,
+      "ms": 42,
       "detail": "500 {\"error\":\"misconfigured\",\"code\":\"internal\"}"
     },
     {
@@ -74,7 +74,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "GET /api/admin/reviews: a non-owner is 401, the owner sees the queue",
       "status": "PASS",
-      "ms": 7,
+      "ms": 5,
       "detail": "pending=1, openNotes=null"
     },
     {
@@ -82,15 +82,15 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "the approve link the inbox mints is HMAC-valid and /api/moderate/review accepts it",
       "status": "PASS",
-      "ms": 8,
-      "detail": "sig verified independently; the quote is now approved"
+      "ms": 13,
+      "detail": "sig verified independently; the GET approved nothing, the POST made the quote approved"
     },
     {
       "id": "E11",
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "the Cloudflare twin answers the SAME gate codes as the Vercel tree",
       "status": "PASS",
-      "ms": 28,
+      "ms": 25,
       "detail": "owner 200, client 401, no cookie 401 - same as the Vercel tree"
     },
     {
@@ -98,7 +98,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "a client session cannot use the owner-only client route -> 403 {code:forbidden}",
       "status": "PASS",
-      "ms": 3,
+      "ms": 4,
       "detail": "403 {\"error\":\"forbidden\",\"code\":\"forbidden\"}"
     },
     {
@@ -106,7 +106,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "a STALE admin cookie does not shadow a valid client cookie",
       "status": "PASS",
-      "ms": 2,
+      "ms": 3,
       "detail": "the stale admin cookie was skipped, the client session won"
     },
     {
@@ -114,7 +114,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "the Cloudflare queue twin answers like the Vercel tree (edge runtime and with a filesystem)",
       "status": "PASS",
-      "ms": 137,
+      "ms": 133,
       "detail": "edge runtime 501 {code:unimplemented}; with a filesystem the same queue as the Vercel tree"
     },
     {
@@ -122,7 +122,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "MUTATION PROBE: with the allow-list check removed, E6 goes RED",
       "status": "PASS",
-      "ms": 533,
+      "ms": 527,
       "detail": "mutated copy: E1=PASS (the owner still gets in), E6=FAIL (the allow-list no longer decides)"
     },
     {

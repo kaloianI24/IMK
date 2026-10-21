@@ -15,25 +15,34 @@
 // Consent (three default-off permissions) is captured with the quote and is
 // enforced AGAIN at publish time by site/scripts/publish-testimonials.mjs.
 //
-// Storage: site/data/moderation/reviews.jsonl — the same append-only moderation
-// log the owner works with, so the existing approve/reject links keep working.
-// A change of mind is appended as a new line with a stable ref: later lines
-// win, which is the rule the publish script and the moderation endpoint use.
+// Storage: the 'reviews' collection of the portal store — the same
+// append-only moderation log the owner works with, so the existing
+// approve/reject links keep working. A change of mind is appended as a new
+// record with a stable ref: the newest record wins, which is the rule the
+// publish script and the moderation endpoint use.
 
 import { IncomingMessage, ServerResponse } from 'node:http';
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { resolveSession, expectedOrigin, baseUrlConfigured } from './session.js';
+import { resolveAccess, expectedOrigin, baseUrlConfigured } from './session.js';
 import { notifyReviewSubmitted } from '../lib/notifications.js';
-import { readJsonlFile, guardStorage } from '../lib/jsonl.js';
+import {
+  getPortalStore,
+  guardStore,
+  storageFailureLog,
+} from '../../site/shared/server/portal-store-access.js';
 import { portalRateLimiter } from '../lib/rate-limit.js';
 
-const PORTAL_DATA_DIR = path.resolve(process.cwd(), 'site/data/portal');
-const PROJECTS_FILE = path.join(PORTAL_DATA_DIR, 'projects.jsonl');
-const CLIENTS_FILE = path.join(PORTAL_DATA_DIR, 'clients.jsonl');
-const REVIEWS_DIR = path.resolve(process.cwd(), 'site/data/moderation');
-const REVIEWS_FILE = path.join(REVIEWS_DIR, 'reviews.jsonl');
+// THE STORE (wave 9)
+//   The collections come from the PortalStore contract
+//   (site/shared/portal-store/**), not from a JSONL file: with
+//   PORTAL_STORE=libsql the portal persists on a read-only filesystem
+//   (Vercel), and with PORTAL_STORE=file the very same records land in the
+//   very same site/data/portal/*.jsonl files as before.
+//
+//   The 'reviews' collection is a REVISION LOG: a change of mind is a new
+//   record with the same ref, and the newest record wins. The store owns
+//   that rule (latest() / append()), so the handler never has to read the
+//   whole log to find the current state.
 
 const MAX_QUOTE = 1000;
 const MAX_DISPLAY_NAME = 80;
@@ -108,21 +117,11 @@ function json(
  * Read a store file. A malformed line is an ERROR (audit M3): it must not
  * turn the whole collection into an empty list, because "empty" reads as
  * "no project", "no quote", "not allowed" — a silent outage.
+ *
+ * The store itself enforces that rule (a corrupt store raises, it never
+ * returns an empty list), so the handler only has to let the error through
+ * to guardStore(), which answers 500 {code:'storage'}.
  */
-function readJsonl(file: string): Array<Record<string, any>> {
-  return readJsonlFile(file);
-}
-
-function appendJsonl(file: string, record: Record<string, any>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
-}
-
-function rewriteJsonl(file: string, records: Array<Record<string, any>>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const content = records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '');
-  fs.writeFileSync(file, content, 'utf8');
-}
 
 /**
  * The payload is a quote, an action and a project id — nothing larger. The
@@ -235,18 +234,15 @@ function rateKey(action: Action, clientKey: string): string {
  * revision counter (audit m7). An owner session (no clientId) sees the
  * project's newest record regardless of who wrote it.
  */
-function latestRecordForProject(
+async function latestRecordForProject(
+  store: { latest: (coll: 'reviews', where: Record<string, any>) => Promise<Record<string, any> | null> },
   projectId: string,
   clientId?: string,
-): TestimonialRecord | null {
-  const records = readJsonl(REVIEWS_FILE).filter(
-    (r) =>
-      r.type === 'review' &&
-      r.projectId === projectId &&
-      (clientId === undefined || r.clientId === clientId),
-  );
-  if (!records.length) return null;
-  return records[records.length - 1] as TestimonialRecord;
+): Promise<TestimonialRecord | null> {
+  const where: Record<string, any> = { type: 'review', projectId };
+  if (clientId !== undefined) where.clientId = clientId;
+  const record = await store.latest('reviews', where);
+  return (record as TestimonialRecord) ?? null;
 }
 
 /**
@@ -288,14 +284,18 @@ function clientView(
   };
 }
 
-function findProject(projectId: string): Record<string, any> | null {
-  const projects = readJsonl(PROJECTS_FILE);
-  return projects.find((p) => p.id === projectId) || null;
+function findProject(
+  store: { get: (coll: 'projects', key: { field: string; value: string }) => Promise<Record<string, any> | null> },
+  projectId: string,
+): Promise<Record<string, any> | null> {
+  return store.get('projects', { field: 'id', value: projectId });
 }
 
-function clientRecord(clientId: string): Record<string, any> | null {
-  const clients = readJsonl(CLIENTS_FILE);
-  return clients.find((c) => c.id === clientId) || null;
+function clientRecord(
+  store: { get: (coll: 'clients', key: { field: string; value: string }) => Promise<Record<string, any> | null> },
+  clientId: string,
+): Promise<Record<string, any> | null> {
+  return store.get('clients', { field: 'id', value: clientId });
 }
 
 /** A client may only be asked about a finished project (or one re-requested). */
@@ -303,18 +303,19 @@ function isEligible(project: Record<string, any>): boolean {
   return project.status === 'completed' || project.testimonialStatus === 'requested';
 }
 
-function setProjectTestimonialStatus(
+async function setProjectTestimonialStatus(
+  store: {
+    update: (coll: 'projects', key: Record<string, any>, patch: Record<string, any>) => Promise<number>;
+  },
   project: Record<string, any>,
   status: 'requested' | 'snoozed' | 'declined',
   actor: string,
-): void {
-  const projects = readJsonl(PROJECTS_FILE);
-  const idx = projects.findIndex((p) => p.id === project.id);
-  if (idx === -1) return;
-  projects[idx].testimonialStatus = status;
-  projects[idx].updatedAt = new Date().toISOString();
-  projects[idx].updatedBy = actor;
-  rewriteJsonl(PROJECTS_FILE, projects);
+): Promise<void> {
+  await store.update('projects', { id: project.id }, {
+    testimonialStatus: status,
+    updatedAt: new Date().toISOString(),
+    updatedBy: actor,
+  });
 }
 
 async function handler(
@@ -330,11 +331,20 @@ async function handler(
     return;
   }
 
-  const session = resolveSession(req, 'client');
+  // The CLIENT cookie first, the owner second (M-5, Architect §4.3): a live
+  // admin cookie must never widen a client's read scope. The owner fallback
+  // is the two-part gate, so an address that was taken off ADMIN_EMAILS is
+  // not the owner here either (M-4).
+  const store = getPortalStore();
+  const access = resolveAccess(req);
+  const session = access.session;
   if (!session) {
     json(res, { error: 'authentication required', code: 'unauthorized' }, 401);
     return;
   }
+  // The client session — null when this request is the owner. Every tenant
+  // check below is made against it.
+  const clientSession = access.client;
 
   // A client session always carries the clientId that names the tenant it may
   // touch. Without it, `project.clientId !== session.clientId` passes against
@@ -342,7 +352,7 @@ async function handler(
   // cross-tenant gate (review finding B3). Unreachable with today's sign-in
   // flow (the verify function always links a clientId); refused explicitly so
   // it stays unreachable by construction.
-  if (session.role === 'client' && !session.clientId) {
+  if (clientSession && !clientSession.clientId) {
     json(res, { error: 'session has no client identity', code: 'forbidden' }, 403);
     return;
   }
@@ -355,21 +365,22 @@ async function handler(
       return;
     }
 
-    const project = findProject(projectId);
+    const project = await findProject(store, projectId);
     // A project that does not exist and a project that belongs to somebody else
     // look identical from the outside — no project-id probing (RP-3.6).
     if (!project) {
       json(res, { error: 'project not found', code: 'not-found' }, 404);
       return;
     }
-    if (session.role === 'client' && project.clientId !== session.clientId) {
+    if (clientSession && project.clientId !== clientSession.clientId) {
       json(res, { error: 'project not found', code: 'not-found' }, 404);
       return;
     }
 
-    const record = latestRecordForProject(
+    const record = await latestRecordForProject(
+      store,
       projectId,
-      session.role === 'client' ? session.clientId : undefined,
+      clientSession ? clientSession.clientId : undefined,
     );
     if (!record) {
       json(res, { ok: true, testimonial: null }, 200);
@@ -386,7 +397,7 @@ async function handler(
       return;
     }
 
-    const client = session.clientId ? clientRecord(session.clientId) : null;
+    const client = clientSession?.clientId ? await clientRecord(store, clientSession.clientId) : null;
     json(res, { ok: true, testimonial: clientView(record, client) }, 200);
     return;
   }
@@ -394,7 +405,7 @@ async function handler(
   // --------------------------------------------------------------- POST ----
   if (method === 'POST') {
     // Only a client writes a testimonial — the owner moderates, never submits.
-    if (session.role !== 'client') {
+    if (!clientSession) {
       json(res, { error: 'forbidden', code: 'forbidden' }, 403);
       return;
     }
@@ -453,12 +464,12 @@ async function handler(
       return;
     }
 
-    const project = findProject(projectId);
+    const project = await findProject(store, projectId);
     if (!project) {
       json(res, { error: 'project not found', code: 'not-found' }, 404);
       return;
     }
-    if (session.role === 'client' && project.clientId !== session.clientId) {
+    if (clientSession && project.clientId !== clientSession.clientId) {
       json(res, { error: 'project not found', code: 'not-found' }, 404);
       return;
     }
@@ -468,9 +479,10 @@ async function handler(
       return;
     }
 
-    const existing = latestRecordForProject(
+    const existing = await latestRecordForProject(
+      store,
       projectId,
-      session.role === 'client' ? session.clientId : undefined,
+      clientSession ? clientSession.clientId : undefined,
     );
 
     // Declining is final (RP-3.5): the client is not asked again unless the
@@ -483,7 +495,7 @@ async function handler(
     }
 
     const now = new Date().toISOString();
-    const client = session.clientId ? clientRecord(session.clientId) : null;
+    const client = clientSession?.clientId ? await clientRecord(store, clientSession.clientId) : null;
     // The published name comes from the CLIENT RECORD ONLY (review finding
     // B6). With naming consent but no profile name the stored name stays
     // blank: the email local-part is not a name the client consented to
@@ -609,8 +621,12 @@ async function handler(
       record.withdrawnAt = now;
     }
 
-    appendJsonl(REVIEWS_FILE, record);
-    setProjectTestimonialStatus(
+    // The revision log grows: a new record with the same ref, and the newest
+    // record wins (the publisher and the moderation endpoint use the same
+    // rule).
+    await store.append('reviews', record);
+    await setProjectTestimonialStatus(
+      store,
       project,
       action === 'submit' ? 'requested' : action === 'snooze' ? 'snoozed' : 'declined',
       session.email,
@@ -670,17 +686,10 @@ export default function (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  return guardStorage(
+  return guardStore(
     () => handler(req, res),
     (err) => {
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          outcome: 'storage_corrupt',
-          file: err.file,
-          line: err.line,
-        }),
-      );
+      console.log(JSON.stringify(storageFailureLog(err)));
       json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     },
   );

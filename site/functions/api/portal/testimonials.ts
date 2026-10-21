@@ -13,7 +13,7 @@
 // portal store onto a real database (CF KV/D1) is a separate, sized piece of
 // work — spec/08 §6 / Phase 3.2.
 
-import { resolveSession, expectedOrigin, baseUrlConfigured } from './session.js';
+import { resolveAccess, expectedOrigin, baseUrlConfigured } from './session.js';
 import { notifyReviewSubmitted } from '../lib/notifications.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 import { createPortalRateLimiter } from '../lib/rate-limit.js';
@@ -308,16 +308,25 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
 
   // The signing secret comes from the request's env — a Worker has no
   // process.env (audit wave-6, F-2: one shared, stateless session module).
-  const session = resolveSession(request.headers, 'client', env);
+  //
+  // The CLIENT cookie first, the owner second (M-5, Architect §4.3): a live
+  // admin cookie must never widen a client's read scope. The owner fallback
+  // is the two-part gate, so an address that was taken off ADMIN_EMAILS is
+  // not the owner here either (M-4).
+  const access = resolveAccess(request.headers, env);
+  const session = access.session;
   if (!session) {
     return json({ error: 'authentication required', code: 'unauthorized' }, 401);
   }
+  // The client session — null when this request is the owner. Every tenant
+  // check below is made against it.
+  const clientSession = access.client;
 
   // A client session always carries the clientId that names the tenant it may
   // touch. Without it, `project.clientId !== session.clientId` passes against
   // a project that itself has no clientId — the one hole left in the
   // cross-tenant gate (review finding B3). Mirrors the Vercel twin.
-  if (session.role === 'client' && !session.clientId) {
+  if (clientSession && !clientSession.clientId) {
     return json({ error: 'session has no client identity', code: 'forbidden' }, 403);
   }
 
@@ -331,13 +340,13 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
   if (!project) {
     return json({ error: 'project not found', code: 'not-found' }, 404);
   }
-  if (session.role === 'client' && project.clientId !== session.clientId) {
+  if (clientSession && project.clientId !== clientSession.clientId) {
     return json({ error: 'project not found', code: 'not-found' }, 404);
   }
 
   const record = latestRecordForProject(
     projectId,
-    session.role === 'client' ? session.clientId : undefined,
+    clientSession ? clientSession.clientId : undefined,
   );
   if (!record) {
     return json({ ok: true, testimonial: null }, 200);
@@ -350,7 +359,7 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
     return json({ ok: true, testimonial: null }, 200);
   }
 
-  const client = session.clientId ? clientRecord(session.clientId) : null;
+  const client = clientSession?.clientId ? clientRecord(clientSession.clientId) : null;
   return json({ ok: true, testimonial: clientView(record, client) }, 200);
 };
 
@@ -363,18 +372,22 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
 
   // The signing secret comes from the request's env — a Worker has no
   // process.env (audit wave-6, F-2: one shared, stateless session module).
-  const session = resolveSession(request.headers, 'client', env);
+  const access = resolveAccess(request.headers, env);
+  const session = access.session;
   if (!session) {
     return json({ error: 'authentication required', code: 'unauthorized' }, 401);
   }
+  // The client session — null when this request is the owner.
+  const clientSession = access.client;
 
   // See handleGet: a client session without a clientId is refused outright
   // (review finding B3).
-  if (session.role === 'client' && !session.clientId) {
+  if (clientSession && !clientSession.clientId) {
     return json({ error: 'session has no client identity', code: 'forbidden' }, 403);
   }
 
-  if (session.role !== 'client') {
+  // Only a client writes a testimonial — the owner moderates, never submits.
+  if (!clientSession) {
     return json({ error: 'forbidden', code: 'forbidden' }, 403);
   }
 
@@ -429,7 +442,7 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
   if (!project) {
     return json({ error: 'project not found', code: 'not-found' }, 404);
   }
-  if (session.role === 'client' && project.clientId !== session.clientId) {
+  if (clientSession && project.clientId !== clientSession.clientId) {
     return json({ error: 'project not found', code: 'not-found' }, 404);
   }
 
@@ -439,7 +452,7 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
 
   const existing = latestRecordForProject(
     projectId,
-    session.role === 'client' ? session.clientId : undefined,
+    clientSession ? clientSession.clientId : undefined,
   );
 
   // Declining is final (RP-3.5): the client is not asked again unless the
@@ -449,7 +462,7 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
   }
 
   const now = new Date().toISOString();
-  const client = session.clientId ? clientRecord(session.clientId) : null;
+  const client = clientSession?.clientId ? clientRecord(clientSession.clientId) : null;
   // The published name comes from the CLIENT RECORD ONLY (review finding
   // B6). With naming consent but no profile name the stored name stays
   // blank: the email local-part is not a name the client consented to

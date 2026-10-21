@@ -60,7 +60,9 @@ const SANDBOX = path.join(
   `qa-wave2-${new Date().toISOString().replace(/[:.]/g, '-')}`,
 );
 
-const SECRET = 'qa-wave2-form-webhook-secret';
+// H-1 (wave-8A): a secret shorter than 32 characters is refused in
+// production, so the fixture has to be a usable one (32+ characters).
+const SECRET = 'qa-wave2-form-webhook-secret-0123456789';
 const ADMIN_EMAIL = 'owner@imk.test';
 const CLIENT_EMAIL = 'wanda@client.test';
 const RL_EMAIL = 'ratelimit@client.test';
@@ -130,8 +132,14 @@ process.env.ADMIN_EMAILS = ADMIN_EMAIL;
 // signed token (wave 6, F-2). In production BOTH secrets are mandatory: a
 // missing one is a misconfiguration and the endpoint answers 500. These are
 // QA-local test secrets, not credentials.
-process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-wave2-magic-link-secret';
-process.env.PORTAL_SESSION_SECRET = 'qa-wave2-session-secret';
+//
+// H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE -- the
+// published placeholder, or shorter than MIN_SECRET_LENGTH (32) -- is refused
+// exactly like a missing one. The fixtures below are therefore 32+ characters
+// long: a short fixture would turn every request into a 500 and the suite
+// would prove nothing about the behaviour it claims to cover.
+process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-wave2-magic-link-secret-0123456789';
+process.env.PORTAL_SESSION_SECRET = 'qa-wave2-session-secret-0123456789';
 
 const emails = [];
 // Keep a handle on the real fetch: the harness's OWN requests to the sandbox
@@ -258,12 +266,21 @@ async function req(method, pathname, opts = {}) {
   const headers = { ...(opts.headers || {}) };
   if (opts.cookie) headers.Cookie = opts.cookie;
   if (opts.origin !== undefined) headers.Origin = opts.origin;
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  let body;
+  if (opts.body !== undefined) {
+    if (opts.form) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      body = new URLSearchParams(opts.body).toString();
+    } else {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(opts.body);
+    }
+  }
 
   const res = await fetch(`${ORIGIN}${pathname}`, {
     method,
     headers,
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+    body,
     redirect: 'manual',
   });
   const text = await res.text();
@@ -412,10 +429,27 @@ async function submitQuote(
   });
 }
 
-/** Click a one-click moderation link exactly as the owner would. */
+/** Open a one-click moderation link -- what a mail scanner does by itself. */
 async function clickLink(url) {
   const parsed = new URL(url);
   return req('GET', `${parsed.pathname}${parsed.search}`);
+}
+
+/**
+ * DECIDE with a one-click moderation link.
+ *
+ * M-1 (wave-8A): a GET is not a decision -- it only shows the confirmation
+ * page, because every mail scanner prefetches the link in the owner's mail.
+ * The decision is the POST that the page's form issues, and the signed
+ * parameters travel in the form body.
+ */
+async function decideLink(url) {
+  const parsed = new URL(url);
+  const body = {};
+  for (const name of ['ref', 'decision', 'revision', 'ts', 'sig']) {
+    body[name] = parsed.searchParams.get(name) || '';
+  }
+  return req('POST', '/api/moderate/review', { body, form: true, origin: ORIGIN });
 }
 
 let owner = null;
@@ -461,7 +495,8 @@ async function main() {
   assertEqual(latestForRef(ref).revision, 2, 'the edited quote is revision 2');
 
   await t('M1', "the owner's link for revision 1 cannot approve revision 2", async () => {
-    const r = await clickLink(linkRev1);
+    // The DECISION path (M-1, wave-8A): the POST the confirmation form makes.
+    const r = await decideLink(linkRev1);
     assertEqual(r.status, 409, `a stale link must answer 409 (got ${r.status})`);
     assertEqual(r.json.code, 'stale-revision', 'the error code must be stale-revision');
     return `409 ${r.json.code}`;
@@ -486,7 +521,7 @@ async function main() {
 
   await t('M4', 'after the 409 the owner gets a fresh link for the CURRENT revision', async () => {
     const before = emails.length;
-    const r = await clickLink(linkRev1);
+    const r = await decideLink(linkRev1);
     assertEqual(r.status, 409, 'still a stale link');
     const sent = emails.slice(before);
     assert(
@@ -503,11 +538,32 @@ async function main() {
     return 'fresh link names revision 2';
   });
 
+  await t('M4b', 'M-1: a GET on the fresh link shows the confirmation page and approves NOTHING', async () => {
+    // What every mail scanner does by itself: fetch the link. It must not
+    // decide -- before wave-8A that prefetch WAS the approval.
+    const fresh = emails.filter((e) => /Approve:/.test(e.text)).pop();
+    const freshUrl = approveLink(fresh);
+    const page = await clickLink(freshUrl);
+    assertEqual(page.status, 200, `the GET must serve the confirmation page (got ${page.status})`);
+    assert(
+      /<form[^>]*method="POST"/i.test(page.text),
+      'the confirmation page must offer a POST form (a GET must never decide)',
+    );
+    const newest = latestForRef(ref);
+    assertEqual(newest.state, 'pending', 'a GET must not approve anything');
+    assertEqual(
+      allForRef(ref).filter((l) => l.state === 'approved').length,
+      0,
+      'no line may be approved by a GET',
+    );
+    return 'the page was served, the quote stayed pending';
+  });
+
   await t('M5', 'the fresh (current-revision) link approves exactly revision 2', async () => {
     const before = emails.length;
-    await clickLink(linkRev1); // provoke the refresh mail again
+    await decideLink(linkRev1); // provoke the refresh mail again
     const fresh = emails.slice(before).filter((e) => /Approve:/.test(e.text)).pop();
-    const r = await clickLink(approveLink(fresh));
+    const r = await decideLink(approveLink(fresh));
     assertEqual(r.status, 200, `the current link must approve (got ${r.status})`);
     assertEqual(r.json.state, 'approved', 'the state must be approved');
     const newest = latestForRef(ref);

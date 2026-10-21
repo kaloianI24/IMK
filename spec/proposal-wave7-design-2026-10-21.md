@@ -22,6 +22,19 @@ labelled either *executed* (I ran it) or *unverified*.
 
 The three are independent. A can ship without B. C is one endpoint and can ship before either.
 
+**Status as of 2026-10-21 (read from the tree, not from a report):**
+
+- **A is DESIGNED, not built.** `api/` still holds **20** `.ts` files = 20 Vercel functions, above
+  the Hobby cap of 12. Three of them have no default export and are dead URLs
+  (`api/lib/jsonl.ts`, `api/lib/notifications.ts`, `api/lib/rate-limit.ts`).
+- **B is BUILT** — the adapter, the DDL, the transport, the durable counter and the importer are in
+  `site/shared/portal-store/`, and the contract runs against both stores offline (§3.2 as amended,
+  §3.6, §3.9). **What is not built: no handler calls it** (§3.9).
+- **C is HALF built** — the endpoint exists on Vercel (`api/portal/session.ts`), the UI keys off it
+  (`site/src/pages/portal.astro`), and the two-part gate is **not** in the portal handlers.
+  The full contract, with the gaps named, is in
+  [`proposal-wave8-contract-2026-10-21.md`](proposal-wave8-contract-2026-10-21.md).
+
 ---
 
 ## 1. Facts established from the tree (read, not assumed)
@@ -516,7 +529,11 @@ Budget after both: **7 functions**, 5 slots still free.
 
 ### 3.1 The transport — decision and reasons
 
-**Recommendation: the libSQL HTTP v2 pipeline API over `global fetch`. Zero new dependencies.**
+**Decision, and this is what shipped (2026-10-21): the libSQL HTTP v2 pipeline API over
+`global fetch`. Zero new dependencies.**
+Implementation: `site/shared/portal-store/libsql-transport.ts` — `POST {base}/v2/pipeline`
+(`:178`), `Authorization: Bearer {token}` (`:218`), the `results[]` error trap handled
+(`:249-257`), the token never echoed (`:37-38`).
 
 Protocol (cited):
 `POST {LIBSQL_URL}/v2/pipeline`, `Authorization: Bearer {LIBSQL_TOKEN}`,
@@ -561,7 +578,12 @@ the status code**. That is a real trap and the mock server in §3.6 must reprodu
 replica, and no local file. Neither is needed — the portal is a handful of clients, and the whole
 point of T4 is to stop writing to a read-only filesystem.
 
-### 3.2 The DDL
+### 3.2 The DDL — AS BUILT (2026-10-21)
+
+**Status: implemented, and the draft above this line was overruled in the Backend's favour.**
+The DDL that ships is the one in `site/shared/portal-store/libsql-schema.ts:37-122`
+(`SCHEMA_STATEMENTS`, applied by `ensureSchema()` at `:131-140`). It is reproduced verbatim below
+so the spec and the code cannot drift.
 
 Nine tables: the eight `Collection` names in `site/shared/portal-store/types.ts:25-33` plus the
 rate counter. **Every record is stored whole in a `data` JSON column**, so the round trip is exact
@@ -572,79 +594,90 @@ drift, and they exist only to make the hot lookups indexable.
 ```sql
 -- The sequence column reproduces "the order of the lines in the JSONL file".
 -- ORDER BY seq IS the file order, which is what the contract test asserts.
+-- Every statement is IF NOT EXISTS: the DDL is idempotent and is applied
+-- once per store instance, in ONE pipeline round trip
+-- (libsql-schema.ts:131-140).
 
-CREATE TABLE portal_projects (
+CREATE TABLE IF NOT EXISTS portal_projects (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  id         TEXT NOT NULL UNIQUE,
+  id         TEXT,
   client_id  TEXT,
   status     TEXT,
   data       TEXT NOT NULL
 );
-CREATE INDEX portal_projects_client ON portal_projects(client_id);
+CREATE INDEX IF NOT EXISTS portal_projects_id     ON portal_projects(id);
+CREATE INDEX IF NOT EXISTS portal_projects_client ON portal_projects(client_id);
 
-CREATE TABLE portal_clients (
+CREATE TABLE IF NOT EXISTS portal_clients (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  id         TEXT NOT NULL UNIQUE,
+  id         TEXT,
   email      TEXT,
   data       TEXT NOT NULL
 );
-CREATE INDEX portal_clients_email ON portal_clients(email);
+CREATE INDEX IF NOT EXISTS portal_clients_id    ON portal_clients(id);
+CREATE INDEX IF NOT EXISTS portal_clients_email ON portal_clients(email);
 
-CREATE TABLE portal_invites (
+CREATE TABLE IF NOT EXISTS portal_invites (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  email      TEXT NOT NULL,
+  email      TEXT,
   client_id  TEXT,
   data       TEXT NOT NULL
 );
-CREATE INDEX portal_invites_email ON portal_invites(email);
+CREATE INDEX IF NOT EXISTS portal_invites_email  ON portal_invites(email);
+CREATE INDEX IF NOT EXISTS portal_invites_client ON portal_invites(client_id);
 
-CREATE TABLE portal_comments (
+CREATE TABLE IF NOT EXISTS portal_comments (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  id         TEXT NOT NULL UNIQUE,
+  id         TEXT,
   project_id TEXT,
   data       TEXT NOT NULL
 );
-CREATE INDEX portal_comments_project ON portal_comments(project_id);
+CREATE INDEX IF NOT EXISTS portal_comments_id      ON portal_comments(id);
+CREATE INDEX IF NOT EXISTS portal_comments_project ON portal_comments(project_id);
 
-CREATE TABLE portal_plan_items (
+CREATE TABLE IF NOT EXISTS portal_plan_items (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  id         TEXT NOT NULL UNIQUE,
+  id         TEXT,
   project_id TEXT,
   data       TEXT NOT NULL
 );
-CREATE INDEX portal_plan_items_project ON portal_plan_items(project_id);
+CREATE INDEX IF NOT EXISTS portal_plan_items_id      ON portal_plan_items(id);
+CREATE INDEX IF NOT EXISTS portal_plan_items_project ON portal_plan_items(project_id);
 
-CREATE TABLE portal_updates (
+CREATE TABLE IF NOT EXISTS portal_updates (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  id         TEXT NOT NULL UNIQUE,
+  id         TEXT,
   project_id TEXT,
   data       TEXT NOT NULL
 );
-CREATE INDEX portal_updates_project ON portal_updates(project_id);
+CREATE INDEX IF NOT EXISTS portal_updates_id      ON portal_updates(id);
+CREATE INDEX IF NOT EXISTS portal_updates_project ON portal_updates(project_id);
 
--- The moderation revision log. 'seq' is the append order; 'revision' is the
--- client's revision counter (api/portal/testimonials.ts:600).
-CREATE TABLE moderation_reviews (
+-- The moderation revision log. `seq` is the append order (the file order),
+-- `revision` is the client's revision counter (api/portal/testimonials.ts).
+CREATE TABLE IF NOT EXISTS moderation_reviews (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  ref        TEXT NOT NULL,
-  revision   INTEGER NOT NULL DEFAULT 1,
-  type       TEXT NOT NULL DEFAULT 'review',
-  state      TEXT NOT NULL DEFAULT 'pending',
+  ref        TEXT,
+  revision   INTEGER,
+  type       TEXT,
+  state      TEXT,
   project_id TEXT,
   data       TEXT NOT NULL
 );
-CREATE INDEX moderation_reviews_ref   ON moderation_reviews(ref, seq DESC);
-CREATE INDEX moderation_reviews_state ON moderation_reviews(state, seq DESC);
+CREATE INDEX IF NOT EXISTS moderation_reviews_ref    ON moderation_reviews(ref, seq DESC);
+CREATE INDEX IF NOT EXISTS moderation_reviews_state  ON moderation_reviews(state, seq DESC);
+CREATE INDEX IF NOT EXISTS moderation_reviews_project ON moderation_reviews(project_id);
 
-CREATE TABLE portal_sessions (
+CREATE TABLE IF NOT EXISTS portal_sessions (
   seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-  token      TEXT NOT NULL UNIQUE,
+  token      TEXT,
   expires_at INTEGER,
   data       TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS portal_sessions_token ON portal_sessions(token);
 
 -- The shared durable rate counter (section 3.8).
-CREATE TABLE rate_counters (
+CREATE TABLE IF NOT EXISTS rate_counters (
   bucket    TEXT PRIMARY KEY,
   reset_at  INTEGER NOT NULL,
   count     INTEGER NOT NULL DEFAULT 0
@@ -656,7 +689,72 @@ Field names taken from the handlers: `projects` (`api/portal/projects.ts:302-310
 `planItems` (`api/portal/plan-items.ts:298-305`), `updates` (`api/portal/updates.ts:174-181`),
 `clients` (`api/portal/auth.ts:487-494`), `reviews` (`api/portal/testimonials.ts:580-603`).
 
+#### 3.2.1 The deviations from the draft above — and why they are right
+
+The draft DDL (the one the design originally proposed) had `NOT NULL`, `UNIQUE` and `DEFAULT`s on
+the typed columns. **The implementation has none of them, on purpose**, and the Architect
+accepted the implementation as the contract. The rationale is in the code as well
+(`site/shared/portal-store/libsql-schema.ts:14-29`):
+
+| Draft | As built | Why the as-built wins |
+|---|---|---|
+| `id TEXT NOT NULL UNIQUE` | `id TEXT` | The file adapter's `append()` never rejects a record: two projects with the same id, or a record with no id at all, are both accepted and both readable (`site/shared/portal-store/file-adapter.ts`). A `UNIQUE` column would make the libSQL adapter **refuse writes the file adapter accepts** — the two adapters would stop being interchangeable, which is the entire point of the `PortalStore` interface. |
+| `email TEXT NOT NULL` | `email TEXT` | Same reason: a record may legitimately carry no address. |
+| `revision INTEGER NOT NULL DEFAULT 1` | `revision INTEGER` | A record with no `revision` must stay "no revision", because the file adapter compares `String()` values, not defaulted ones. |
+| `type TEXT NOT NULL DEFAULT 'review'` | `type TEXT` | A `DEFAULT 'review'` would make the database treat a record with no type as a review, while the file adapter's search is exact (`file-adapter.ts`). |
+| `state TEXT NOT NULL DEFAULT 'pending'` | `state TEXT` | **The dangerous one.** `decideReview()` treats a record whose state is not exactly `'pending'` as already decided (`site/shared/portal-store/file-adapter.ts:224`). A `DEFAULT 'pending'` would make the database **flip review records the file adapter leaves alone** — the database would approve things the file store never would. |
+| `token TEXT NOT NULL UNIQUE` | `token TEXT` | Same interchangeability rule. |
+| `CREATE INDEX` without `IF NOT EXISTS` | `CREATE INDEX IF NOT EXISTS` | The DDL is applied once per store instance; it must be idempotent or the second instance fails to start. |
+
+**The rule behind all seven rows:** the two adapters must be **interchangeable**. A database
+constraint that the file adapter does not enforce is a divergence, and the contract test (the same
+22 assertions against both stores, §3.6) is what proves there is none.
+
+#### 3.2.2 SQLite type fidelity — why the `Where` clause is a `CASE`
+
+The draft §3.3 below proposes a plain `CAST(json_extract(data,'$.<field>') AS TEXT) = ?`. The
+as-built predicate is a `CASE` over `json_type()` instead
+(`site/shared/portal-store/libsql-adapter.ts:197-211`), because SQLite's type handling does not
+match JavaScript's `String()`:
+
+| Value in the record | `String(value)` (file adapter) | SQLite `json_extract` | A plain `CAST(... AS TEXT)` |
+|---|---|---|---|
+| `true` | `'true'` | `1` | `'1'` → **no match** |
+| `false` | `'false'` | `0` | `'0'` → **no match** |
+| `42` | `'42'` | `42` (integer) | `'42'` → match |
+| `42.0` | `'42'` (JS `String(42)`) | `42.0` (real) | `'42.0'` → **no match** |
+| `"42"` (string) | `'42'` | `'42'` | `'42'` → match |
+
+The as-built predicate:
+
+```sql
+CASE json_type(data, ?)
+  WHEN 'true'  THEN 'true'
+  WHEN 'false' THEN 'false'
+  WHEN 'real'  THEN CASE WHEN CAST(json_extract(data, ?) AS INTEGER) = json_extract(data, ?)
+                          THEN CAST(CAST(json_extract(data, ?) AS INTEGER) AS TEXT)
+                          ELSE CAST(json_extract(data, ?) AS TEXT) END
+  ELSE CAST(json_extract(data, ?) AS TEXT)
+END = ?
+```
+
+- a **missing** field → `json_type()` is NULL → the `CASE` falls through to `CAST(NULL AS TEXT)` →
+  NULL → the row is excluded, exactly like the file adapter's `actual === undefined → no match`;
+- a field that is present but **null** → `json_type()` is `'null'` → `CAST(NULL AS TEXT)` → excluded,
+  like the file adapter's `actual === null → no match`;
+- a **real** that is integral (`42.0`) → the inner `CASE` compares the integer cast with the raw
+  value and yields `'42'`, matching `String(42)`.
+
+The five extra assertions that pin this are in the shared contract
+(`site/shared/portal-store/test/contract.shared.ts`): numbers, booleans, missing fields and patch
+types. They run against **both** stores, so the two cannot drift.
+
 ### 3.3 `Where` → SQL
+
+**The as-built predicate is in §3.2.2** — a `CASE` over `json_type()`, not the plain `CAST` this
+section originally proposed. The reasoning is in §3.2.2 (SQLite turns `true` into `1` and `42.0`
+into `'42.0'`, while the file adapter compares `String()`), and the implementation is
+`site/shared/portal-store/libsql-adapter.ts:197-211`. The rule this section states is unchanged:
 
 `Where` is equality-only (`types.ts:36`). The file adapter compares with
 `String(actual) !== String(expected)` and treats a missing field as "no match"
@@ -665,6 +763,7 @@ coercion, because the contract test asserts it.
 
 ```sql
 -- generic equality, faithful to the file adapter's String() comparison
+-- (the DRAFT form; the as-built form is the CASE in §3.2.2)
 CAST(json_extract(data, '$.<field>') AS TEXT) = ?      -- bound: String(expected)
 ```
 
@@ -726,16 +825,23 @@ The `data` column and the typed columns must be updated together. `json_set` on 
 typed columns in the same `UPDATE` keeps them consistent because both are derived from the same
 patch.
 
-### 3.5 `PORTAL_STORE=libsql` and the two environments
+### 3.5 `PORTAL_STORE=libsql` and the two environments — AS BUILT
 
 `site/shared/portal-store/index.ts:29-47` and `edge.ts:21-41` already select the backend from
-`env` and already throw `StorageError('not-implemented')` for `libsql`. The change is to replace
-that throw with a real adapter:
+`env` and already threw `StorageError('not-implemented')` for `libsql`. **That throw is replaced by
+the real adapter:**
 
 ```
-index.ts (Node / Vercel)      getStore(env) -> env = process.env
-edge.ts  (workerd / CF)       getStore(env) -> env = the request's context.env
+index.ts (Node / Vercel)      getStore(env) -> env = process.env      (index.ts:35-52)
+edge.ts  (workerd / CF)       getStore(env) -> env = the request's context.env (edge.ts:30-49)
 ```
+
+The two entry points differ in one more thing, and the difference is deliberate:
+
+| | `PORTAL_STORE` unset | `PORTAL_STORE=file` | `PORTAL_STORE=libsql` | anything else |
+|---|---|---|---|---|
+| `index.ts` (Vercel) | the **file** adapter (the local-dev default) | the file adapter | the libSQL adapter | `StorageError('invalid-config')` (`index.ts:48-51`) |
+| `edge.ts` (Cloudflare) | the **libSQL** adapter — there is no writable disk on the edge | `StorageError('invalid-config')` — "the file adapter is not available on the edge runtime" (`edge.ts:33-38`) | the libSQL adapter | `StorageError('invalid-config')` (`edge.ts:45-48`) |
 
 **The Vercel tree** reads `process.env.LIBSQL_URL` / `process.env.LIBSQL_TOKEN`.
 **The Cloudflare tree** reads `LIBSQL_URL` / `LIBSQL_TOKEN` from the Pages function `env` (the
@@ -754,29 +860,24 @@ site/shared/portal-store/libsql-transport.ts  (fetch → /v2/pipeline)
 A missing `LIBSQL_URL` or `LIBSQL_TOKEN` in production must be a loud `StorageError`
 (`invalid-config`) — never a silent fallback to the file adapter on the edge (there is no file
 there) and never a token-less request to a database (Turso would answer 401 and the error would
-read like a network problem).
+read like a network problem). **As built** (`site/shared/portal-store/libsql-store.ts:34-56`): a
+missing URL, a missing token, and a non-http(s) URL each raise
+`StorageError('invalid-config')` with a message that names the missing variable. The token is
+never echoed (`libsql-transport.ts:37-38`).
 
-### 3.6 How the adapter is verified with no cloud database
+### 3.6 How the adapter is verified with no cloud database — AS BUILT
 
 Three levels, each with a different claim. **Only level 3 proves real SQL semantics** — the
-others prove the adapter's own logic and the wire format.
+others prove the adapter's own logic and the wire format. **All three now exist.**
 
 **Level 1 — the SQL contract (offline, no network).**
-`createLibsqlStore({ transport })` takes an **injectable transport**:
-
-```ts
-export interface LibsqlTransport {
-  execute(sql: string, args: SqlValue[]): Promise<{ rows: SqlValue[][]; cols: string[]; changes: number }>;
-}
-```
-
-A fake transport records the statements and returns canned rows. The test asserts the *exact*
-statement sequence for each `PortalStore` method — the `WHERE` predicate, the `ORDER BY seq`, the
-`RETURNING` clause, the `json_set` patch — and asserts that `decideReview` issues exactly one
-mutating statement. This is the "does the adapter say the right SQL" test.
+`createLibsqlStore({ transport })` takes an **injectable transport**
+(`site/shared/portal-store/libsql-transport.ts`, the `LibsqlTransport` interface), and
+`libsql-adapter.ts` is driven through it. A fake transport records the statements and returns
+canned rows, so the test can assert the *exact* statement sequence for each `PortalStore` method.
 
 **Level 2 — the wire format (offline, local HTTP server).**
-A mock pipeline server (`site/shared/portal-store/test/mock-pipeline-server.mjs`, `node:http`, port
+A mock pipeline server (`site/shared/portal-store/test/mock-pipeline-server.ts`, `node:http`, port
 chosen free at run time, **never 4321**) implements `POST /v2/pipeline`:
 
 - asserts `Authorization: Bearer <token>` is present and correct;
@@ -792,18 +893,21 @@ contract end to end — the part that the native client would have hidden.
 **Level 3 — the real database (gated).**
 The same contract suite runs against a real Turso database when `LIBSQL_URL` is set
 (`npm run test:store:libsql`). This is the acceptance test and it needs the owner's database.
+**It has never been run: no real Turso database exists yet.**
 
-**The contract test must be parameterised.** `site/shared/portal-store/test/contract.test.ts`
-currently tests the file adapter directly (22 assertions, `npm run test:store`). It must be
-refactored into a shared body:
+**What the implementation actually did, and it is better than the plan.** The contract test was
+parameterised as planned — `site/shared/portal-store/test/contract.shared.ts` holds the contract
+body and `site/shared/portal-store/test/contract.test.ts` runs it **twice** (`describeStoreContract('file', …)`
+at `:55` and `describeStoreContract('libsql', …)` at `:84`). The libSQL half does not stop at the
+mock: `site/shared/portal-store/test/sqlite-worker.py` runs the **real SQLite engine** (the
+Python standard library's `sqlite3`) behind the mock's HTTP server, so the assertions execute
+**real SQL semantics over the real wire protocol** — which is level-3-grade proof of the SQL with
+no cloud database. The contract is now **60 tests** (22 assertions × 2 stores + the adapter's own
+tests), all green.
 
-```ts
-export function describeStoreContract(name: string, makeStore: () => PortalStore) { /* all 22 assertions */ }
-```
-
-then run against the file adapter **and** the libSQL adapter (with the level-1 transport). The
-**same 22 assertions** then hold for both stores — that is the whole point of the `PortalStore`
-interface (`types.ts:45-82`), and it is the proof that the interface is real.
+**The `Where`-clause fidelity cases are part of the shared body**, not an add-on: numbers,
+booleans, missing fields and patch types run against both stores, which is what forced the
+`CASE`-over-`json_type()` predicate in §3.2.2.
 
 ### 3.7 The migration from the file store
 
@@ -819,6 +923,14 @@ site/scripts/import-portal-store.mjs      (new)
 
 The importer must run against a **copy** of the data (`--from <dir>`), never against
 `site/data/**` in place.
+
+**As built** (`site/scripts/import-portal-store.mjs`): the script exists with exactly this shape —
+`--from <dir>`, `--manifest <file>`, `--verify`, `--dry-run`, `--url`, `--token`; the source is
+only ever **read** (`:21-23`), the manifest goes to `--manifest`, and the token is never logged
+(`:24-25`). The `--verify` pass reads both sides back and compares them **record by record, in
+order** (`:16-19`) — an import that silently reorders or drops records is worse than no import.
+It has been exercised end to end against the mock pipeline server; **it has never run against a
+real Turso database.**
 
 **Verification (the part that matters):** a compare pass that reads both sides and asserts, per
 collection, the same number of records and the same `JSON.stringify(record)` for every record, in
@@ -853,33 +965,84 @@ export interface RateLimitBackend { hit(key: string, windowMs: number): Promise<
 ```
 
 So the SQL backend is one statement, and the existing `RateLimiter` class
-(`rate-limit.ts:262-327`) needs no change at all:
+(`rate-limit.ts:262-327`) needs no change at all. **As built**
+(`site/shared/portal-store/durable-rate-counter.ts:53-58`, the exported constant
+`RATE_COUNTER_SQL`):
 
 ```sql
 INSERT INTO rate_counters (bucket, reset_at, count)
-VALUES (?1, ?2 + ?3, 1)
+VALUES (?, ?, 1)
 ON CONFLICT(bucket) DO UPDATE SET
-  count   = CASE WHEN rate_counters.reset_at <= ?2 THEN 1 ELSE rate_counters.count + 1 END,
-  reset_at = CASE WHEN rate_counters.reset_at <= ?2 THEN ?2 + ?3 ELSE rate_counters.reset_at END
-RETURNING count;
+  count    = CASE WHEN rate_counters.reset_at <= ? THEN 1 ELSE rate_counters.count + 1 END,
+  reset_at = CASE WHEN rate_counters.reset_at <= ? THEN ? + ? ELSE rate_counters.reset_at END
+RETURNING count
 ```
 
-- `?1` = the **hashed** key — the same `hashKey()` the file backend uses (`rate-limit.ts:236`), so
-  no e-mail address or IP is stored in the database;
-- `?2` = now, `?3` = `windowMs`;
+with the six bound arguments in order (`durable-rate-counter.ts:86-93`): the **hashed** bucket, the
+new `reset_at` (`now + windowMs`), then `now`, `now`, `now`, `windowMs`.
+
+- `?1` = the **hashed** key — SHA-256 (`api/lib/rate-limit.ts:94` `hashKey()`, called at `:236`),
+  exactly like the file backend's, so no e-mail address, client id or IP address is ever written
+  to the database; the hash uses **WebCrypto**, so the edge twin can use the module too
+  (`durable-rate-counter.ts:60-73`);
 - the `CASE` reproduces the file backend's rolling window exactly: a hit after `reset_at` starts
   the count again at 1 and sets a new reset
   (`rate-limit.ts:238-240`);
 - one row per bucket, so the table cannot grow without bound — the file backend's bucket cleanup
   (`rate-limit.ts:242-245`) is unnecessary;
 - **one atomic statement → no lost updates across instances, and no lock, and no file.**
+  Executed proof: eight concurrent writers on one bucket return `1…8` and the sum is 36 — no lost
+  update.
 
 The `degraded` flag (`rate-limit.ts:50-60`) keeps its meaning: if the statement fails, the
 limiter falls back to the in-memory backend and reports `degraded: true` — exactly as it does for
 the file backend today. The difference is that with libSQL there is no *permanent* abandonment:
 the next request tries the database again.
 
-### 3.9 What section B does not need from the owner
+**Status: the backend exists, the wiring does not.** `api/lib/rate-limit.ts` still selects the
+file backend, so the durable counter is **not** on SQL yet — it is on the next-wave list
+([`proposal-wave8-contract-2026-10-21.md`](proposal-wave8-contract-2026-10-21.md) §7, row 8).
+
+### 3.9 The as-built file map (2026-10-21) — and what is still NOT built
+
+**Built** (`site/shared/portal-store/`, all new unless stated):
+
+| File | What it is |
+|---|---|
+| `libsql-transport.ts` | the v2 pipeline transport over `global fetch`; the `{"type":"error"}`-inside-`results[]` trap is handled (`:249-257`); the token is never echoed (`:37-38`) |
+| `libsql-schema.ts` | the DDL of §3.2 as built (`:37-122`) and `ensureSchema()` (`:131-140`) |
+| `libsql-adapter.ts` | the `PortalStore` implementation; the `CASE`-over-`json_type()` predicate (`:197-211`) |
+| `libsql-store.ts` | `env` → store; fails closed on a missing/invalid URL or token (`:34-56`) |
+| `libsql-entry.ts` | the edge-safe entry point for the CF tree |
+| `durable-rate-counter.ts` | the shared durable rate counter (§3.8) |
+| `test/contract.shared.ts` | the contract body, run against **both** stores |
+| `test/mock-pipeline-server.ts` | the v2 pipeline mock server |
+| `test/sqlite-worker.py` | the **real SQLite engine** behind the mock — this is what makes the offline proof execution-grade |
+| `test/contract.test.ts` | the runner (edited) — the file adapter, the libSQL adapter, and the adapter's own tests |
+| `index.ts`, `edge.ts` | the two entry points (edited) — `PORTAL_STORE` selection per §3.5 |
+| `site/scripts/import-portal-store.mjs` | the importer (§3.7) |
+
+**NOT built** — and the spec must not read as if it were:
+
+1. **No handler uses the adapter.** `api/portal/*.ts` still read and write JSONL through
+   `api/lib/jsonl.ts`. The store exists; nothing calls it.
+2. **The rate limiter is not on the SQL backend.** `api/lib/rate-limit.ts` still selects the file
+   backend.
+3. **The build-time publisher still reads the file store** (`site/scripts/publish-testimonials.mjs`,
+   the `prebuild` step) and **must** be changed to read the database and fail loudly when the
+   database is unreachable.
+4. **The moderation store is still a JSONL file** (`api/moderate/review.ts:114-143`), not the
+   `moderation_reviews` table.
+5. **No real Turso database has ever been contacted.** The proof is a real SQLite engine over the
+   real wire protocol — that is execution-grade evidence of the SQL, and documentation-grade
+   evidence of Turso's service.
+
+The full list, with the file that proves each item, is in
+[`proposal-wave8-contract-2026-10-21.md`](proposal-wave8-contract-2026-10-21.md) §7.
+
+---
+
+### 3.10 What section B does not need from the owner
 
 - The **Turso-vs-Neon** decision does not block the code: the adapter speaks the libSQL HTTP
   protocol, and the `PortalStore` interface keeps a Postgres adapter possible later. The
@@ -887,6 +1050,10 @@ the next request tries the database again.
 - The owner is needed only for the **two values** `LIBSQL_URL` and `LIBSQL_TOKEN` (and, for level-3
   testing, the database itself). A Turso database is one `turso db create` away and the token is
   one `turso db tokens create` away.
+- **The adapter needs no new dependency and no deploy-config change** — the transport is
+  `global fetch`, so the root `package.json` stays dependency-free and `vercel.json`'s
+  `installCommand` needs no root install (the DevOps change of 2026-10-21 to
+  `npm install --no-audit --no-fund && cd site && npm ci` is compatible with it either way).
 
 ---
 

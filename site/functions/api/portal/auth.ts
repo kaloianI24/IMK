@@ -1,7 +1,7 @@
-// site/functions/api/portal/auth.ts — Cloudflare Pages Function.
-//   POST /api/portal/auth/request-link  — request magic-link sign-in
-//   GET  /api/portal/auth/verify         — verify token, set session cookie
-//   POST /api/portal/auth/logout        — clear session cookie
+// site/functions/api/portal/auth.ts â€” Cloudflare Pages Function.
+//   POST /api/portal/auth/request-link  â€” request magic-link sign-in
+//   GET  /api/portal/auth/verify         â€” verify token, set session cookie
+//   POST /api/portal/auth/logout        â€” clear session cookie
 
 import {
   sessionCookieString,
@@ -14,7 +14,10 @@ import {
   isSecureBaseUrl,
   expectedOrigin,
   baseUrlConfigured,
+  isProductionEnv,
+  sessionSecretProblem,
 } from './session.js';
+import { secretProblem } from '../../../shared/server/secret.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 import { createPortalRateLimiter } from '../lib/rate-limit.js';
 import {
@@ -29,12 +32,21 @@ import {
 const RATE_LIMIT = 5; // per hour per IP
 const RATE_LIMIT_WINDOW_MS = 3600 * 1000;
 
-// Production unless the environment says otherwise — the same convention as
-// api/contact.ts. An unset APP_ENV must NOT be treated as development: a
-// deployed instance with a missing RESEND_API_KEY would print a live bearer
-// token to its log (audit M4).
+// Production unless the environment says otherwise.
+//
+// H-2 (wave-8A): the rule used to be `(env.APP_ENV || 'production') === 'production'`,
+// which meant `APP_ENV=development` alone switched EVERY fail-closed guard
+// off â€” including the one that keeps a live sign-in token out of the log. The
+// shipped example file set exactly that one variable, so a deployed instance
+// printed sign-in links to its log.
+//
+// The shared rule (site/shared/server/portal-session.ts) is used instead, and
+// it is ONE definition for the whole project: a deployment is PRODUCTION when
+// APP_ENV is unset or unknown, or when NODE_ENV=production, or VERCEL=1, or
+// the base URL is an https:// URL. Only an explicit APP_ENV=development on a
+// machine that is not deployed is DEVELOPMENT.
 const isProd = (env: { [key: string]: string | undefined }): boolean =>
-  (env.APP_ENV || 'production') === 'production';
+  isProductionEnv(env as any);
 
 const INVITED_FILE = 'site/data/portal/invited.jsonl';
 
@@ -44,7 +56,7 @@ const INVITED_FILE = 'site/data/portal/invited.jsonl';
 // filled and the verify route read. That works only inside ONE isolate; the
 // Cloudflare edge runs one isolate per colo, so a link verified in another
 // colo was rejected. The token is now SELF-CONTAINED and signed with
-// PORTAL_MAGIC_LINK_SECRET (site/shared/server/magic-link.ts — the SAME
+// PORTAL_MAGIC_LINK_SECRET (site/shared/server/magic-link.ts â€” the SAME
 // module the Vercel tree uses): it carries the address, the purpose, the
 // expiry and a nonce, and the verifier recomputes the signature. No table, no
 // shared state, no isolate. See that file for what "single use" means now.
@@ -76,7 +88,7 @@ function fsModule(): any {
 /**
  * Read a store file. A malformed line is an ERROR (audit M3 / QA D3): it must
  * not turn the invite list into an empty list, because "empty" reads as "this
- * client is not invited" — a silent sign-in outage for a real client.
+ * client is not invited" â€” a silent sign-in outage for a real client.
  */
 async function readJsonl(file: string): Promise<Array<Record<string, any>>> {
   const fs = fsModule();
@@ -109,12 +121,12 @@ function isAdmin(email: string, env: { [key: string]: string | undefined }): boo
 /**
  * Send the sign-in link.
  *
- *   'sent'          — Resend accepted the message
- *   'dev'           — no API key and NOT production: the link was logged for
+ *   'sent'          â€” Resend accepted the message
+ *   'dev'           â€” no API key and NOT production: the link was logged for
  *                     the developer (local only)
- *   'misconfigured' — no API key in production: the caller answers 500 and
+ *   'misconfigured' â€” no API key in production: the caller answers 500 and
  *                     the token is NEVER written to the log (audit M4)
- *   'failed'        — Resend rejected the message (e.g. unverified sender)
+ *   'failed'        â€” Resend rejected the message (e.g. unverified sender)
  */
 async function sendMagicLinkEmail(
   email: string,
@@ -256,7 +268,10 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
         JSON.stringify({
           ts: Date.now(),
           outcome: 'magic_link_misconfigured',
-          reason: 'PORTAL_MAGIC_LINK_SECRET missing',
+          // The precise reason (H-1): 'missing', 'placeholder' or
+          // 'too-short'. The operator needs to know whether to paste a new
+          // value or to generate one.
+          reason: `PORTAL_MAGIC_LINK_SECRET ${secretProblem(env.PORTAL_MAGIC_LINK_SECRET)}`,
         }),
       );
       return json({ error: 'misconfigured', code: 'internal' }, 500);
@@ -271,7 +286,9 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
         JSON.stringify({
           ts: Date.now(),
           outcome: 'session_misconfigured',
-          reason: 'PORTAL_SESSION_SECRET missing',
+          // The precise reason (H-1): 'missing', 'placeholder' or
+          // 'too-short'.
+          reason: `PORTAL_SESSION_SECRET ${sessionSecretProblem(env)}`,
         }),
       );
       return json({ error: 'misconfigured', code: 'internal' }, 500);
@@ -287,7 +304,9 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
           JSON.stringify({
             ts: Date.now(),
             outcome: 'magic_link_misconfigured',
-            reason: 'PORTAL_MAGIC_LINK_SECRET missing',
+            // The precise reason (H-1): 'missing', 'placeholder' or
+            // 'too-short'.
+            reason: `PORTAL_MAGIC_LINK_SECRET ${secretProblem(env.PORTAL_MAGIC_LINK_SECRET)}`,
           }),
         );
         return json({ error: 'misconfigured', code: 'internal' }, 500);
@@ -359,7 +378,10 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
         JSON.stringify({
           ts: Date.now(),
           outcome: 'magic_link_misconfigured',
-          reason: 'PORTAL_MAGIC_LINK_SECRET missing',
+          // The precise reason (H-1): 'missing', 'placeholder' or
+          // 'too-short'. The operator needs to know whether to paste a new
+          // value or to generate one.
+          reason: `PORTAL_MAGIC_LINK_SECRET ${secretProblem(env.PORTAL_MAGIC_LINK_SECRET)}`,
         }),
       );
       return json({ error: 'misconfigured', code: 'internal' }, 500);
@@ -374,7 +396,9 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
         JSON.stringify({
           ts: Date.now(),
           outcome: 'session_misconfigured',
-          reason: 'PORTAL_SESSION_SECRET missing',
+          // The precise reason (H-1): 'missing', 'placeholder' or
+          // 'too-short'.
+          reason: `PORTAL_SESSION_SECRET ${sessionSecretProblem(env)}`,
         }),
       );
       return json({ error: 'misconfigured', code: 'internal' }, 500);
@@ -391,7 +415,7 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
       return json({ error: 'link expired or invalid', code: 'invalid' }, 400);
     }
 
-    // Single use — PER INSTANCE (per isolate here). The used-token register
+    // Single use â€” PER INSTANCE (per isolate here). The used-token register
     // lives on globalThis, so a second verification of the same link that
     // lands on THIS isolate is refused; one that lands in another colo is
     // not, and the register is lost on a cold start. Durable single use
@@ -421,7 +445,7 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
     // The session is a SIGNED token (audit wave-6, F-2): it carries the
     // session and the signature is the proof, so no other function and no
     // other isolate has to share state with this one. createSession returns
-    // null when there is no signing secret — a misconfiguration, never a
+    // null when there is no signing secret â€” a misconfiguration, never a
     // session only this isolate can read.
     const sessionToken = createSession(email, role, clientId, env);
     if (!sessionToken) {
@@ -429,7 +453,9 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
         JSON.stringify({
           ts: Date.now(),
           outcome: 'session_misconfigured',
-          reason: 'PORTAL_SESSION_SECRET missing',
+          // The precise reason (H-1): 'missing', 'placeholder' or
+          // 'too-short'.
+          reason: `PORTAL_SESSION_SECRET ${sessionSecretProblem(env)}`,
         }),
       );
       return json({ error: 'misconfigured', code: 'internal' }, 500);
@@ -449,7 +475,7 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
 };
 
 // A corrupt invite store must not look like "this client is not invited"
-// (audit M3 / QA D3) — that locks a real client out while the owner sees a
+// (audit M3 / QA D3) â€” that locks a real client out while the owner sees a
 // normal 200. Answer 500 {code:'storage'} and name the file and line.
 const storageError = (err: { file: string; line: number }): Response => {
   console.log(

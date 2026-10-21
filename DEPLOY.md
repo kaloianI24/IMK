@@ -21,8 +21,11 @@ no writable store).
 | Node.js version | 20.19.5 (`site/.node-version`) | matches the local build. |
 
 `vercel.json` at the repository root already declares the framework, install command,
-build command, output directory and the security headers. Only **Root Directory** is a
-dashboard setting — it cannot be committed.
+build command, output directory and the security headers. **Bare-path robots rules**
+(`/login`, `/portal`, `/admin` without trailing slashes) are included alongside the
+wildcard patterns; bare-path coverage is verified by pattern reading only (no Vercel
+token, no deploy). Only **Root Directory** is a dashboard setting — it cannot be
+committed.
 
 ### 1.2 Environment variables
 
@@ -53,14 +56,15 @@ and reads return empty data.
 - The moderation endpoint (`/api/moderate/review`) returns `501 { code: 'unimplemented' }` because the store is unreachable — this is the fail-closed behavior.
 
 **What does NOT work on Vercel today:**
-- All portal endpoints (`/api/portal/*`) return storage errors because the file backend cannot write.
+- All portal endpoints (`/api/portal/*`) return storage errors because the portal handlers are not yet wired to the libSQL adapter — they still read/write JSONL directly, which fails on Vercel's read-only filesystem.
 - Rate limiting is per-instance only (no durable counter) until the storage migration lands.
 
 **The durable answer is the libSQL adapter (T4):**
 - Task T4 in `spec/08-portal-mvp.md` §4.8.5 and `spec/proposal-portal-storage.md`.
 - The `PortalStore` interface and the file adapter already exist (`site/shared/portal-store/`).
-- The libSQL adapter is **not built** — `getStore()` throws `not-implemented` (see `site/shared/portal-store/index.ts:37–41` and `edge.ts:31–35`).
-- This work is **BLOCKED on an owner decision** (Turso vs Neon, and database creation).
+- The libSQL adapter **is built and proven**: `npm run test:store` = 60 pass / 0 fail (the same 22 contract assertions run against both the file adapter and the libSQL adapter). `getStore(env)` at `site/shared/portal-store/index.ts:35` and `edge.ts:30` selects the libSQL adapter when `PORTAL_STORE=libsql`.
+- What is **not yet wired** is the portal handlers: `api/portal/*`, `api/moderate/review.ts`, `api/lib/rate-limit.ts` and `site/scripts/publish-testimonials.mjs` still read/write JSONL directly. The wiring is in flight (wave 9).
+- The owner needs only two values (`LIBSQL_URL`, `LIBSQL_TOKEN`) plus a database — the Turso vs Neon choice does **not** block the code (the adapter speaks the libSQL HTTP v2 protocol; `PortalStore` keeps Postgres swappable).
 
 Do not claim the portal is deployable when it is not. Do not invent or stub a libSQL adapter.
 
@@ -83,16 +87,16 @@ per deployment** (Pro and Enterprise are unlimited).
 
 | Category | Count | Files |
 |---|---|---|
-| Real routes (have a default export handler) | 16 | `contact.ts`, `admin/session.ts`, `admin/reviews.ts`, `moderate/review.ts`, `portal/auth/logout.ts`, `portal/auth/request-link.ts`, `portal/auth/verify.ts`, `portal/comments.ts`, `portal/invites.ts`, `portal/plan-items.ts`, `portal/plan-items/[id].ts`, `portal/projects.ts`, `portal/projects/[id].ts`, `portal/testimonials.ts`, `portal/updates.ts`, `portal/session.ts` |
-| Shared utilities (NO default export — build a dead function that 500s on its URL) | 4 | `lib/jsonl.ts`, `lib/notifications.ts`, `lib/rate-limit.ts`, `portal/session.ts` |
+| Real routes (have a default export handler) | 17 | `contact.ts`, `admin/session.ts`, `admin/reviews.ts`, `moderate/review.ts`, `portal/auth/logout.ts`, `portal/auth/request-link.ts`, `portal/auth/verify.ts`, `portal/comments.ts`, `portal/invites.ts`, `portal/plan-items.ts`, `portal/plan-items/[id].ts`, `portal/projects.ts`, `portal/projects/[id].ts`, `portal/testimonials.ts`, `portal/updates.ts`, `portal/session.ts`, `portal/auth.ts` |
+| Shared utilities (NO default export — build a dead function that 500s on its URL) | 3 | `lib/jsonl.ts`, `lib/notifications.ts`, `lib/rate-limit.ts` |
 | **Total Vercel functions on deploy** | **20** | **20 > 12 (Hobby cap)** |
 
 **What this means:**
-- **On Vercel Pro/Enterprise:** the deploy works, but 4 dead functions exist (they answer `"Can't detect way to handle request"` — a 500, not a build failure).
+- **On Vercel Pro/Enterprise:** the deploy works, but 3 dead functions exist (they answer `"Can't detect way to handle request"` — a 500, not a build failure).
 - **On Vercel Hobby:** the deploy **fails the function count check** (20 > 12). The portal cannot launch on Hobby until the function count drops to ≤ 12.
 
 **The fix (not yet applied — see `spec/proposal-wave7-design-2026-10-21.md` §2):**
-Move the 4 shared utilities out of `api/` (e.g. to `site/shared/server/`), add one shared entry point per route family, and use `vercel.json` rewrites. This brings the function count to **7** (5 route families + 2 auth files with query params that must not be rewritten) with 5 slots spare.
+Move the 3 shared utilities out of `api/` (e.g. to `site/shared/server/`), add one shared entry point per route family, and use `vercel.json` rewrites. This brings the function count to **7** (`api/portal.ts` + `api/admin.ts` + `api/contact.ts` + `api/moderate/review.ts` + the **3** `/api/portal/auth/*` files) with 5 slots spare.
 
 Do not claim the deploy works on Hobby. This is a hard platform limit, not a risk.
 
@@ -152,6 +156,14 @@ The `/admin` owner inbox is served by two routes in both trees:
 | `GET /api/admin/session` | `api/admin/session.ts` | `site/functions/api/admin/session.ts` | **200** `{ok:true,role:'admin',email:'...'}` for the allow-listed owner; **401** `{code:'unauthorized'}` for a non-owner (client session, no session, forged cookie, or address not on `ADMIN_EMAILS`); **500** `{code:'internal'}` when `ADMIN_EMAILS` is unset |
 | `GET /api/admin/reviews` | `api/admin/reviews.ts` | `site/functions/api/admin/reviews.ts` | **200** `{ok:true,counts:{...},reviews:[...],recent:[...]}` for the allow-listed owner; **401** `{code:'unauthorized'}` for a non-owner; **500** `{code:'internal'}` when `ADMIN_EMAILS` or `FORM_WEBHOOK_SECRET` is unset; **501** `{code:'unimplemented'}` when the moderation store file is missing (read-only filesystem) |
 
+### 4.1.1 Portal session route
+
+The owner-role endpoint used by the portal UI:
+
+| Route | File (Vercel) | File (Cloudflare) | Response |
+|---|---|---|---|
+| `GET /api/portal/session` | `api/portal/session.ts` | `site/functions/api/portal/session.ts` | **200** `{authenticated:true,role:'admin'|'client',expiresAt:number}` for a valid session; **401** `{code:'unauthorized'}` with no valid session; **500** `{code:'internal'}` when `ADMIN_EMAILS` is unset or session secrets are missing/invalid |
+
 The `/admin` page itself is `site/src/pages/admin.astro` (server-rendered, `noindex,nofollow`, excluded from the sitemap — invariant D-4).
 
 ---
@@ -209,7 +221,7 @@ The portal needs a libSQL database. The code reads **exactly these three variabl
 |---|---|---|---|
 | 1 | **Vercel Root Directory = repository root** (dashboard setting) | You (Owner) | ❌ Not set — must be done manually in Vercel dashboard |
 | 2 | **Turso database + credentials** (`LIBSQL_URL`, `LIBSQL_TOKEN`, `PORTAL_STORE=libsql`) | You (Owner) | ❌ Database not created; env vars not added to Vercel or Cloudflare |
-| 3 | **libSQL storage adapter** (the code that implements `PortalStore` for libSQL) | Backend Developer | ❌ Not built — `getStore()` throws `not-implemented` today (see `site/shared/portal-store/index.ts:37–41` and `edge.ts:31–35`) |
+| 3 | **Portal handlers not wired to the libSQL adapter** (adapters exist, but portal still uses JSONL) | Backend Developer | ❌ `api/portal/projects.ts` imports `readJsonlFile` from `../lib/jsonl.js`; `api/portal/auth.ts` imports `readJsonlFile` from `../lib/jsonl.js`; `api/lib/rate-limit.ts` selects the file backend instead of `createLibsqlRateLimitBackend`; `site/scripts/publish-testimonials.mjs` reads `data/moderation/reviews.jsonl` at build time. The `PortalStore` contract is built and proven offline; the wiring is not. |
 
 All three must be complete before the portal can accept sign-ups, store projects, or serve reviews.
 
@@ -229,8 +241,8 @@ All three must be complete before the portal can accept sign-ups, store projects
 | `ADMIN_EMAILS` | yes | comma-separated list of owner addresses (the owner role). |
 | `TURNSTILE_SECRET_KEY` | yes | the public contact form. |
 | `PORTAL_RATE_LIMIT_FILE` | no | only for a self-hosted target: a durable counter file. On Vercel the limit is per instance until the storage migration lands. |
-| **`PORTAL_STORE`** | **yes (for portal)** | **`libsql` in production. Today: not yet implemented — the adapter throws `not-implemented` until it lands.** |
-| **`LIBSQL_URL`** | **yes (for portal)** | **`libsql://<db>.turso.io`. Today: not yet implemented — the adapter throws `not-implemented` until it lands.** |
-| **`LIBSQL_TOKEN`** | **yes (for portal)** | **Turso auth token. Today: not yet implemented — the adapter throws `not-implemented` until it lands. Never commit; never log.** |
+| **`PORTAL_STORE`** | **yes (for portal)** | **`libsql` in production. The adapter is built and proven (60/60 contract tests); the portal handlers are being wired to it (in flight). The owner creates the database and sets the three variables below.** |
+| **`LIBSQL_URL`** | **yes (for portal)** | **`libsql://<db>.turso.io`. The adapter is built and proven; the wiring is in flight.** |
+| **`LIBSQL_TOKEN`** | **yes (for portal)** | **Turso auth token. The adapter is built and proven; the wiring is in flight. Never commit; never log.** |
 
-> The three storage rows above are **not green** — they are documented here so the table cannot be misread as complete. The portal will error with `not-implemented` until the libSQL adapter (task T4) is merged.
+> The three storage rows above document the libSQL adapter that exists at `site/shared/portal-store/libsql-adapter.ts`, `libsql-transport.ts`, `libsql-schema.ts` and is proven by `npm run test:store` (60/60). The portal still uses the file store today because the wiring to the libSQL adapter is not yet complete — the owner creates the database, adds the credentials, and the wiring lands in the next wave.

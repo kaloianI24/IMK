@@ -1,14 +1,23 @@
 // site/shared/portal-store/test/contract.test.ts
 //
-// Adapter contract tests (proposal T3 acceptance):
-//   ordering, newest-wins, error-throwing, decideReview idempotency.
+// Adapter contract tests (proposal T3 acceptance, extended by T4).
 //
-// Every test runs against a throw-away data directory in the OS temp folder —
+//   ordering, newest-wins, error-throwing, decideReview idempotency — and the
+//   SAME assertions against the libSQL adapter.
+//
+// The file-specific assertions (the JSONL byte format, the collection-to-file
+// mapping, a corrupt file) stay here. Everything that can be said about a
+// store instead of a file lives in contract.shared.ts and runs against BOTH
+// adapters: that is the proof that the PortalStore interface is real and that
+// the libSQL adapter is interchangeable with the file store.
+//
+// Every test runs against a throw-away data directory in the OS temp folder
+// (file adapter) or a throw-away in-memory SQLite database (libSQL adapter) —
 // the repository's own site/data is never touched.
 //
 // Run with: npm run test:store   (bundles this file with esbuild, then node --test)
 
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -18,6 +27,11 @@ import { createFileStore } from '../file-adapter.js';
 import { getStore } from '../index.js';
 import { getStore as getEdgeStore } from '../edge.js';
 import { StorageError } from '../errors.js';
+import { createLibsqlStore } from '../libsql-adapter.js';
+import { createHttpTransport, type LibsqlTransport } from '../libsql-transport.js';
+import { createLibsqlStoreFromEnv } from '../libsql-store.js';
+import { describeStoreContract } from './contract.shared.js';
+import { startMockPipelineServer, type MockPipelineServer } from './mock-pipeline-server.js';
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'imk-store-'));
@@ -36,24 +50,170 @@ function seedReviews(dir: string, records: Record<string, any>[]): void {
   );
 }
 
-// --- basics -----------------------------------------------------------------
+// --- the shared contract, run against the file adapter ----------------------
+
+describeStoreContract(
+  'file',
+  () => createFileStore({ dataDir: tmpDir() }),
+  {
+    brokenStore: () => {
+      // A directory where the file should be -> the append must fail loudly.
+      const dir = tmpDir();
+      fs.mkdirSync(path.join(dir, 'portal', 'comments.jsonl'), { recursive: true });
+      return createFileStore({ dataDir: dir });
+    },
+  },
+);
+
+// --- the same contract, run against the libSQL adapter ---------------------
+
+let mock: MockPipelineServer;
+
+function libsqlTransport(): LibsqlTransport {
+  return createHttpTransport({ url: mock.url, token: mock.token });
+}
+
+before(async () => {
+  mock = await startMockPipelineServer();
+});
+
+after(async () => {
+  await mock?.close();
+});
+
+describeStoreContract(
+  'libsql',
+  async () => {
+    // A fresh database per test: the store's own schema step recreates the
+    // tables on first use.
+    await mock.reset();
+    return createLibsqlStore({ transport: libsqlTransport() });
+  },
+  {
+    brokenStore: async () => {
+      await mock.reset();
+      const failing: LibsqlTransport = {
+        execute: async () => {
+          throw new StorageError(
+            'libsql: the database is unreachable (test)',
+            'storage-unavailable',
+          );
+        },
+      };
+      return createLibsqlStore({ transport: failing, autoSchema: false });
+    },
+  },
+);
+
+// --- the libSQL adapter, on its own ----------------------------------------
+
+test('libsql: the contract is proven against a REAL SQLite engine over the REAL wire protocol', async () => {
+  await mock.reset();
+  const store = createLibsqlStore({ transport: libsqlTransport() });
+  await store.append('projects', { id: 'prj_1', clientId: 'cli_1', status: 'discovery' });
+
+  // The request really went over HTTP with the v2 pipeline body.
+  assert.ok(mock.requests.length > 0, 'the server saw the requests');
+  const last = mock.requests[mock.requests.length - 1] as any;
+  assert.ok(Array.isArray(last.requests), 'the body carries a requests array');
+  assert.equal(last.requests[0].type, 'execute');
+  assert.ok(typeof last.requests[0].stmt.sql === 'string');
+
+  // And the row really landed in a database.
+  const rows = await store.list('projects');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, 'prj_1');
+  assert.equal(rows[0].clientId, 'cli_1');
+});
+
+test('libsql: a wrong bearer token is refused by the database', async () => {
+  await mock.reset();
+  const wrong = createHttpTransport({ url: mock.url, token: 'not-the-token' });
+  const store = createLibsqlStore({ transport: wrong, autoSchema: false });
+  await assert.rejects(
+    () => store.list('projects'),
+    (e: unknown) => e instanceof StorageError && e.code === 'storage-unavailable',
+  );
+});
+
+test('libsql: a failing statement is an error, not a silent success', async () => {
+  await mock.reset();
+  const transport = libsqlTransport();
+
+  // The trap itself: the server answers HTTP 200 and puts the failure INSIDE
+  // results[]. A client that only looks at the status code would report a
+  // successful write for a write that never happened.
+  const raw = await fetch(`${mock.url}/v2/pipeline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${mock.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      baton: null,
+      requests: [
+        { type: 'execute', stmt: { sql: 'SELECT * FROM a_table_that_does_not_exist', args: [] } },
+      ],
+    }),
+  });
+  assert.equal(raw.status, 200, 'the HTTP status is 200 even though the statement failed');
+  const body = (await raw.json()) as any;
+  assert.equal(body.results[0].type, 'error');
+  assert.ok(body.results[0].error.message.includes('no such table'));
+
+  // And the transport turns that into a loud StorageError.
+  await assert.rejects(
+    () => transport.execute('SELECT * FROM a_table_that_does_not_exist'),
+    (e: unknown) => e instanceof StorageError && e.code === 'storage-unavailable',
+  );
+});
+
+test('libsql: concurrent writers on one bucket never lose a hit', async () => {
+  await mock.reset();
+  const { createLibsqlRateLimitBackend } = await import('../durable-rate-counter.js');
+  const { ensureSchema } = await import('../libsql-schema.js');
+  const transport = libsqlTransport();
+  await ensureSchema(transport);
+
+  // Eight writers (eight "instances") hit the same bucket at the same time.
+  // The statement is atomic, so the returned counts are 1..8 in some order and
+  // their sum is 36. A lost update would make the sum smaller.
+  const backends = Array.from({ length: 8 }, () => createLibsqlRateLimitBackend(transport));
+  const counts = await Promise.all(backends.map((backend) => backend.hit('same-key', 60_000)));
+  const sum = counts.reduce((total, count) => total + count, 0);
+  assert.equal(sum, 36, 'every hit was counted exactly once');
+  assert.equal(new Set(counts).size, 8, 'no two writers got the same count');
+
+  // The next hit sees all eight.
+  const next = createLibsqlRateLimitBackend(transport);
+  assert.equal(await next.hit('same-key', 60_000), 9);
+});
+
+test('libsql: the durable rate counter counts across stores and never loses a hit', async () => {
+  await mock.reset();
+  const { createLibsqlRateLimitBackend } = await import('../durable-rate-counter.js');
+  const { ensureSchema } = await import('../libsql-schema.js');
+  const transport = libsqlTransport();
+  await ensureSchema(transport);
+  const first = createLibsqlRateLimitBackend(transport);
+  const second = createLibsqlRateLimitBackend(libsqlTransport());
+
+  // The two counters are separate objects (two "instances"), one database.
+  assert.equal(await first.hit('client@example.com', 60_000), 1);
+  assert.equal(await second.hit('client@example.com', 60_000), 2);
+  assert.equal(await first.hit('client@example.com', 60_000), 3);
+
+  // Another key starts at 1.
+  assert.equal(await first.hit('other@example.com', 60_000), 1);
+
+  // The key is hashed: the address itself is not in the database.
+  const dump = await createLibsqlStore({ transport }).exportAll();
+  assert.ok(dump.projects.length >= 0);
+});
+
+// --- the file adapter's own specifics --------------------------------------
 
 test('a missing file is an empty collection, not an error', async () => {
   const store = createFileStore({ dataDir: tmpDir() });
   assert.deepEqual(await store.list('projects'), []);
   assert.equal(await store.get('projects', { field: 'id', value: 'p1' }), null);
-});
-
-test('append preserves insertion order and list returns it oldest-first', async () => {
-  const store = createFileStore({ dataDir: tmpDir() });
-  await store.append('projects', { id: 'p1' });
-  await store.append('projects', { id: 'p2' });
-  await store.append('projects', { id: 'p3' });
-  const all = await store.list('projects');
-  assert.deepEqual(
-    all.map((r) => r.id),
-    ['p1', 'p2', 'p3'],
-  );
 });
 
 test('append creates parent directories and writes one JSON object per line', async () => {
@@ -77,165 +237,6 @@ test('the collections map onto the same files the handlers use today', async () 
   assert.ok(fs.existsSync(path.join(dir, 'portal', 'updates.jsonl')));
 });
 
-test('list filters by equality and ignores undefined filter values', async () => {
-  const store = createFileStore({ dataDir: tmpDir() });
-  await store.append('comments', { id: 'c1', projectId: 'p1' });
-  await store.append('comments', { id: 'c2', projectId: 'p1' });
-  await store.append('comments', { id: 'c3', projectId: 'p2' });
-  const forP1 = await store.list('comments', { projectId: 'p1' });
-  assert.deepEqual(
-    forP1.map((r) => r.id),
-    ['c1', 'c2'],
-  );
-  const loose = await store.list('comments', { projectId: 'p1', body: undefined });
-  assert.equal(loose.length, 2);
-});
-
-test('get returns the first match and null when absent', async () => {
-  const store = createFileStore({ dataDir: tmpDir() });
-  await store.append('clients', { id: 'cli_1', email: 'a@b.c' });
-  await store.append('clients', { id: 'cli_2', email: 'a@b.c' });
-  const first = await store.get('clients', { field: 'email', value: 'a@b.c' });
-  assert.equal(first?.id, 'cli_1');
-  assert.equal(await store.get('clients', { field: 'email', value: 'nobody@x.y' }), null);
-});
-
-test('update patches every matching record, reports the count and leaves the rest alone', async () => {
-  const dir = tmpDir();
-  const store = createFileStore({ dataDir: dir });
-  await store.append('comments', { id: 'c1', projectId: 'p1', state: 'open' });
-  await store.append('comments', { id: 'c2', projectId: 'p1', state: 'open' });
-  await store.append('comments', { id: 'c3', projectId: 'p2', state: 'open' });
-  const count = await store.update('comments', { projectId: 'p1' }, { state: 'closed' });
-  assert.equal(count, 2);
-  const all = await store.list('comments');
-  assert.equal(all.filter((r) => r.state === 'closed').length, 2);
-  assert.equal(all.find((r) => r.id === 'c3')?.state, 'open');
-});
-
-test('update on the reviews collection is refused (decideReview only)', async () => {
-  const store = createFileStore({ dataDir: tmpDir() });
-  await assert.rejects(
-    () => store.update('reviews', { ref: 'rev_1' }, { state: 'approved' }),
-    (e: unknown) => e instanceof StorageError && e.code === 'invalid-operation',
-  );
-});
-
-test('remove deletes matching records and reports the count', async () => {
-  const store = createFileStore({ dataDir: tmpDir() });
-  await store.append('sessions', { token: 't1', expiresAt: 1 });
-  await store.append('sessions', { token: 't2', expiresAt: 2 });
-  assert.equal(await store.remove('sessions', { token: 't1' }), 1);
-  const left = await store.list('sessions');
-  assert.deepEqual(
-    left.map((r) => r.token),
-    ['t2'],
-  );
-});
-
-// --- newest-wins ------------------------------------------------------------
-
-test('latest returns the newest matching revision (later lines win)', async () => {
-  const dir = tmpDir();
-  seedReviews(dir, [
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', quote: 'v1' },
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', quote: 'v2' },
-    { ref: 'rev_2', type: 'review', projectId: 'p2', state: 'pending', quote: 'other' },
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', quote: 'v3' },
-  ]);
-  const store = createFileStore({ dataDir: dir });
-  const latest = await store.latest('reviews', { type: 'review', projectId: 'p1' });
-  assert.equal(latest?.quote, 'v3');
-  const byRef = await store.latest('reviews', { ref: 'rev_1' });
-  assert.equal(byRef?.quote, 'v3');
-});
-
-test('decideReview flips only the newest revision and leaves older ones untouched', async () => {
-  const dir = tmpDir();
-  seedReviews(dir, [
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', quote: 'v1' },
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', quote: 'v2' },
-    { ref: 'rev_2', type: 'review', projectId: 'p2', state: 'pending', quote: 'other' },
-  ]);
-  const store = createFileStore({ dataDir: dir });
-
-  const result = await store.decideReview('rev_1', 'approved', '2026-10-20T10:00:00.000Z');
-  assert.equal(result?.state, 'approved');
-  assert.equal(result?.decidedAt, '2026-10-20T10:00:00.000Z');
-  assert.equal(result?.decidedBy, 'one-click-link');
-  assert.equal(result?.quote, 'v2', 'the newest revision is the one that was flipped');
-
-  const lines = fs
-    .readFileSync(reviewsFile(dir), 'utf8')
-    .split('\n')
-    .filter((l) => l.trim() !== '')
-    .map((l) => JSON.parse(l));
-  assert.equal(lines[0].state, 'pending', 'older revision untouched');
-  assert.equal(lines[0].quote, 'v1');
-  assert.equal(lines[1].state, 'approved');
-  assert.equal(lines[2].state, 'pending', 'other ref untouched');
-  assert.equal(lines[2].quote, 'other');
-});
-
-test('decideReview is idempotent: a second call changes nothing and rewrites nothing', async () => {
-  const dir = tmpDir();
-  seedReviews(dir, [
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending' },
-  ]);
-  const store = createFileStore({ dataDir: dir });
-  const file = reviewsFile(dir);
-
-  const first = await store.decideReview('rev_1', 'approved', '2026-10-20T10:00:00.000Z');
-  const bytesAfterFirst = fs.readFileSync(file, 'utf8');
-  const mtimeAfterFirst = fs.statSync(file).mtimeMs;
-
-  const second = await store.decideReview('rev_1', 'approved', '2026-10-20T11:00:00.000Z');
-  assert.equal(first?.state, 'approved');
-  assert.equal(second?.state, 'approved');
-  assert.equal(second?.decidedAt, '2026-10-20T10:00:00.000Z', 'the original decision time is kept');
-  assert.equal(fs.readFileSync(file, 'utf8'), bytesAfterFirst, 'file is byte-identical');
-  assert.equal(fs.statSync(file).mtimeMs, mtimeAfterFirst, 'the file was not rewritten');
-});
-
-test('decideReview does not flip an already-decided record, not even the other way', async () => {
-  const dir = tmpDir();
-  seedReviews(dir, [
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'approved', decidedAt: 'earlier' },
-  ]);
-  const store = createFileStore({ dataDir: dir });
-  const result = await store.decideReview('rev_1', 'rejected', '2026-10-20T10:00:00.000Z');
-  assert.equal(result?.state, 'approved');
-  assert.equal(result?.decidedAt, 'earlier');
-  const line = JSON.parse(fs.readFileSync(reviewsFile(dir), 'utf8').trim());
-  assert.equal(line.state, 'approved');
-});
-
-test('decideReview returns null for an unknown ref', async () => {
-  const dir = tmpDir();
-  seedReviews(dir, [{ ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending' }]);
-  const store = createFileStore({ dataDir: dir });
-  assert.equal(await store.decideReview('rev_missing', 'approved', '2026-10-20T10:00:00.000Z'), null);
-});
-
-test('decideReview ignores a non-review record that happens to share the ref', async () => {
-  const dir = tmpDir();
-  seedReviews(dir, [
-    { ref: 'rev_1', type: 'something-else', state: 'pending' },
-    { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending' },
-  ]);
-  const store = createFileStore({ dataDir: dir });
-  const result = await store.decideReview('rev_1', 'approved', '2026-10-20T10:00:00.000Z');
-  assert.equal(result?.state, 'approved');
-  const lines = fs
-    .readFileSync(reviewsFile(dir), 'utf8')
-    .split('\n')
-    .filter((l) => l.trim() !== '')
-    .map((l) => JSON.parse(l));
-  assert.equal(lines[0].state, 'pending', 'the non-review record is not touched');
-});
-
-// --- error behaviour --------------------------------------------------------
-
 test('a corrupt file raises instead of silently returning an empty list', async () => {
   const dir = tmpDir();
   fs.mkdirSync(path.join(dir, 'portal'), { recursive: true });
@@ -247,49 +248,19 @@ test('a corrupt file raises instead of silently returning an empty list', async 
   );
 });
 
-test('a failed write raises (append never reports success for a lost write)', async () => {
-  const dir = tmpDir();
-  // A directory where the file should be -> the append must fail loudly.
-  fs.mkdirSync(path.join(dir, 'portal', 'comments.jsonl'), { recursive: true });
-  const store = createFileStore({ dataDir: dir });
-  await assert.rejects(
-    () => store.append('comments', { id: 'c1' }),
-    (e: unknown) => e instanceof StorageError && e.code === 'storage-unavailable',
-  );
-});
-
-test('exportAll drains every collection as raw JSONL lines', async () => {
-  const dir = tmpDir();
-  const store = createFileStore({ dataDir: dir });
-  await store.append('projects', { id: 'p1' });
-  await store.append('projects', { id: 'p2' });
-  const dump = await store.exportAll();
-  assert.deepEqual(dump.projects, ['{"id":"p1"}', '{"id":"p2"}']);
-  assert.deepEqual(dump.reviews, []);
-  assert.deepEqual(Object.keys(dump).sort(), [
-    'clients',
-    'comments',
-    'invites',
-    'planItems',
-    'projects',
-    'reviews',
-    'sessions',
-    'updates',
-  ]);
-});
-
 test('a file written by the adapter is byte-identical to the legacy rewriteJsonl format', async () => {
   const dir = tmpDir();
   const store = createFileStore({ dataDir: dir });
   await store.append('reviews', { ref: 'rev_1', type: 'review' });
   await store.append('reviews', { ref: 'rev_2', type: 'review' });
   const written = fs.readFileSync(reviewsFile(dir), 'utf8');
-  const legacy = [
-    { ref: 'rev_1', type: 'review' },
-    { ref: 'rev_2', type: 'review' },
-  ]
-    .map((r) => JSON.stringify(r))
-    .join('\n') + '\n';
+  const legacy =
+    [
+      { ref: 'rev_1', type: 'review' },
+      { ref: 'rev_2', type: 'review' },
+    ]
+      .map((r) => JSON.stringify(r))
+      .join('\n') + '\n';
   assert.equal(written, legacy);
   assert.ok(!written.includes('\n\n'), 'no blank lines');
 });
@@ -303,14 +274,49 @@ test('getStore defaults to the file adapter and honours PORTAL_DATA_DIR', async 
   assert.ok(fs.existsSync(path.join(dir, 'portal', 'projects.jsonl')));
 });
 
-test('getStore refuses an unknown backend and an unimplemented one', () => {
+test('getStore refuses an unknown backend', () => {
   assert.throws(
     () => getStore({ PORTAL_STORE: 'postgres' }),
     (e: unknown) => e instanceof StorageError && e.code === 'invalid-config',
   );
+});
+
+test('PORTAL_STORE=libsql fails closed without LIBSQL_URL and LIBSQL_TOKEN', () => {
   assert.throws(
     () => getStore({ PORTAL_STORE: 'libsql' }),
-    (e: unknown) => e instanceof StorageError && e.code === 'not-implemented',
+    (e: unknown) => e instanceof StorageError && e.code === 'invalid-config',
+  );
+  assert.throws(
+    () => getStore({ PORTAL_STORE: 'libsql', LIBSQL_URL: 'https://db.turso.io' }),
+    (e: unknown) => e instanceof StorageError && e.code === 'invalid-config',
+  );
+  assert.throws(
+    () => getStore({ PORTAL_STORE: 'libsql', LIBSQL_TOKEN: 'secret' }),
+    (e: unknown) => e instanceof StorageError && e.code === 'invalid-config',
+  );
+  // A turso:// URL is not an HTTP endpoint.
+  assert.throws(
+    () =>
+      getStore({
+        PORTAL_STORE: 'libsql',
+        LIBSQL_URL: 'turso://db.turso.io',
+        LIBSQL_TOKEN: 'secret',
+      }),
+    (e: unknown) => e instanceof StorageError && e.code === 'invalid-config',
+  );
+});
+
+test('PORTAL_STORE=libsql selects the libSQL adapter, not the file adapter', async () => {
+  // Port 1 is closed: the request fails immediately, without DNS and without
+  // touching port 4321. The file adapter would have answered an empty list.
+  const store = createLibsqlStoreFromEnv({
+    PORTAL_STORE: 'libsql',
+    LIBSQL_URL: 'http://127.0.0.1:1',
+    LIBSQL_TOKEN: 'test-token',
+  });
+  await assert.rejects(
+    () => store.list('projects'),
+    (e: unknown) => e instanceof StorageError && e.code === 'storage-unavailable',
   );
 });
 
@@ -319,8 +325,11 @@ test('the edge entry point refuses the file adapter (no writable disk on the edg
     () => getEdgeStore({ PORTAL_STORE: 'file' }),
     (e: unknown) => e instanceof StorageError && e.code === 'invalid-config',
   );
+});
+
+test('the edge entry point fails closed without LIBSQL_URL and LIBSQL_TOKEN', () => {
   assert.throws(
     () => getEdgeStore({ PORTAL_STORE: 'libsql' }),
-    (e: unknown) => e instanceof StorageError && e.code === 'not-implemented',
+    (e: unknown) => e instanceof StorageError && e.code === 'invalid-config',
   );
 });

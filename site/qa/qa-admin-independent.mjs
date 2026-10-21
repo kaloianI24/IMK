@@ -84,9 +84,12 @@ const STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 const SANDBOX = path.join(os.tmpdir(), 'opencode', `qa-admin-${STAMP}`);
 const WORK = path.join(SANDBOX, 'work');
 
-const SECRET = 'qa-admin-form-webhook-secret';
-const MAGIC_SECRET = 'qa-admin-magic-link-secret';
-const SESSION_SECRET = 'qa-admin-session-secret';
+// H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE -- the
+// published placeholder, or shorter than MIN_SECRET_LENGTH (32) -- is refused
+// exactly like a missing one, so every fixture below is 32+ characters long.
+const SECRET = 'qa-admin-form-webhook-secret-0123456789';
+const MAGIC_SECRET = 'qa-admin-magic-link-secret-0123456789';
+const SESSION_SECRET = 'qa-admin-session-secret-0123456789';
 const ADMIN_EMAIL = 'owner@imk.test';
 const OTHER_ADMIN_EMAIL = 'other.owner@imk.test';
 const CLIENT_EMAIL = 'client@imk.test';
@@ -256,6 +259,13 @@ function readJsonl(file) {
     .split(/\r?\n/)
     .filter((l) => l.trim())
     .map((l) => JSON.parse(l));
+}
+
+/** The state of the newest stored line of a ref. */
+function latestState(ref) {
+  const lines = readJsonl(REVIEWS_FILE).filter((l) => l.ref === ref);
+  if (!lines.length) return null;
+  return lines[lines.length - 1].state;
 }
 
 // ---------------------------------------------------------------------------
@@ -967,10 +977,39 @@ async function main() {
       expected,
       'the link signature does not match QA\'s own HMAC over ref|decision|revision|ts',
     );
-    const r = await moderate.request('GET', `${approve.pathname}${approve.search}`, {
+    // M-1 (wave-8A): the DECISION is the POST -- a GET only shows the
+    // confirmation page, so a mail scanner that prefetches the owner's link
+    // approves nothing. The signed parameters travel in the form body, the
+    // way the confirmation page's own form sends them.
+    const fields = new URLSearchParams();
+    for (const name of ['ref', 'decision', 'revision', 'ts', 'sig']) {
+      fields.set(name, approve.searchParams.get(name) || '');
+    }
+    const scanned = await moderate.request('GET', `${approve.pathname}${approve.search}`, {
       cookie: owner.adminCookie,
     });
+    assertEqual(
+      scanned.status,
+      200,
+      `the link must serve the confirmation page (got ${scanned.status}: ${scanned.text})`,
+    );
+    assert(
+      /<form[^>]*method="POST"/i.test(scanned.text),
+      'the confirmation page must offer a POST form (a GET must never decide)',
+    );
+    assertEqual(
+      latestState(REVIEW_REF),
+      'pending',
+      'a GET must not approve anything -- the quote must still be pending',
+    );
+
+    const r = await moderate.request('POST', '/api/moderate/review', {
+      cookie: owner.adminCookie,
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: fields.toString(),
+    });
     assertEqual(r.status, 200, `the moderation endpoint should accept the link (got ${r.status}: ${r.text})`);
+    assertEqual(r.json.state, 'approved', 'the decision must be approved');
     const lines = readJsonl(REVIEWS_FILE);
     const latest = lines.filter((l) => l.ref === REVIEW_REF).pop();
     assert(latest, 'the decision was not written to the store');
@@ -979,7 +1018,7 @@ async function main() {
       'approved',
       `the quote should be approved in the store (got ${latest.state})`,
     );
-    return `sig verified independently; the quote is now ${latest.state}`;
+    return `sig verified independently; the GET approved nothing, the POST made the quote ${latest.state}`;
   });
 
   await t('E11', 'the Cloudflare twin answers the SAME gate codes as the Vercel tree', async () => {
@@ -1130,17 +1169,30 @@ async function main() {
     copyDir(CF_DIR, path.join(copyRoot, 'site', 'functions'));
 
     // Put the defect back IN THE COPY: the allow-list no longer decides.
-    const target = path.join(copyRoot, 'api', 'admin', 'session.ts');
-    const original = fs.readFileSync(target, 'utf8');
-    const mutated = original.replace(
-      'return list.includes(String(email || \'\').trim().toLowerCase());',
-      'return true;',
-    );
+    //
+    // The rule itself lives in the SHARED module (wave-8A moved it there:
+    // site/shared/server/portal-session.ts); api/admin/session.ts only
+    // delegates to it. The probe therefore patches the shared copy -- and
+    // falls back to the admin route if the rule ever moves back.
+    const ANCHOR = "return list.includes(String(email || '').trim().toLowerCase());";
+    const candidates = [
+      path.join(copyRoot, 'site', 'shared', 'server', 'portal-session.ts'),
+      path.join(copyRoot, 'api', 'admin', 'session.ts'),
+    ];
+    let patched = null;
+    for (const candidate of candidates) {
+      if (!fs.existsSync(candidate)) continue;
+      const original = fs.readFileSync(candidate, 'utf8');
+      if (!original.includes(ANCHOR)) continue;
+      fs.writeFileSync(candidate, original.replace(ANCHOR, 'return true;'), 'utf8');
+      patched = candidate;
+      break;
+    }
     assert(
-      mutated !== original,
-      'the mutation did not apply - the probe would be vacuous',
+      patched !== null,
+      'the mutation did not apply - the probe would be vacuous ' +
+        `(no copy of the allow-list rule matched: ${candidates.join(', ')})`,
     );
-    fs.writeFileSync(target, mutated, 'utf8');
 
     const outFile = path.join(WORK, 'probe-results.json');
     let probe = null;

@@ -7,18 +7,26 @@
 
 import { IncomingMessage, ServerResponse } from 'node:http';
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { readJsonlFile, guardStorage } from '../lib/jsonl.js';
 import {
-  resolveSession,
+  getPortalStore,
+  guardStore,
+  storageFailureLog,
+} from '../../site/shared/server/portal-store-access.js';
+import {
+  resolveAccess,
+  resolveOwnerSession,
+  canReadClient,
+  canWriteClient,
   expectedOrigin,
   baseUrlConfigured,
 } from './session.js';
 
-const PORTAL_DATA_DIR = path.resolve(process.cwd(), 'site/data/portal');
-const PROJECTS_FILE = path.join(PORTAL_DATA_DIR, 'projects.jsonl');
-const PLAN_ITEMS_FILE = path.join(PORTAL_DATA_DIR, 'planItems.jsonl');
+// THE STORE (wave 9)
+//   The collections come from the PortalStore contract
+//   (site/shared/portal-store/**), not from a JSONL file: with
+//   PORTAL_STORE=libsql the portal persists on a read-only filesystem
+//   (Vercel), and with PORTAL_STORE=file the very same records land in the
+//   very same site/data/portal/*.jsonl files as before.
 
 const PLAN_ITEM_STATUSES = ['todo', 'in-progress', 'done', 'blocked'];
 
@@ -41,22 +49,11 @@ function json(
  * Read a store file. A malformed line is an ERROR (audit M3 / QA D3): it must
  * not turn the collection into an empty list, because "empty" reads as "no
  * plan items" — a silent outage wearing the costume of a normal answer.
+ *
+ * The store itself enforces that rule (a corrupt store raises, it never
+ * returns an empty list), so the handler only has to let the error through
+ * to guardStore(), which answers 500 {code:'storage'}.
  */
-function readJsonl(file: string): Array<Record<string, any>> {
-  return readJsonlFile(file);
-}
-
-function appendJsonl(file: string, record: Record<string, any>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
-}
-
-function rewriteJsonl(file: string, records: Array<Record<string, any>>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const content = records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '');
-  fs.writeFileSync(file, content, 'utf8');
-}
-
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -64,14 +61,6 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
-}
-
-function projectAccessible(
-  project: Record<string, any>,
-  session: { email: string; role: 'admin' | 'client'; clientId?: string },
-): boolean {
-  if (session.role === 'admin') return true;
-  return project.clientId === session.clientId;
 }
 
 async function handler(
@@ -82,13 +71,20 @@ async function handler(
   const pathname = url.pathname;
   const method = req.method || 'GET';
 
-  const session = resolveSession(req);
-  if (!session) {
+  // ONE reading of the cookies, TWO decisions (M-4, M-5): the READ scope is
+  // the client's own, the WRITE gate is the owner's (role claim AND the live
+  // allow-list).
+  const access = resolveAccess(req);
+  const session = access.session;
+
+  // Nobody is signed in at all -> 401, on every path.
+  if (!access.any) {
     json(res, { error: 'authentication required', code: 'unauthorized' }, 401);
     return;
   }
 
-  const projects = readJsonl(PROJECTS_FILE);
+  const store = getPortalStore();
+  const projects = await store.list('projects');
 
   function findProject(id: string): Record<string, any> | undefined {
     return projects.find((p) => p.id === id);
@@ -101,10 +97,14 @@ async function handler(
   // visible to the checker.
   const checkOwnership = (
     projectId: string,
+    write: boolean,
   ): { project: Record<string, any> } | { error: any; status: number } => {
     const project = findProject(projectId);
     if (!project) return { error: { error: 'project not found', code: 'not-found' }, status: 404 };
-    if (!projectAccessible(project, session)) {
+    const allowed = write
+      ? canWriteClient(access, project.clientId)
+      : canReadClient(access, project.clientId);
+    if (!allowed) {
       return { error: { error: 'forbidden', code: 'forbidden' }, status: 403 };
     }
     return { project };
@@ -112,22 +112,27 @@ async function handler(
 
   // ---- GET /api/portal/plan-items ----
   if (pathname === '/api/portal/plan-items' && method === 'GET') {
+    // The READ scope: a client session, or the owner gate (Architect §4.3).
+    if (!session) {
+      json(res, { error: 'authentication required', code: 'unauthorized' }, 401);
+      return;
+    }
     const projectId = url.searchParams.get('projectId');
-    const all = readJsonl(PLAN_ITEMS_FILE);
+    const all = await store.list('planItems');
 
     let filtered = all;
     if (projectId) {
-      const ownership = checkOwnership(projectId);
+      const ownership = checkOwnership(projectId, false);
       if ('error' in ownership) {
         json(res, ownership.error, ownership.status);
         return;
       }
       filtered = all.filter((i) => i.projectId === projectId);
     } else {
-      // No projectId: client sees own projects only; admin sees all
-      const accessibleProjectIds = session.role === 'admin'
-        ? projects.map((p) => p.id)
-        : projects.filter((p) => projectAccessible(p, session)).map((p) => p.id);
+      // No projectId: the client sees own projects only; the owner sees all
+      const accessibleProjectIds = projects
+        .filter((p) => canReadClient(access, p.clientId))
+        .map((p) => p.id);
       filtered = all.filter((i) => accessibleProjectIds.includes(i.projectId));
     }
 
@@ -160,15 +165,13 @@ async function handler(
       return;
     }
 
-    const items = readJsonl(PLAN_ITEMS_FILE);
-    const idx = items.findIndex((i) => i.id === planItemId);
-    if (idx === -1) {
+    const item = await store.get('planItems', { field: 'id', value: planItemId });
+    if (!item) {
       json(res, { error: 'plan item not found', code: 'not-found' }, 404);
       return;
     }
 
-    const item = items[idx];
-    const ownership = checkOwnership(item.projectId);
+    const ownership = checkOwnership(item.projectId, true);
     if ('error' in ownership) {
       json(res, ownership.error, ownership.status);
       return;
@@ -183,27 +186,35 @@ async function handler(
       return;
     }
 
+    // The patch holds ONLY the fields this request changes.
+    const patch: Record<string, any> = {};
+
     if (body.status !== undefined) {
       if (!PLAN_ITEM_STATUSES.includes(body.status)) {
         json(res, { error: 'invalid status', code: 'validation', fields: ['status'] }, 400);
         return;
       }
-      item.status = body.status;
-      item.updatedAt = new Date().toISOString();
+      patch.status = body.status;
+      patch.updatedAt = new Date().toISOString();
 
-      // Client approve / request-change tracking
-      if (session.role === 'client') {
+      // Client approve / request-change tracking.
+      //
+      // Only a CLIENT's own change counts as an approval. The owner editing
+      // a status is not a client approval, so the tracking is bound to the
+      // client session and NOT to the owner gate: a request that passes the
+      // owner gate is the owner's action, whoever else is signed in.
+      if (!access.owner && access.client) {
         if (body.status === 'done') {
-          item.approvedBy = session.email;
-          item.approvedAt = new Date().toISOString();
-          item.requestChangeBy = undefined;
-          item.requestChangeAt = undefined;
+          patch.approvedBy = access.client.email;
+          patch.approvedAt = new Date().toISOString();
+          patch.requestChangeBy = undefined;
+          patch.requestChangeAt = undefined;
         } else if (body.status === 'in-progress' || body.status === 'todo') {
           // Client requesting change: revert from done
-          item.requestChangeBy = session.email;
-          item.requestChangeAt = new Date().toISOString();
-          item.approvedBy = undefined;
-          item.approvedAt = undefined;
+          patch.requestChangeBy = access.client.email;
+          patch.requestChangeAt = new Date().toISOString();
+          patch.approvedBy = undefined;
+          patch.approvedAt = undefined;
         }
       }
     }
@@ -214,7 +225,7 @@ async function handler(
         json(res, { error: 'invalid title', code: 'validation', fields: ['title'] }, 400);
         return;
       }
-      item.title = title;
+      patch.title = title;
     }
     if (body.description !== undefined) {
       const desc = String(body.description).trim();
@@ -222,30 +233,41 @@ async function handler(
         json(res, { error: 'description too long', code: 'validation', fields: ['description'] }, 400);
         return;
       }
-      item.description = desc ? desc : undefined;
+      patch.description = desc ? desc : undefined;
     }
 
-    items[idx] = item;
-    rewriteJsonl(PLAN_ITEMS_FILE, items);
+    await store.update('planItems', { id: planItemId }, patch);
+
+    const updated = { ...item, ...patch };
+
+    // The actor is the owner when the owner gate passed, the client
+    // otherwise — the same decision the scope above was made with.
+    const actor = access.owner || access.client;
+    if (!actor) {
+      json(res, { error: 'forbidden', code: 'forbidden' }, 403);
+      return;
+    }
 
     console.log(
       JSON.stringify({
         ts: Date.now(),
         outcome: 'plan_item_updated',
         planItemId,
-        status: item.status,
-        updatedBy: session.email,
-        role: session.role,
+        status: updated.status,
+        updatedBy: actor.email,
+        role: actor.role,
       }),
     );
 
-    json(res, { ok: true, planItem: item }, 200);
+    json(res, { ok: true, planItem: updated }, 200);
     return;
   }
 
   // ---- POST /api/portal/plan-items ----
   if (pathname === '/api/portal/plan-items' && method === 'POST') {
-    if (session.role !== 'admin') {
+    // The OWNER gate (M-4): the role claim AND the live allow-list.
+    const owner = resolveOwnerSession(req, process.env);
+    if (!owner) {
       json(res, { error: 'forbidden', code: 'forbidden' }, 403);
       return;
     }
@@ -274,7 +296,7 @@ async function handler(
 
     // body.projectId is optional in the payload. Coerced, not validated, so
     // the "project not found" behaviour for a missing id is unchanged.
-    const ownership = checkOwnership(String(body.projectId ?? ''));
+    const ownership = checkOwnership(String(body.projectId ?? ''), true);
     if ('error' in ownership) {
       json(res, ownership.error, ownership.status);
       return;
@@ -292,7 +314,7 @@ async function handler(
       return;
     }
 
-    const allItems = readJsonl(PLAN_ITEMS_FILE);
+    const allItems = await store.list('planItems');
     const projectItems = allItems.filter((i) => i.projectId === body.projectId);
     const order = body.order ?? (projectItems.length > 0 ? Math.max(...projectItems.map((i) => i.order || 0)) + 1 : 1);
 
@@ -306,7 +328,7 @@ async function handler(
       createdAt: new Date().toISOString(),
     };
 
-    appendJsonl(PLAN_ITEMS_FILE, planItem);
+    await store.append('planItems', planItem);
 
     console.log(
       JSON.stringify({
@@ -314,7 +336,7 @@ async function handler(
         outcome: 'plan_item_created',
         planItemId: planItem.id,
         projectId: body.projectId,
-        createdBy: session.email,
+        createdBy: owner.email,
       }),
     );
 
@@ -330,17 +352,10 @@ export default function (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  return guardStorage(
+  return guardStore(
     () => handler(req, res),
     (err) => {
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          outcome: 'storage_corrupt',
-          file: err.file,
-          line: err.line,
-        }),
-      );
+      console.log(JSON.stringify(storageFailureLog(err)));
       json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     },
   );

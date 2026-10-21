@@ -84,10 +84,15 @@ const STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 const SANDBOX = path.join(os.tmpdir(), 'opencode', `qa-wave5-${STAMP}`);
 const WORK = path.join(SANDBOX, 'work');
 
-const SECRET = 'qa-wave5-form-webhook-secret';
-const MAGIC_SECRET = 'qa-wave5-magic-link-secret';
-const SESSION_SECRET = 'qa-wave5-session-secret';
-const OTHER_SESSION_SECRET = 'qa-wave5-other-session-secret';
+// H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE -- the
+// published placeholder, or shorter than MIN_SECRET_LENGTH (32) -- is refused
+// exactly like a missing one, so every fixture below is 32+ characters long.
+// They stay distinguishable from each other: OTHER_SESSION_SECRET must not
+// verify a token signed with SESSION_SECRET (check A7).
+const SECRET = 'qa-wave5-form-webhook-secret-0123456789';
+const MAGIC_SECRET = 'qa-wave5-magic-link-secret-0123456789';
+const SESSION_SECRET = 'qa-wave5-session-secret-0123456789';
+const OTHER_SESSION_SECRET = 'qa-wave5-other-session-secret-0123456789';
 const ADMIN_EMAIL = 'owner@imk.test';
 const CLIENT_EMAIL = 'client@imk.test';
 const SITE_ORIGIN = 'https://imk.test';
@@ -684,6 +689,25 @@ function qaModerationPath(ref, decision, revision, ts) {
   );
 }
 
+/**
+ * The body of the confirmation form.
+ *
+ * M-1 (wave-8A): the DECISION is the POST the page's form issues; the signed
+ * parameters travel in the body. A GET only shows the page.
+ */
+function qaModerationForm(ref, decision, revision, ts) {
+  const sig = qaSignModeration(ref, decision, revision, ts);
+  return new URLSearchParams({
+    ref: String(ref),
+    decision: String(decision),
+    revision: String(revision),
+    ts: String(ts),
+    sig: String(sig),
+  }).toString();
+}
+
+const FORM_HEADERS = { 'content-type': 'application/x-www-form-urlencoded' };
+
 function tokenFromMail(mail) {
   const m = /(https?:\/\/\S*\/login\/verify\?token=([^\s&"']+))/.exec(String(mail.text || ''));
   assert(m, `no sign-in link in the mail: ${JSON.stringify(mail).slice(0, 300)}`);
@@ -983,13 +1007,48 @@ async function main() {
     const child = await startChild('b1-moderate', moderateBundle);
     try {
       const ts = Math.floor(Date.now() / 1000);
-      const r = await child.request('GET', qaModerationPath('inq_wave5', 'approve', 1, ts));
+      // The DECISION is the POST (M-1, wave-8A).
+      const r = await child.request('POST', '/api/moderate/review', {
+        body: qaModerationForm('inq_wave5', 'approve', 1, ts),
+        headers: FORM_HEADERS,
+      });
       assertEqual(r.status, 200, `approve should be 200 (got ${r.status}: ${r.text})`);
       assert(r.json && r.json.state === 'approved', `unexpected body: ${r.text}`);
       const rows = readJsonl(REVIEWS_FILE);
       assertEqual(rows.length, 1, 'the store should hold exactly one record');
       assertEqual(rows[0].state, 'approved', 'the store was not updated');
       return `approved and written to ${path.basename(REVIEWS_FILE)}`;
+    } finally {
+      await child.stop();
+    }
+  });
+
+  await t('B1b', 'M-1: a GET on the signed link shows the confirmation page and decides NOTHING', async () => {
+    seedReview('pending');
+    const child = await startChild('b1b-moderate', moderateBundle);
+    try {
+      const ts = Math.floor(Date.now() / 1000);
+      // What every mail scanner does by itself: fetch the link.
+      const page = await child.request('GET', qaModerationPath('inq_wave5', 'approve', 1, ts));
+      assertEqual(page.status, 200, `the GET must serve the confirmation page (got ${page.status}: ${page.text})`);
+      assert(
+        /<form[^>]*method="POST"/i.test(page.text),
+        'the confirmation page must offer a POST form (a GET must never decide)',
+      );
+      const rows = readJsonl(REVIEWS_FILE);
+      assertEqual(rows.length, 1, 'the store must not grow');
+      assertEqual(rows[0].state, 'pending', 'a GET must not approve anything');
+      assertEqual(rows[0].decidedAt, undefined, 'a GET must not stamp a decision time');
+
+      // ...and the POST of the same link is the decision.
+      const decided = await child.request('POST', '/api/moderate/review', {
+        body: qaModerationForm('inq_wave5', 'approve', 1, ts),
+        headers: FORM_HEADERS,
+      });
+      assertEqual(decided.status, 200, `the POST must decide (got ${decided.status}: ${decided.text})`);
+      assert(decided.json && decided.json.state === 'approved', `unexpected body: ${decided.text}`);
+      assertEqual(readJsonl(REVIEWS_FILE)[0].state, 'approved', 'the store was not updated');
+      return 'the GET served the page and approved nothing; the POST approved the quote';
     } finally {
       await child.stop();
     }
@@ -1048,7 +1107,11 @@ async function main() {
       let r;
       try {
         const ts = Math.floor(Date.now() / 1000);
-        r = await child.request('GET', qaModerationPath('inq_wave5', 'approve', 1, ts));
+        // The DECISION is the POST (M-1, wave-8A).
+        r = await child.request('POST', '/api/moderate/review', {
+          body: qaModerationForm('inq_wave5', 'approve', 1, ts),
+          headers: FORM_HEADERS,
+        });
       } finally {
         fs.chmodSync(REVIEWS_FILE, 0o644);
       }
@@ -1110,6 +1173,11 @@ async function main() {
           readFileSync: (p, enc) => realFs.readFileSync(path.resolve(process.cwd(), p), enc),
           writeFileSync: (p, data, enc) => realFs.writeFileSync(path.resolve(process.cwd(), p), data, enc),
           mkdirSync: (p, opts) => realFs.mkdirSync(path.resolve(process.cwd(), p), opts),
+          // The moderation log is written ATOMICALLY (temp file + rename), so
+          // a mock without renameSync fails exactly where the decision is
+          // written.
+          renameSync: (from, to) =>
+            realFs.renameSync(path.resolve(process.cwd(), from), path.resolve(process.cwd(), to)),
         };
       }
       return require(id);
@@ -1426,7 +1494,16 @@ async function main() {
       code = typeof err.status === 'number' ? err.status : 1;
       stdout = `${stdout || ''}${err.stdout || ''}${err.stderr || ''}`;
     }
-    const parsed = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+    let parsed = null;
+    try {
+      parsed = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+    } catch (err) {
+      // The child died before it could write its report: say so with the
+      // child's own output instead of an ENOENT that hides the cause.
+      throw new Error(
+        `the probe run produced no report (${err.message}). The child said:\n${stdout.slice(0, 4000)}`,
+      );
+    }
     return { code, results: parsed.results, stdout };
   }
 
@@ -1554,6 +1631,65 @@ async function main() {
         'export function baseUrlConfigured(env?: any): boolean { return !!configuredBaseUrl(env) || !isProductionEnv(env); }',
         'export function isSecureBaseUrl(env?: any): boolean { return baseUrl(env).indexOf("https://") === 0; }',
         'export function expectedOrigin(env?: any): string { return new URL(baseUrl(env)).origin; }',
+        // The tree imports the access helpers from './session.js' as well, so
+        // the fake has to provide them: without them the MUTATED COPY does
+        // not even build, and the probe would prove nothing.
+        'export function sessionSecretProblem(env?: any): string | null {',
+        "  const e = env || (globalThis as any).process?.env || {};",
+        "  const raw = String((e.PORTAL_SESSION_SECRET || e.PORTAL_MAGIC_LINK_SECRET || '').trim());",
+        "  if (!raw) return isProductionEnv(e) ? 'missing' : null;",
+        '  if (!isProductionEnv(e)) return null;',
+        "  return raw.length < 32 ? 'too-short' : null;",
+        '}',
+        'export function adminEmailsConfigured(env?: any): boolean {',
+        "  const e = env || (globalThis as any).process?.env || {};",
+        "  return String(e.ADMIN_EMAILS || '').split(',').map((x: string) => x.trim().toLowerCase()).filter(Boolean).length > 0;",
+        '}',
+        'export function isAdminEmail(email: string, env?: any): boolean {',
+        "  const e = env || (globalThis as any).process?.env || {};",
+        "  const list = String(e.ADMIN_EMAILS || '').split(',').map((x: string) => x.trim().toLowerCase()).filter(Boolean);",
+        '  return list.indexOf(String(email || "").trim().toLowerCase()) !== -1;',
+        '}',
+        'export function effectiveRole(session: any, env?: any): any {',
+        '  if (!session) return null;',
+        "  if (session.role !== 'admin') return 'client';",
+        '  return isAdminEmail(session.email, env) ? "admin" : "client";',
+        '}',
+        'export function resolveAccess(source: any, env?: any): any {',
+        '  const cookies = readSessionCookies(source);',
+        '  const client = cookies.client ? parseSession(cookies.client, env) : null;',
+        '  const admin = cookies.admin ? parseSession(cookies.admin, env) : null;',
+        '  const owner = admin && admin.role === "admin" && isAdminEmail(admin.email, env) ? admin : null;',
+        '  return { client: client, owner: owner, session: client || owner, any: client || admin };',
+        '}',
+        'export function resolveClientSession(source: any, env?: any): any { return resolveAccess(source, env).session; }',
+        'export function canReadClient(access: any, clientId?: string): boolean {',
+        '  if (access.client) {',
+        '    if (!access.client.clientId) return false;',
+        '    return access.client.clientId === clientId;',
+        '  }',
+        '  return !!access.owner;',
+        '}',
+        'export function canWriteClient(access: any, clientId?: string): boolean {',
+        '  if (access.owner) return true;',
+        '  if (!access.client || !access.client.clientId) return false;',
+        '  return access.client.clientId === clientId;',
+        '}',
+        'export function resolveOwnerSession(source: any, env?: any, sessionEnv?: any): any {',
+        '  const cookies = readSessionCookies(source);',
+        '  if (!cookies.admin) return null;',
+        '  const s = parseSession(cookies.admin, sessionEnv || env);',
+        '  if (!s) return null;',
+        "  if (s.role !== 'admin') return null;",
+        '  if (!isAdminEmail(s.email, env)) return null;',
+        '  return s;',
+        '}',
+        // The route file itself (wave-8A): the fake is a module, not a
+        // handler, so the route answers "not found".
+        'export default async function handler(req: any, res: any): Promise<void> {',
+        "  res.writeHead(404, { 'Content-Type': 'application/json' });",
+        "  res.end(JSON.stringify({ error: 'not found', code: 'not-found' }));",
+        '}',
         '',
       ].join('\n'),
       'utf8',
@@ -1570,18 +1706,33 @@ async function main() {
     return `mutated copy: A1=${a1} (one bundle still works), A2=${a2} (cross-bundle is broken again)`;
   });
 
-  await t('D2', 'F-3 reverted (an unguarded writeReviews) -> the unwritable-store check goes RED', async () => {
+  await t('D2', 'F-3 reverted (an unguarded store failure) -> the unwritable-store check goes RED', async () => {
     const root = copyTree('f3');
-    const reviewFile = path.join(root, 'api', 'moderate', 'review.ts');
+    // Wave 9 moved the write into the store, so the old `writeReviews()`
+    // function is gone. The DEFECT F-3 found is still there in a different
+    // shape: a store failure that is NOT caught escapes the handler and the
+    // request dies with an unhandled error instead of answering
+    // 500 {code:'storage'}. The guard that prevents it lives in
+    // site/shared/server/portal-store-access.ts — so that is what the
+    // mutation removes.
+    const accessFile = path.join(
+      root,
+      'site',
+      'shared',
+      'server',
+      'portal-store-access.ts',
+    );
     replaceFunction(
-      reviewFile,
-      'function writeReviews(',
+      accessFile,
+      'export async function guardStore<T>(',
       [
-        'function writeReviews(reviews: Array<Record<string, any>>): boolean {',
-        "  fs.mkdirSync(REVIEWS_DIR, { recursive: true });",
-        "  const content = reviews.map((r) => JSON.stringify(r)).join('\\n') + (reviews.length ? '\\n' : '');",
-        "  fs.writeFileSync(REVIEWS_FILE, content, 'utf8');",
-        '  return true;',
+        'export async function guardStore<T>(',
+        '  fn: () => Promise<T> | T,',
+        '  onError: (err: StorageError | StorageCorruptError) => T,',
+        '): Promise<T> {',
+        '  // QA MUTATION (F-3): the store failure is NOT guarded — it throws',
+        '  // out of the handler, exactly as the old unguarded write did.',
+        '  return await fn();',
         '}',
       ].join('\n'),
     );
@@ -1593,7 +1744,7 @@ async function main() {
       /threw|throw|error/i.test(detail),
       `B4 failed for an unexpected reason: ${detail}`,
     );
-    return `mutated copy: B4=${b4} (the handler throws out of the write again)`;
+    return `mutated copy: B4=${b4} (the handler throws out of the store failure again)`;
   });
 
   await t('D3', 'F-4 reverted (only EEXIST is busy) -> the delete-pending check goes RED', async () => {

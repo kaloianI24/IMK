@@ -4,7 +4,7 @@
 //   POST   /api/portal/projects        — create project (owner only, deferred)
 //   PATCH  /api/portal/projects/:id    — update project status (owner only, deferred)
 
-import { resolveSession, expectedOrigin, type Role } from './session.js';
+import { resolveAccess, resolveOwnerSession, canReadClient, expectedOrigin } from './session.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 
 const PROJECTS_FILE = 'site/data/portal/projects.jsonl';
@@ -35,14 +35,6 @@ async function readJsonl(file: string): Promise<Array<Record<string, any>>> {
   return parseJsonlStrict(fs.readFileSync(file, 'utf8'), file);
 }
 
-function projectAccessible(
-  project: Record<string, any>,
-  session: { email: string; role: Role; clientId?: string },
-): boolean {
-  if (session.role === 'admin') return true;
-  return project.clientId === session.clientId;
-}
-
 const handleGet: any = async (ctx: any): Promise<Response> => {
   const { request, env } = ctx;
   const url = new URL(request.url);
@@ -59,7 +51,19 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
 
   // The signing secret comes from the request's env — a Worker has no
   // process.env (audit wave-6, F-2: one shared, stateless session module).
-  const session = resolveSession(request.headers, undefined, env);
+  //
+  // The READ scope is the client's own, even when an owner cookie is
+  // present (M-5, Architect §4.3); the owner (no client cookie) reads every
+  // project.
+  const access = resolveAccess(request.headers, env);
+  const session = access.session;
+
+  // Nobody is signed in at all -> 401, on every path.
+  if (!access.any) {
+    return json({ error: 'authentication required', code: 'unauthorized' }, 401);
+  }
+
+  // The READ scope: a client session, or the owner gate (Architect §4.3).
   if (!session) {
     return json({ error: 'authentication required', code: 'unauthorized' }, 401);
   }
@@ -67,9 +71,7 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
   const projects = await readJsonl(PROJECTS_FILE);
 
   if (pathname === '/api/portal/projects') {
-    const visible = session.role === 'admin'
-      ? projects
-      : projects.filter((p) => projectAccessible(p, session));
+    const visible = projects.filter((p) => canReadClient(access, p.clientId));
     return json({ ok: true, projects: visible }, 200);
   }
 
@@ -80,7 +82,7 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
     if (!project) {
       return json({ error: 'project not found', code: 'not-found' }, 404);
     }
-    if (!projectAccessible(project, session)) {
+    if (!canReadClient(access, project.clientId)) {
       return json({ error: 'forbidden', code: 'forbidden' }, 403);
     }
     return json({ ok: true, project }, 200);
@@ -91,10 +93,11 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
 
 export const onRequestPost: any = async (ctx: any): Promise<Response> => {
   const { request, env } = ctx;
-  // The signing secret comes from the request's env — a Worker has no
+  // The OWNER gate (M-4): the role claim AND the live allow-list. The
+  // signing secret comes from the request's env — a Worker has no
   // process.env (audit wave-6, F-2: one shared, stateless session module).
-  const session = resolveSession(request.headers, undefined, env);
-  if (!session || session.role !== 'admin') {
+  const owner = resolveOwnerSession(request.headers, env, env);
+  if (!owner) {
     return json({ error: 'forbidden', code: 'forbidden' }, 403);
   }
   const origin = request.headers.get('origin') || '';
@@ -107,10 +110,11 @@ export const onRequestPost: any = async (ctx: any): Promise<Response> => {
 
 export const onRequestPatch: any = async (ctx: any): Promise<Response> => {
   const { request, env } = ctx;
-  // The signing secret comes from the request's env — a Worker has no
+  // The OWNER gate (M-4): the role claim AND the live allow-list. The
+  // signing secret comes from the request's env — a Worker has no
   // process.env (audit wave-6, F-2: one shared, stateless session module).
-  const session = resolveSession(request.headers, undefined, env);
-  if (!session || session.role !== 'admin') {
+  const owner = resolveOwnerSession(request.headers, env, env);
+  if (!owner) {
     return json({ error: 'forbidden', code: 'forbidden' }, 403);
   }
   const origin = request.headers.get('origin') || '';

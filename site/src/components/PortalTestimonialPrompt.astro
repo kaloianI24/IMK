@@ -292,9 +292,49 @@ const ratingValues = [1, 2, 3, 4, 5];
   // The owner's portal is a management view, not an invitation to answer the
   // ask: GET /api/portal/testimonials answers 200 for an admin (owner view)
   // and POST answers 403, so showing the form to the owner would be a dead
-  // end. The role is read the same way the portal reads it for its own
-  // admin-only reveals (sessionStorage `imk_portal_role`, set at sign-in).
-  const sessionRole = (sessionStorage.getItem('imk_portal_role') as 'admin' | 'client' | null) ?? 'client';
+  // end.
+  //
+  // The role is the SERVER's answer. The portal page asks
+  // GET /api/portal/session on load and dispatches `imk:portal-role` with the
+  // result. It used to be read from sessionStorage, which is per tab: a NEW
+  // TAB has an empty sessionStorage while the cookie still says admin, so the
+  // owner was asked to answer their own ask. Until the role arrives the card
+  // assumes the client view — the fail-safe direction: an owner is never
+  // invited, and a client is never locked out.
+  let sessionRole: 'admin' | 'client' = 'client';
+  let roleSettled = false;
+  let roleWaiter: (() => void) | null = null;
+
+  function settleRole(next: 'admin' | 'client'): void {
+    sessionRole = next;
+    roleSettled = true;
+    if (roleWaiter) {
+      roleWaiter();
+      roleWaiter = null;
+    }
+  }
+
+  document.addEventListener('imk:portal-role', (event) => {
+    const detail = (event as CustomEvent).detail as { role?: string } | undefined;
+    const claimed = String(detail?.role ?? '').trim().toLowerCase();
+    settleRole(claimed === 'admin' ? 'admin' : 'client');
+  });
+
+  /**
+   * Wait for the role — but not forever. If the page never answers (the
+   * endpoint is not deployed), the card falls back to the client view
+   * instead of staying hidden for good.
+   */
+  function whenRoleKnown(): Promise<void> {
+    if (roleSettled) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      roleWaiter = resolve;
+      setTimeout(() => {
+        roleWaiter = null;
+        resolve();
+      }, 2500);
+    });
+  }
 
   function setMessage(text: string, isError = false): void {
     if (!msgEl) return;
@@ -426,30 +466,37 @@ const ratingValues = [1, 2, 3, 4, 5];
   // The portal page tells us which project is loaded; the card decides
   // whether the client is actually being asked (RP-3.2).
   document.addEventListener('imk:portal-project', (event) => {
-    // Owner session: the card never opens, whatever the project says.
-    if (sessionRole === 'admin') {
-      hide();
-      return;
-    }
-
     const detail = (event as CustomEvent).detail as
       | { projectId?: string; status?: string; testimonialStatus?: string | null }
       | undefined;
-    if (!detail || !detail.projectId) return;
 
-    projectId = detail.projectId;
+    // The role can still be in flight: the portal page asks the server who
+    // the browser is BEFORE it loads the project, but the answer may arrive
+    // after the project event. Decide once the role is known, so the owner is
+    // never asked to answer their own ask — and never sees the card flash.
+    void whenRoleKnown().then(() => {
+      // Owner session: the card never opens, whatever the project says.
+      if (sessionRole === 'admin') {
+        hide();
+        return;
+      }
 
-    const testimonialStatus = detail.testimonialStatus ?? null;
-    const eligible =
-      testimonialStatus === 'requested' ||
-      (testimonialStatus === null && detail.status === 'completed');
+      if (!detail || !detail.projectId) return;
 
-    if (!eligible) {
-      hide();
-      return;
-    }
+      projectId = detail.projectId;
 
-    void loadExisting();
+      const testimonialStatus = detail.testimonialStatus ?? null;
+      const eligible =
+        testimonialStatus === 'requested' ||
+        (testimonialStatus === null && detail.status === 'completed');
+
+      if (!eligible) {
+        hide();
+        return;
+      }
+
+      void loadExisting();
+    });
   });
 
   form?.addEventListener('submit', async (event) => {

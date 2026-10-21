@@ -8,16 +8,16 @@
       "group": "A -- the route table, derived by QA from the sources",
       "name": "every /api URL the front-end calls has a function file in BOTH trees",
       "status": "PASS",
-      "ms": 20,
-      "detail": "17 client routes, all served in both trees"
+      "ms": 22,
+      "detail": "18 client routes, all served in both trees"
     },
     {
       "id": "A2",
       "group": "A -- the route table, derived by QA from the sources",
       "name": "every /api path the server names has a function file in BOTH trees",
       "status": "PASS",
-      "ms": 19,
-      "detail": "14 server routes, all served in both trees"
+      "ms": 18,
+      "detail": "15 server routes, all served in both trees"
     },
     {
       "id": "A3",
@@ -40,7 +40,7 @@
       "group": "B -- the route manifest check is not vacuous",
       "name": "CONTROL: the route check passes on the current tree",
       "status": "PASS",
-      "ms": 190,
+      "ms": 175,
       "detail": "exit 0 on the untouched copy"
     },
     {
@@ -48,7 +48,7 @@
       "group": "B -- the route manifest check is not vacuous",
       "name": "the route check FAILS when a static route file is missing (on a COPY)",
       "status": "PASS",
-      "ms": 83,
+      "ms": 74,
       "detail": "exit != 0, the missing route is named, the repo is unchanged"
     },
     {
@@ -56,7 +56,7 @@
       "group": "B -- the route manifest check is not vacuous",
       "name": "the route check FAILS when a dynamic route file is missing (on a COPY)",
       "status": "PASS",
-      "ms": 186,
+      "ms": 171,
       "detail": "exit != 0, the dynamic route is named"
     },
     {
@@ -72,7 +72,7 @@
       "group": "C -- the CI static invariant check (F-2)",
       "name": "the new CI steps call npm scripts that exist",
       "status": "PASS",
-      "ms": 0,
+      "ms": 1,
       "detail": "check:routes and typecheck:api exist and are wired into CI"
     },
     {
@@ -80,7 +80,7 @@
       "group": "C -- the CI static invariant check (F-2)",
       "name": "the api/ tree is outside the CI working-directory and the paths say so",
       "status": "PASS",
-      "ms": 1,
+      "ms": 0,
       "detail": "working-directory: site, ../api/contact.ts and functions/api/contact.ts both exist"
     },
     {
@@ -88,7 +88,7 @@
       "group": "D -- the by-id handlers (F-1)",
       "name": "the owner edits a project with the id in the PATH",
       "status": "PASS",
-      "ms": 4,
+      "ms": 5,
       "detail": "status -> in-progress"
     },
     {
@@ -104,7 +104,7 @@
       "group": "D -- the by-id handlers (F-1)",
       "name": "a foreign project id is still refused",
       "status": "PASS",
-      "ms": 6,
+      "ms": 4,
       "detail": "GET foreign -> 403, PATCH foreign -> 403, unknown id -> 404"
     },
     {
@@ -112,7 +112,7 @@
       "group": "D -- the by-id handlers (F-1)",
       "name": "a plan item is edited with the id in the PATH and in req.query.id",
       "status": "PASS",
-      "ms": 8,
+      "ms": 9,
       "detail": "path -> done, query.id -> in-progress, foreign -> 403, unknown -> 404"
     },
     {
@@ -120,7 +120,7 @@
       "group": "D -- the by-id handlers (F-1)",
       "name": "the by-id routes are reachable on the deployed target (the route files really export a handler)",
       "status": "PASS",
-      "ms": 33,
+      "ms": 36,
       "detail": "both by-id route files export a callable handler"
     },
     {
@@ -136,7 +136,7 @@
       "group": "E -- the wave-3 regressions, kept (D-1 and D-2)",
       "name": "the same corrupt store answers 500 storage on the Vercel tree",
       "status": "PASS",
-      "ms": 3,
+      "ms": 4,
       "detail": "500 {code:storage}"
     },
     {
@@ -144,7 +144,7 @@
       "group": "E -- the wave-3 regressions, kept (D-1 and D-2)",
       "name": "a busy lock must not escape as a raw platform error (the limiter would degrade for good)",
       "status": "PASS",
-      "ms": 5051,
+      "ms": 5044,
       "detail": "busy lock -> undefined: rate-limit: could not take the counter lock"
     },
     {
@@ -152,7 +152,7 @@
       "group": "E -- the wave-3 regressions, kept (D-1 and D-2)",
       "name": "N writers into the same counter file lose no counts",
       "status": "PASS",
-      "ms": 3946,
+      "ms": 3730,
       "detail": "8 rounds x 4 writers x 40 keys, nothing lost"
     },
     {
@@ -160,7 +160,7 @@
       "group": "F -- the Cloudflare moderation endpoint on a runtime without a filesystem",
       "name": "no filesystem -> 501 unimplemented (not 404, not 200)",
       "status": "PASS",
-      "ms": 2,
+      "ms": 1,
       "detail": "501 {code:unimplemented}"
     },
     {
@@ -168,7 +168,7 @@
       "group": "F -- the Cloudflare moderation endpoint on a runtime without a filesystem",
       "name": "a forged link is refused before the store is touched",
       "status": "PASS",
-      "ms": 0,
+      "ms": 1,
       "detail": "400 {code:signature}"
     },
     {
@@ -176,7 +176,7 @@
       "group": "G -- housekeeping",
       "name": "the repository site/data was never touched by this run",
       "status": "PASS",
-      "ms": 0,
+      "ms": 1,
       "detail": "repo site/data/ untouched"
     },
     {
@@ -184,7 +184,7 @@
       "group": "G -- housekeeping",
       "name": "the copy-based vacuity proof left the repository byte-identical",
       "status": "PASS",
-      "ms": 1,
+      "ms": 0,
       "detail": "7 route files present"
     }
   ]

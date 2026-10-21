@@ -23,8 +23,9 @@
 //   the same thing (api/admin/reviews.ts imports './session.js').
 
 import {
-  resolveSession,
-  type EnvLike,
+  resolveOwnerSession,
+  isAdminEmail as isAdminEmailShared,
+  adminEmailsConfigured as adminEmailsConfiguredShared,
   type Session,
   type SessionSource,
 } from '../portal/session.js';
@@ -39,19 +40,25 @@ export interface AdminEnv {
  *
  * An unset or empty ADMIN_EMAILS means NOBODY is the owner — never
  * "everyone". Same rule as the Vercel twin.
+ *
+ * The rule lives in the SHARED module (site/shared/server/portal-session.ts)
+ * so /admin and /portal cannot drift apart on it — that is the whole point
+ * of the M-4 fix: the two halves of the owner story have to agree.
  */
 export function isAdminEmail(email: string, env: AdminEnv): boolean {
-  const list = String(env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  if (list.length === 0) return false;
-  return list.includes(String(email || '').trim().toLowerCase());
+  return isAdminEmailShared(email, env as any);
 }
 
-/** Is the allow-list configured at all? */
+/**
+ * Is the allow-list configured at all?
+ *
+ * A list that is set but EMPTY AFTER PARSING (" , ") counts as
+ * misconfigured too: it is the same mistake written differently. The owner
+ * has no way in either way, and the two are told apart by the status code —
+ * 500 {code:'internal'} for the first, 401 for the second.
+ */
 export function adminEmailsConfigured(env: AdminEnv): boolean {
-  return String(env.ADMIN_EMAILS || '').trim() !== '';
+  return adminEmailsConfiguredShared(env as any);
 }
 
 /**
@@ -59,17 +66,17 @@ export function adminEmailsConfigured(env: AdminEnv): boolean {
  *
  * `sessionEnv` is the Worker's env: the signing secret lives there, and the
  * Vercel twin leaves it undefined so the module falls back to process.env.
+ *
+ * This is the SHARED two-part gate (site/shared/server/portal-session.ts) —
+ * the same one the portal's owner-only actions use (M-4), so /admin and
+ * /portal answer the same way for the same request.
  */
 export function resolveAdmin(
   source: SessionSource,
   env: AdminEnv,
-  sessionEnv?: EnvLike,
+  sessionEnv?: any,
 ): Session | null {
-  const session = resolveSession(source, 'admin', sessionEnv);
-  if (!session) return null;
-  if (session.role !== 'admin') return null;
-  if (!isAdminEmail(session.email, env)) return null;
-  return session;
+  return resolveOwnerSession(source, env as any, sessionEnv);
 }
 
 function json(body: any, status = 200, extra: Record<string, string> = {}): Response {

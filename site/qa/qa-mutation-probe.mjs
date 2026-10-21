@@ -20,6 +20,8 @@
 //           -> O3 (an invalid request must burn no slot) must FAIL
 //   P4  4.7.1 the rate limiter never blocks
 //           -> O4 (the 6th valid submission must be rate-limited) must FAIL
+//   P5  M-1  the GET decides again (the confirmation page is gone)
+//           -> M4b (a GET must decide NOTHING) must FAIL
 //
 // USAGE
 //   node site/qa/qa-mutation-probe.mjs
@@ -144,7 +146,7 @@ try {
       records.push(JSON.parse(line));
     } catch {
       throw new Error(
-        \`data/moderation/reviews.jsonl line \${index + 1} is not valid JSON — \` +
+        \`\${file} line \${index + 1} is not valid JSON — \` +
           'refusing to publish a partial set of testimonials. Fix or remove that line.',
       );
     }`,
@@ -242,6 +244,37 @@ try {
     ok: p4Ok,
   });
   if (!p4Ok) allGood = false;
+
+  // =====================================================================
+  // PROBE 5 -- M-1: the GET decides again
+  // =====================================================================
+  // Before wave-8A a plain GET on the signed link WAS the approval, so every
+  // mail scanner published the owner's quotes. The GET now only shows the
+  // confirmation page. If that guard is removed, the check that says "a GET
+  // decides NOTHING" must go red -- otherwise the check proves nothing.
+  const p5Root = path.join(WORK, 'p5');
+  copyApiTree(p5Root);
+  patch(
+    path.join(p5Root, 'api', 'moderate', 'review.ts'),
+    `  if (method === 'GET') {`,
+    `  if (false) { // MUTATION: the GET decides again`,
+  );
+  const p5 = runSuite({ QA_API_DIR: path.join(p5Root, 'api'), QA_PORT: '4435' });
+  const p5ExpectFail = ['M4b'];
+  const p5Ok = p5ExpectFail.every((id) => statusOf(p5.results, id) === 'FAIL');
+  probes.push({
+    probe: 'P5',
+    defect: 'M-1 - the confirmation page is gone and a GET decides again',
+    expect: `${p5ExpectFail.join(', ')} must FAIL`,
+    actual: p5ExpectFail.map((id) => `${id}=${statusOf(p5.results, id)}`).join(' '),
+    allFailed: p5.results.results
+      .filter((r) => r.status === 'FAIL')
+      .map((r) => r.id)
+      .join(', '),
+    total: `${p5.results.passed} passed / ${p5.results.failed} failed`,
+    ok: p5Ok,
+  });
+  if (!p5Ok) allGood = false;
 } catch (err) {
   console.error('[qa] PROBE ERROR', err && err.stack ? err.stack : err);
   allGood = false;

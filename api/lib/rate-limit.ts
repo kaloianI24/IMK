@@ -18,13 +18,20 @@
 //             read-modify-write runs under an exclusive lock file, so two
 //             writers cannot lose each other's hits. Opt-in via
 //             PORTAL_RATE_LIMIT_FILE, for a self-hosted/VPS target.
-//     store  — a shared counter service. RESERVED for the storage migration
-//             (T4, libSQL/Turso). The seam exists so that adapter can land
-//             without touching a single call site.
+//     store  — the SHARED counter, on the same libSQL/Turso connection as
+//             the portal store (wave 9). Selected by PORTAL_STORE=libsql.
+//             One atomic INSERT .. ON CONFLICT .. RETURNING, so two
+//             instances on two hosts cannot lose each other's hits and there
+//             is no lock file to leak.
 //
 // SAFETY RULES
 //   - A backend can NEVER fail a request. If it throws, the limiter falls
 //     back to the in-memory counter and reports `degraded: true`.
+//   - A CONFIGURATION error is NOT a transient failure: a missing
+//     LIBSQL_URL/LIBSQL_TOKEN is a misconfiguration, and silently degrading
+//     to a per-process counter would turn "the limit is shared" into "the
+//     limit is a speed bump" without anybody noticing. Such an error is
+//     re-thrown, and the handler turns it into 500 {code:'storage'}.
 //   - Keys are hashed before they reach a durable backend, so a client id or
 //     an IP address never lands on disk.
 //   - The counter is only consumed by a request that ALREADY passed
@@ -37,6 +44,11 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+
+import { StorageError } from '../../site/shared/portal-store/errors.js';
+import { createLibsqlRateLimitBackend } from '../../site/shared/portal-store/durable-rate-counter.js';
+import { ensureSchema } from '../../site/shared/portal-store/libsql-schema.js';
+import { getPortalBackend } from '../../site/shared/server/portal-store-access.js';
 
 export interface RateLimitBackend {
   /**
@@ -252,6 +264,57 @@ export function createFileBackend(filePath: string): RateLimitBackend {
 }
 
 /**
+ * The libSQL-backed counter — the SHARED counter (wave 9).
+ *
+ * One row per bucket, so the table cannot grow without bound, and one
+ * atomic statement, so two instances cannot lose each other's hits. The key
+ * is hashed by the counter itself (SHA-256), so no client id and no IP
+ * address reaches the database.
+ *
+ * The backend is built LAZILY: a missing LIBSQL_URL/LIBSQL_TOKEN must not
+ * crash the module that imports this one (a handler that cannot even load
+ * answers a 500 with no body), it must fail the REQUEST that needs the
+ * counter — and loudly, because a shared counter that quietly became a
+ * per-process one is a limit nobody is enforcing any more.
+ */
+export function createStoreBackend(
+  env: Record<string, string | undefined> = process.env,
+): RateLimitBackend {
+  let backendPromise: Promise<RateLimitBackend> | null = null;
+
+  async function backend(): Promise<RateLimitBackend> {
+    if (!backendPromise) {
+      backendPromise = (async () => {
+        // The SAME backend as the portal store: one transport, one database.
+        const { transport } = getPortalBackend(env);
+        if (!transport) {
+          throw new StorageError(
+            'PORTAL_STORE=libsql needs a libSQL transport for the durable rate counter',
+            'invalid-config',
+          );
+        }
+        // The rate_counters table must exist before the first INSERT.
+        await ensureSchema(transport);
+        return createLibsqlRateLimitBackend(transport);
+      })();
+      // A failure is NOT cached: the database may come back, and the limiter
+      // must be able to use it again on the next request.
+      backendPromise.catch(() => {
+        backendPromise = null;
+      });
+    }
+    return backendPromise;
+  }
+
+  return {
+    async hit(key: string, windowMs: number): Promise<number> {
+      const counter = await backend();
+      return counter.hit(key, windowMs);
+    },
+  };
+}
+
+/**
  * A limiter: a backend, a fallback, and the decision rule.
  *
  * The rule is deliberately simple and identical for every backend: a request
@@ -281,6 +344,15 @@ export class RateLimiter {
       try {
         count = await this.backend.hit(key, windowMs);
       } catch (err) {
+        // A MISCONFIGURATION is not a transient failure: the durable counter
+        // cannot be built (no LIBSQL_URL, no LIBSQL_TOKEN). Degrading to the
+        // in-memory counter here would silently turn a shared limit into a
+        // per-process one — the exact weakness the durable backend exists to
+        // remove. Re-throw instead; the handler answers 500 {code:'storage'}.
+        if (err instanceof StorageError && err.code === 'invalid-config') {
+          this.logDegradation(err);
+          throw err;
+        }
         // One failure is enough: stop trying the durable backend for the
         // lifetime of this process rather than failing a request per attempt.
         this.backendFailed = true;
@@ -325,14 +397,30 @@ export class RateLimiter {
  * With PORTAL_RATE_LIMIT_FILE=<path>: durable, file backed. The path is
  * created if needed; if the filesystem is read-only the limiter degrades to
  * the in-memory counter instead of failing the request.
+ * With PORTAL_STORE=libsql: the SHARED counter, on the same libSQL
+ * connection as the portal store. This is the only backend that works on a
+ * serverless target: the file backend needs a writable filesystem (Vercel
+ * has none) and the memory backend is per instance.
+ *
+ * The explicit PORTAL_RATE_LIMIT_FILE wins over PORTAL_STORE=libsql: an
+ * operator who names a counter file wants that file.
  */
-export function createPortalRateLimiter(options?: { filePath?: string }): RateLimiter {
-  const configured = options?.filePath ?? process.env.PORTAL_RATE_LIMIT_FILE;
-  if (!configured) return new RateLimiter(createMemoryBackend());
-  const filePath = path.isAbsolute(configured)
-    ? configured
-    : path.resolve(process.cwd(), configured);
-  return new RateLimiter(createFileBackend(filePath));
+export function createPortalRateLimiter(options?: {
+  filePath?: string;
+  env?: Record<string, string | undefined>;
+}): RateLimiter {
+  const env = options?.env ?? process.env;
+  const configured = options?.filePath ?? env.PORTAL_RATE_LIMIT_FILE;
+  if (configured) {
+    const filePath = path.isAbsolute(configured)
+      ? configured
+      : path.resolve(process.cwd(), configured);
+    return new RateLimiter(createFileBackend(filePath));
+  }
+  if ((env.PORTAL_STORE || 'file').trim() === 'libsql') {
+    return new RateLimiter(createStoreBackend(env));
+  }
+  return new RateLimiter(createMemoryBackend());
 }
 
 /**

@@ -1,4 +1,4 @@
-// api/moderate/review.ts — Vercel serverless function, GET /api/moderate/review
+// api/moderate/review.ts — Vercel serverless function, /api/moderate/review
 //
 // HMAC-signed one-click approve/reject for pending reviews.
 // Called from the notification email links (api/lib/notifications.ts).
@@ -10,6 +10,14 @@
 //   sig   — HMAC-SHA256(FORM_WEBHOOK_SECRET, ref|decision|revision|ts)
 //   ts    — unix timestamp (seconds), links expire after 7 days
 //
+// THE METHOD IS THE POINT (audit M-1, wave-8A)
+//   GET  → shows a CONFIRMATION PAGE. It NEVER changes the state.
+//   POST → applies the decision.
+//   The link in the owner's mail is a GET, so the owner clicks it and
+//   confirms. A mail scanner that prefetches the link sees the page and
+//   decides nothing. Before this change the prefetch WAS the approval:
+//   every corporate link scanner published the owner's quotes.
+//
 // Behavior:
 //   - Invalid/missing params → 400
 //   - Bad/expired signature → 400
@@ -18,28 +26,46 @@
 //     the mail went out) → 409 stale-revision; the owner is sent a fresh
 //     link for the current revision so the quote can still be moderated
 //   - Already decided → 200 (idempotent, no change)
-//   - Valid → flips state in site/data/moderation/reviews.jsonl,
-//     sends confirmation email via Resend, returns 200
+//   - Valid POST → flips the state in the 'reviews' collection of the portal
+//     store, sends confirmation email via Resend, returns 200
 //
 // Environment (server-side only):
 //   FORM_WEBHOOK_SECRET — HMAC signing secret
 //   RESEND_API_KEY, RESEND_FROM, RESEND_TO / CONTACT_TO — confirmation email
 
 import { IncomingMessage, ServerResponse } from 'node:http';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {
   notifyReviewDecided,
   notifyReviewSubmitted,
   verifyModerationSignature,
 } from '../lib/notifications.js';
-import { readJsonlFile, guardStorage } from '../lib/jsonl.js';
+import {
+  getPortalStore,
+  guardStore,
+  storageFailureLog,
+  assertStoreReachable,
+  StoreUnreachableError,
+} from '../../site/shared/server/portal-store-access.js';
+import {
+  MODERATION_PATH,
+  parseModerationParams,
+  renderConfirmationPage,
+  type ModerationParams,
+} from '../../site/shared/server/moderation.js';
+import { isProductionEnv } from '../../site/shared/server/portal-session.js';
+import { secretProblem } from '../../site/shared/server/secret.js';
 
-const REVIEWS_DIR = path.resolve(process.cwd(), 'site/data/moderation');
-const REVIEWS_FILE = path.join(REVIEWS_DIR, 'reviews.jsonl');
-const CLIENTS_FILE = path.resolve(process.cwd(), 'site/data/portal/clients.jsonl');
-
-const LINK_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+// THE STORE (wave 9)
+//   The moderation log comes from the PortalStore contract
+//   (site/shared/portal-store/**), not from a JSONL file: with
+//   PORTAL_STORE=libsql the decision is stored in the DATABASE, atomically,
+//   and with PORTAL_STORE=file the very same records land in the very same
+//   site/data/moderation/reviews.jsonl as before.
+//
+//   The decision itself is ONE statement (decideReview): the newest revision
+//   of the ref flips from 'pending' to the decision, in the store, with no
+//   read-modify-write window and no temp-file rename. The atomicity the old
+//   tmp-file + rename gave is now the database's.
 
 function json(
   res: ServerResponse,
@@ -57,6 +83,22 @@ function json(
 }
 
 /**
+ * The confirmation page.
+ *
+ * It is a page, not an action: no state changes while it is served. It is
+ * never indexed and never cached — it carries a signed URL.
+ */
+function html(res: ServerResponse, body: string, status = 200): void {
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    'X-Robots-Tag': 'noindex, nofollow',
+    'Cache-Control': 'no-store',
+  });
+  res.end(body);
+}
+
+/**
  * Thrown when the moderation store cannot be reached AT ALL.
  *
  * A store that cannot be read must never look like a store that is empty:
@@ -65,128 +107,134 @@ function json(
  * The Cloudflare twin answers 501 for the same situation; this tree must
  * answer the same thing when the store file is not there at all.
  */
-class StoreUnreachableError extends Error {
-  constructor() {
-    super('moderation store unreachable');
-    this.name = 'StoreUnreachableError';
-  }
-}
-
-/**
- * Read the moderation log. A malformed line is an ERROR (audit M3 / QA D3):
- * it must not read as "this review does not exist" — the owner would be told
- * the quote is gone while the client still sees it waiting for approval.
- *
- * A MISSING file is not an empty log: it is a store this target cannot
- * serve (the function filesystem is read-only in production, and a deployment
- * that does not carry site/data/ has no log at all). That is 501, not 404.
- */
-function readReviews(): Array<Record<string, any>> {
-  if (!fs.existsSync(REVIEWS_FILE)) throw new StoreUnreachableError();
-  return readJsonlFile(REVIEWS_FILE);
-}
-
-/**
- * Persist the moderation log.
- *
- * Returns false when the write could not happen. The caller must NOT answer
- * "approved" for a decision that was never stored — the owner would believe
- * the quote is published while the store still says pending.
- */
-function writeReviews(reviews: Array<Record<string, any>>): boolean {
-  try {
-    fs.mkdirSync(REVIEWS_DIR, { recursive: true });
-    const content = reviews.map((r) => JSON.stringify(r)).join('\n') + (reviews.length ? '\n' : '');
-    fs.writeFileSync(REVIEWS_FILE, content, 'utf8');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function isLinkExpired(ts: number): boolean {
-  const now = Math.floor(Date.now() / 1000);
-  return now - ts > LINK_TTL_SECONDS || ts - now > 60; // also reject future timestamps > 1 min
-}
 
 /**
  * The e-mail of the client behind a review record. The review record itself
  * holds NO address (audit M2) — it is looked up in the client store, and only
  * for the owner's own notification channel.
  */
-function clientEmailFor(clientId: string): string | undefined {
+async function clientEmailFor(
+  store: { get: (coll: 'clients', key: { field: string; value: string }) => Promise<Record<string, any> | null> },
+  clientId: string,
+): Promise<string | undefined> {
   if (!clientId) return undefined;
-  const clients = readJsonlFile(CLIENTS_FILE);
-  const client = clients.find((c) => c.id === clientId);
+  const client = await store.get('clients', { field: 'id', value: clientId });
   return client && client.email ? String(client.email) : undefined;
+}
+
+function readBodyText(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+/**
+ * The signed parameters of the request.
+ *
+ * They may arrive in the query string (a link) or in the body (the
+ * confirmation form). The query wins when it carries them, so a POST to the
+ * link URL works as well as a POST of the form.
+ */
+async function readModerationParams(
+  req: IncomingMessage,
+  url: URL,
+): Promise<
+  | { ok: true; params: ModerationParams }
+  | { ok: false; status: number; body: { error: string; code: string } }
+> {
+  const fromQuery = parseModerationParams((name) => url.searchParams.get(name));
+  if (fromQuery.ok) return fromQuery;
+
+  const method = (req.method || 'GET').toUpperCase();
+  if (method !== 'POST') return fromQuery;
+
+  // The query was incomplete: the parameters may be in the body.
+  const raw = await readBodyText(req);
+  let body: Record<string, unknown> = {};
+  const contentType = String(req.headers['content-type'] || '');
+  if (raw) {
+    if (contentType.includes('application/json')) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') body = parsed as Record<string, unknown>;
+      } catch {
+        body = {};
+      }
+    } else {
+      const form = new URLSearchParams(raw);
+      for (const [key, value] of form.entries()) body[key] = value;
+    }
+  }
+  const fromBody = parseModerationParams((name) => {
+    const value = body[name];
+    return typeof value === 'string' && value !== '' ? value : null;
+  });
+  if (fromBody.ok) return fromBody;
+
+  // Neither source carried a complete set: report the QUERY answer, which
+  // is the one the caller can act on (the body may simply have been empty).
+  return fromQuery;
 }
 
 async function handler(
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  if (req.method !== 'GET') {
-    json(res, { error: 'method not allowed', code: 'method' }, 405, { Allow: 'GET' });
+  const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
+  const method = (req.method || 'GET').toUpperCase();
+
+  if (method !== 'GET' && method !== 'POST') {
+    json(res, { error: 'method not allowed', code: 'method' }, 405, { Allow: 'GET, POST' });
     return;
   }
-
-  const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
-  const ref = url.searchParams.get('ref');
-  const decision = url.searchParams.get('decision');
-  const revisionParam = url.searchParams.get('revision');
-  const sig = url.searchParams.get('sig');
-  const tsParam = url.searchParams.get('ts');
 
   // --- parameter validation ---
-  if (!ref || !decision || !revisionParam || !sig || !tsParam) {
-    json(res, { error: 'missing parameters', code: 'validation' }, 400);
+  const parsed = await readModerationParams(req, url);
+  if (!parsed.ok) {
+    json(res, parsed.body, parsed.status);
     return;
   }
+  const { ref, decision, revision, ts, sig } = parsed.params;
 
-  if (decision !== 'approve' && decision !== 'reject') {
-    json(res, { error: 'invalid decision', code: 'validation' }, 400);
-    return;
-  }
-
-  // The revision is part of the signed message: the link may only approve the
-  // exact text the owner was shown (audit M5).
-  const revision = Number(revisionParam);
-  if (!Number.isInteger(revision) || revision < 1) {
-    json(res, { error: 'invalid revision', code: 'validation' }, 400);
-    return;
-  }
-
-  const ts = Number(tsParam);
-  if (!Number.isFinite(ts) || ts <= 0) {
-    json(res, { error: 'invalid timestamp', code: 'validation' }, 400);
-    return;
-  }
-
-  if (isLinkExpired(ts)) {
-    json(res, { error: 'link expired', code: 'expired' }, 400);
-    return;
-  }
-
+  // --- signature verification ---
+  //
+  // The secret must not only EXIST, it must be USABLE (audit H-1): the
+  // shipped example placeholder is published in the repository, and a
+  // published HMAC key is a public key. In production such a secret is
+  // refused exactly like a missing one.
   const secret = process.env.FORM_WEBHOOK_SECRET;
-  if (!secret) {
+  const secretProblemHere = secretProblem(secret);
+  if (!secret || (isProductionEnv() && secretProblemHere !== null)) {
+    console.log(
+      JSON.stringify({
+        ts: Date.now(),
+        outcome: 'moderation_misconfigured',
+        reason: secretProblemHere === 'missing' ? 'FORM_WEBHOOK_SECRET missing' : `FORM_WEBHOOK_SECRET ${secretProblemHere}`,
+      }),
+    );
     json(res, { error: 'misconfigured', code: 'internal' }, 500);
     return;
   }
 
-  // --- signature verification ---
   if (!verifyModerationSignature(ref, decision, revision, ts, sig)) {
     json(res, { error: 'invalid signature', code: 'signature' }, 400);
     return;
   }
 
-  // --- state flip in JSONL ---
-  let reviews: Array<Record<string, any>>;
+  // --- the moderation store ---
+  const store = getPortalStore();
+
+  // The store must be there AT ALL. A MISSING store is not an empty log: it
+  // is a store this target cannot serve (the function filesystem is read-only
+  // in production, and a deployment that does not carry site/data/ has no log
+  // at all). That is 501, not 404.
   try {
-    reviews = readReviews();
+    assertStoreReachable('reviews');
   } catch (err) {
     if (err instanceof StoreUnreachableError) {
-      // The store is not there at all: this target cannot moderate. Never
-      // answer "review not found" — that reads as "your quote is gone".
       console.log(
         JSON.stringify({ ts: Date.now(), outcome: 'moderation_store_unreachable' }),
       );
@@ -197,23 +245,19 @@ async function handler(
       );
       return;
     }
-    // A corrupt store is caught by guardStorage below (500 {code:'storage'}).
     throw err;
   }
 
   // Later lines win: when a client edits or withdraws a quote the portal
-  // appends a new line with the same ref, and the publisher applies the same
-  // rule. Deciding the newest line keeps approval and publication in step.
-  let idx = -1;
-  for (let i = 0; i < reviews.length; i++) {
-    if (reviews[i].ref === ref && reviews[i].type === 'review') idx = i;
-  }
-  if (idx === -1) {
+  // appends a new record with the same ref, and the publisher applies the
+  // same rule. Deciding the newest record keeps approval and publication in
+  // step.
+  const record = await store.latest('reviews', { ref, type: 'review' });
+  if (!record) {
     json(res, { error: 'review not found', code: 'not-found' }, 404);
     return;
   }
 
-  const record = reviews[idx];
   const currentRevision = Number(record.revision || 0);
 
   if (currentRevision !== revision) {
@@ -236,7 +280,7 @@ async function handler(
         await notifyReviewSubmitted({
           ref: record.ref,
           name: record.name || 'Anonymous client',
-          email: clientEmailFor(String(record.clientId || '')),
+          email: await clientEmailFor(store, String(record.clientId || '')),
           company: record.company || '',
           rating: record.rating || '—',
           review: record.review || '',
@@ -261,6 +305,29 @@ async function handler(
     return;
   }
 
+  // --- GET: show the confirmation page. NOTHING IS DECIDED HERE ---
+  //
+  // This is the whole point of the change (audit M-1): a GET is what every
+  // mail scanner does by itself. The state is only ever changed by the
+  // POST that the confirmation form issues.
+  if (method === 'GET') {
+    html(
+      res,
+      renderConfirmationPage({
+        ref,
+        decision,
+        revision,
+        ts,
+        sig,
+        ...(record.state !== 'pending'
+          ? { alreadyDecided: String(record.state) }
+          : {}),
+      }),
+      200,
+    );
+    return;
+  }
+
   if (record.state !== 'pending') {
     // idempotent: already decided, no change
     json(res, { ok: true, ref, state: record.state, decidedAt: record.decidedAt }, 200);
@@ -268,22 +335,28 @@ async function handler(
   }
 
   const now = new Date().toISOString();
-  record.state = decision === 'approve' ? 'approved' : 'rejected';
-  record.decidedAt = now;
-  record.decidedBy = 'one-click-link';
+  const decidedState = decision === 'approve' ? 'approved' : 'rejected';
 
-  // The decision is only real once it is stored. A write that fails must not
-  // be answered with "approved": the owner would believe the quote is
-  // published while the store still says pending (audit wave-6, F-3).
-  if (!writeReviews(reviews)) {
+  // The decision is stored in ONE statement: the newest revision of this ref
+  // flips from 'pending' to the decision, and the statement only matches a
+  // record that is still pending. A decision that cannot be stored is never
+  // answered with "approved" (audit wave-6, F-3).
+  const decided = await store.decideReview(ref, decidedState, now, 'one-click-link');
+  if (!decided) {
     console.log(JSON.stringify({ ts: Date.now(), ref, outcome: 'storage_write_failed' }));
     json(res, { error: 'storage unavailable', code: 'storage' }, 500);
+    return;
+  }
+  if (decided.state !== decidedState) {
+    // Somebody else decided it in the meantime: the answer is the idempotent
+    // one, never a false claim about this decision.
+    json(res, { ok: true, ref, state: decided.state, decidedAt: decided.decidedAt }, 200);
     return;
   }
 
   // --- confirmation email ---
   try {
-    await notifyReviewDecided({ ref, name: record.name || '—', decision: record.state });
+    await notifyReviewDecided({ ref, name: record.name || '—', decision: decided.state });
   } catch {
     // notification failures never fail the request
     console.log(JSON.stringify({ ts: Date.now(), ref, outcome: 'notify_fail' }));
@@ -295,12 +368,12 @@ async function handler(
       ts: Date.now(),
       ref,
       outcome: 'review_decided',
-      decision: record.state,
+      decision: decided.state,
       decidedBy: 'one-click-link',
     }),
   );
 
-  json(res, { ok: true, ref, state: record.state }, 200);
+  json(res, { ok: true, ref, state: decided.state }, 200);
 }
 
 // A corrupt moderation log must never look like "review not found"
@@ -309,17 +382,10 @@ export default function (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  return guardStorage(
+  return guardStore(
     () => handler(req, res),
     (err) => {
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          outcome: 'storage_corrupt',
-          file: err.file,
-          line: err.line,
-        }),
-      );
+      console.log(JSON.stringify(storageFailureLog(err)));
       json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     },
   );

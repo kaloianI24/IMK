@@ -42,6 +42,16 @@
 //   is exactly the TTL on every instance. The register is strictly better
 //   than that, and it costs one map per instance.
 
+// The production rule and the secret-quality rule live in the session
+// module, so both trees get ONE definition of "is this deployment
+// production" and "is this secret usable". See site/shared/server/
+// portal-session.ts (H-1 / H-2, wave-8A). Both modules are edge-safe: no
+// `node:` imports, Web Platform globals only.
+import {
+  isProductionEnv as isProductionEnvShared,
+} from './portal-session.js';
+import { secretProblem, secretUsable } from './secret.js';
+
 /** The environment shape both trees hand over (process.env / Worker env). */
 export interface EnvLike {
   [key: string]: string | undefined;
@@ -63,9 +73,14 @@ export const PORTAL_MAGIC_PURPOSE = 'portal';
 /**
  * Production unless the environment says otherwise — the same convention as
  * api/contact.ts. An unset APP_ENV is PRODUCTION.
+ *
+ * The rule itself lives in the session module, because a secret rule that
+ * exists twice is a secret rule that will drift: H-2 was exactly that —
+ * `APP_ENV=development` alone switched every fail-closed guard off on a
+ * deployed instance.
  */
 export function isProductionEnv(env: EnvLike): boolean {
-  return (env.APP_ENV || 'production') === 'production';
+  return isProductionEnvShared(env as any);
 }
 
 /**
@@ -75,24 +90,32 @@ export function isProductionEnv(env: EnvLike): boolean {
  * for any address. So a production instance without
  * PORTAL_MAGIC_LINK_SECRET is MISCONFIGURED, and the callers answer 500 —
  * they never fall back to an empty key.
+ *
+ * H-1 (wave-8A): a secret that is PRESENT but UNUSABLE is refused exactly
+ * like a missing one — the published example placeholder, or anything
+ * shorter than 32 characters.
  */
 export function magicLinkMisconfigured(env: EnvLike): boolean {
-  return isProductionEnv(env) && !(env.PORTAL_MAGIC_LINK_SECRET || '').trim();
+  if (!isProductionEnv(env)) return false;
+  return secretProblem(env.PORTAL_MAGIC_LINK_SECRET) !== null;
 }
 
 /**
  * The signing secret.
  *
- * Production: the configured secret, or null when it is missing (fail closed).
- * Development: a per-process random secret, so the portal runs with no setup
- * and a forgotten secret can never make tokens forgeable. The cost is that a
- * token minted by one process cannot be verified by another — in development
- * that is the local dev server (one process), and in production the secret
- * is mandatory anyway.
+ * Production: the configured secret, or null when it is missing or unusable
+ * (fail closed). Development: a per-process random secret, so the portal
+ * runs with no setup and a forgotten secret can never make tokens forgeable.
+ * The cost is that a token minted by one process cannot be verified by
+ * another — in development that is the local dev server (one process), and
+ * in production the secret is mandatory anyway.
  */
 export function magicLinkSecret(env: EnvLike): string | null {
   const raw = (env.PORTAL_MAGIC_LINK_SECRET || '').trim();
-  if (raw) return raw;
+  if (raw) {
+    if (isProductionEnv(env) && !secretUsable(raw)) return null;
+    return raw;
+  }
   if (isProductionEnv(env)) return null; // fail closed — never sign with ''
   const g = globalThis as any;
   if (!g.__imkDevMagicSecret) g.__imkDevMagicSecret = randomHex(32);

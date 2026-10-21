@@ -1,12 +1,22 @@
-// site/functions/api/moderate/review.ts — Cloudflare Pages Function, GET /api/moderate/review
+// site/functions/api/moderate/review.ts — Cloudflare Pages Function,
+//   /api/moderate/review
 //
 // Mirrors api/moderate/review.ts (Vercel) so both targets share the same
 // HMAC-signed approve/reject behavior. Kept in sync by design (spec/07 §1, D-6).
 //
 // Query params: ref, decision, revision, sig, ts — see api/moderate/review.ts
 //
+// THE METHOD IS THE POINT (audit M-1, wave-8A)
+//   GET  → shows a CONFIRMATION PAGE. It NEVER changes the state.
+//   POST → applies the decision.
+//   A mail scanner that prefetches the owner's link must not approve a
+//   quote, so the state is only ever changed by the POST the confirmation
+//   form issues.
+//
 // The signature and the link shape are shared with the Vercel tree through
 // site/functions/api/lib/notifications.ts, so a link works on either target.
+// The parsing, the expiry rule and the confirmation page are shared through
+// site/shared/server/moderation.ts, so the two trees cannot drift.
 
 import {
   notifyReviewDecided,
@@ -15,13 +25,31 @@ import {
 } from '../lib/notifications.js';
 import type { Env } from '../lib/notifications.js';
 import { parseJsonlStrict, isStorageCorrupt } from '../../../shared/portal-store/jsonl.js';
-
-const LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
+import {
+  MODERATION_PATH,
+  parseModerationParams,
+  renderConfirmationPage,
+  type ModerationParams,
+} from '../../../shared/server/moderation.js';
+import { isProductionEnv } from '../../../shared/server/portal-session.js';
+import { secretProblem } from '../../../shared/server/secret.js';
 
 function json(body: any, status = 200, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json; charset=utf-8', ...extra },
+  });
+}
+
+/** The confirmation page. It is a page, not an action. */
+function html(body: string, status = 200) {
+  return new Response(body, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'X-Robots-Tag': 'noindex, nofollow',
+      'Cache-Control': 'no-store',
+    },
   });
 }
 
@@ -91,6 +119,10 @@ function readReviews(): Array<Record<string, any>> {
  *
  * Returns false when the write could not happen. The caller must NOT answer
  * "approved" for a decision that was never stored.
+ *
+ * The write is ATOMIC (audit M-6): the content goes to a temporary file and
+ * is then RENAMED over the target, so an interrupted write cannot leave a
+ * half-written store behind.
  */
 function writeReviews(reviews: Array<Record<string, any>>): boolean {
   const fs = edgeFs();
@@ -98,54 +130,85 @@ function writeReviews(reviews: Array<Record<string, any>>): boolean {
   try {
     fs.mkdirSync('site/data/moderation', { recursive: true });
     const content = reviews.map((r) => JSON.stringify(r)).join('\n') + (reviews.length ? '\n' : '');
-    fs.writeFileSync(REVIEWS_FILE, content, 'utf8');
+    const tmp = `${REVIEWS_FILE}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmp, content, 'utf8');
+    fs.renameSync(tmp, REVIEWS_FILE);
     return true;
   } catch {
     return false;
   }
 }
 
-export const onRequestGet: any = async (ctx: any) => {
-  const { request, env } = ctx;
+/**
+ * The signed parameters, from the query string or — for a POST — from the
+ * body (the confirmation form posts them as form fields).
+ */
+async function readModerationParams(request: Request):
+  Promise<
+    | { ok: true; params: ModerationParams }
+    | { ok: false; status: number; body: { error: string; code: string } }
+  > {
   const url = new URL(request.url);
-  const ref = url.searchParams.get('ref');
-  const decision = url.searchParams.get('decision');
-  const revisionParam = url.searchParams.get('revision');
-  const sig = url.searchParams.get('sig');
-  const tsParam = url.searchParams.get('ts');
+  const fromQuery = parseModerationParams((name) => url.searchParams.get(name));
+  if (fromQuery.ok) return fromQuery;
+  if (request.method !== 'POST') return fromQuery;
 
-  if (!ref || !decision || !revisionParam || !sig || !tsParam) {
-    return json({ error: 'missing parameters', code: 'validation' }, 400);
+  let body: Record<string, unknown> = {};
+  try {
+    const contentType = String(request.headers.get('content-type') || '');
+    if (contentType.includes('application/json')) {
+      const parsed = await request.json();
+      if (parsed && typeof parsed === 'object') body = parsed as Record<string, unknown>;
+    } else {
+      const form = await request.formData();
+      form.forEach((value, key) => {
+        body[key] = typeof value === 'string' ? value : String(value);
+      });
+    }
+  } catch {
+    body = {};
   }
-  if (decision !== 'approve' && decision !== 'reject') {
-    return json({ error: 'invalid decision', code: 'validation' }, 400);
+  const fromBody = parseModerationParams((name) => {
+    const value = body[name];
+    return typeof value === 'string' && value !== '' ? value : null;
+  });
+  return fromBody.ok ? fromBody : fromQuery;
+}
+
+/**
+ * The shared body of both methods.
+ *
+ * `commit` is false for a GET: every check runs (a missing store is still
+ * 501, a forged link is still 400) but the state is never written.
+ */
+async function handle(ctx: any, commit: boolean): Promise<Response> {
+  const { request, env } = ctx;
+  const parsed = await readModerationParams(request);
+  if (!parsed.ok) {
+    return json(parsed.body, parsed.status);
   }
-  // The revision is signed into the link: it may only approve the exact text
-  // the owner was shown (audit M5).
-  const revision = Number(revisionParam);
-  if (!Number.isInteger(revision) || revision < 1) {
-    return json({ error: 'invalid revision', code: 'validation' }, 400);
-  }
-  const ts = Number(tsParam);
-  if (!Number.isFinite(ts) || ts <= 0) {
-    return json({ error: 'invalid timestamp', code: 'validation' }, 400);
-  }
-  const now = Math.floor(Date.now() / 1000);
-  if (now - ts > LINK_TTL_SECONDS || ts - now > 60) {
-    return json({ error: 'link expired', code: 'expired' }, 400);
-  }
-  if (!env.FORM_WEBHOOK_SECRET) {
+  const { ref, decision, revision, ts, sig } = parsed.params;
+
+  // The secret must not only EXIST, it must be USABLE (audit H-1): the
+  // shipped example placeholder is published in the repository, and a
+  // published HMAC key is a public key.
+  const secret = env.FORM_WEBHOOK_SECRET;
+  const secretProblemHere = secretProblem(secret);
+  if (!secret || (isProductionEnv(env) && secretProblemHere !== null)) {
+    console.log(
+      JSON.stringify({
+        ts: Date.now(),
+        outcome: 'moderation_misconfigured',
+        reason:
+          secretProblemHere === 'missing'
+            ? 'FORM_WEBHOOK_SECRET missing'
+            : `FORM_WEBHOOK_SECRET ${secretProblemHere}`,
+      }),
+    );
     return json({ error: 'misconfigured', code: 'internal' }, 500);
   }
 
-  const ok = await verifyModerationSignature(
-    env as Env,
-    ref,
-    decision,
-    revision,
-    ts,
-    sig,
-  );
+  const ok = await verifyModerationSignature(env as Env, ref, decision, revision, ts, sig);
   if (!ok) {
     return json({ error: 'invalid signature', code: 'signature' }, 400);
   }
@@ -203,7 +266,7 @@ export const onRequestGet: any = async (ctx: any) => {
 
     // ...and the owner gets a FRESH link for the current revision, so the
     // moderation can still be finished without waiting for another client
-    // action (review finding B2 — parity with api/moderate/review.ts:219-249;
+    // action (review finding B2 — parity with api/moderate/review.ts;
     // only when the newest revision is still a pending quote — a snoozed or
     // declined quote mails nothing).
     if (record.state === 'pending' && String(record.review || '').trim()) {
@@ -234,6 +297,21 @@ export const onRequestGet: any = async (ctx: any) => {
     );
   }
 
+  // --- GET: the confirmation page. NOTHING IS DECIDED HERE ---
+  if (!commit) {
+    return html(
+      renderConfirmationPage({
+        ref,
+        decision,
+        revision,
+        ts,
+        sig,
+        ...(record.state !== 'pending' ? { alreadyDecided: String(record.state) } : {}),
+      }),
+      200,
+    );
+  }
+
   if (record.state !== 'pending') {
     return json({ ok: true, ref, state: record.state, decidedAt: record.decidedAt }, 200);
   }
@@ -260,4 +338,21 @@ export const onRequestGet: any = async (ctx: any) => {
   }
 
   return json({ ok: true, ref, state: record.state }, 200);
+}
+
+/** GET — the confirmation page. The state is never changed here. */
+export const onRequestGet: any = async (ctx: any) => handle(ctx, false);
+
+/** POST — the decision. This is what actually changes the state. */
+export const onRequestPost: any = async (ctx: any) => handle(ctx, true);
+
+/** Every other method is refused. */
+export const onRequest: any = async (ctx: any) => {
+  const method = String(ctx?.request?.method || 'GET').toUpperCase();
+  if (method === 'GET') return handle(ctx, false);
+  if (method === 'POST') return handle(ctx, true);
+  return json({ error: 'method not allowed', code: 'method' }, 405, { Allow: 'GET, POST' });
 };
+
+/** The path this function serves — the same one as the Vercel twin. */
+export const MODERATION_ENDPOINT = MODERATION_PATH;

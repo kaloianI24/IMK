@@ -44,6 +44,8 @@ import * as path from 'node:path';
 import { parseJsonlStrict, guardStorage } from '../lib/jsonl.js';
 import { moderationUrl } from '../lib/notifications.js';
 import { adminEmailsConfigured, resolveAdmin } from './session.js';
+import { isProductionEnv } from '../../site/shared/server/portal-session.js';
+import { secretProblem } from '../../site/shared/server/secret.js';
 
 const REVIEWS_FILE = path.resolve(process.cwd(), 'site/data/moderation/reviews.jsonl');
 
@@ -141,12 +143,24 @@ async function handler(
   // anyone could mint an approve link. The moderation endpoint refuses to
   // verify anything without the secret; this endpoint refuses to offer an
   // action it knows cannot work.
-  if (!process.env.FORM_WEBHOOK_SECRET) {
+  //
+  // H-1 (wave-8A): the secret must not only EXIST, it must be USABLE. The
+  // published example placeholder is in the repository, and a published HMAC
+  // key is a public key. In production such a secret is refused exactly like
+  // a missing one.
+  const webhookSecretProblem = secretProblem(process.env.FORM_WEBHOOK_SECRET);
+  if (
+    !process.env.FORM_WEBHOOK_SECRET ||
+    (isProductionEnv(process.env) && webhookSecretProblem !== null)
+  ) {
     console.log(
       JSON.stringify({
         ts: Date.now(),
         outcome: 'admin_misconfigured',
-        reason: 'FORM_WEBHOOK_SECRET missing',
+        reason:
+          webhookSecretProblem === 'missing'
+            ? 'FORM_WEBHOOK_SECRET missing'
+            : `FORM_WEBHOOK_SECRET ${webhookSecretProblem}`,
       }),
     );
     json(res, { error: 'misconfigured', code: 'internal' }, 500);

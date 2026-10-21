@@ -65,7 +65,9 @@ const SANDBOX = path.join(
   `qa-wave3-${new Date().toISOString().replace(/[:.]/g, '-')}`,
 );
 
-const SECRET = 'qa-wave3-form-webhook-secret';
+// H-1 (wave-8A): a secret shorter than 32 characters is refused in
+// production, so the fixture has to be a usable one (32+ characters).
+const SECRET = 'qa-wave3-form-webhook-secret-0123456789';
 const ADMIN_EMAIL = 'owner@imk.test';
 const IP_A = '203.0.113.7';
 const IP_B = '203.0.113.8';
@@ -132,8 +134,13 @@ process.env.ADMIN_EMAILS = ADMIN_EMAIL;
 // signed token (wave 6, F-2). In production BOTH secrets are mandatory: a
 // missing one is a misconfiguration and the endpoint answers 500. These are
 // QA-local test secrets, not credentials.
-process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-wave3-magic-link-secret';
-process.env.PORTAL_SESSION_SECRET = 'qa-wave3-session-secret';
+//
+// H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE -- the
+// published placeholder, or shorter than MIN_SECRET_LENGTH (32) -- is refused
+// exactly like a missing one. The fixtures below are therefore 32+ characters
+// long.
+process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-wave3-magic-link-secret-0123456789';
+process.env.PORTAL_SESSION_SECRET = 'qa-wave3-session-secret-0123456789';
 
 const emails = [];
 const REAL_FETCH = globalThis.fetch;
@@ -185,7 +192,7 @@ export { onRequestGet as cfPlanItemsGet, onRequestPost as cfPlanItemsPost, onReq
 export { onRequestGet as cfUpdatesGet, onRequestPost as cfUpdatesPost } from '${CF_FWD}/api/portal/updates.ts';
 export { onRequestPost as cfInvitesPost } from '${CF_FWD}/api/portal/invites.ts';
 export { onRequestGet as cfAuthGet, onRequestPost as cfAuthPost } from '${CF_FWD}/api/portal/auth.ts';
-export { onRequestGet as cfModerateGet } from '${CF_FWD}/api/moderate/review.ts';
+export { onRequestGet as cfModerateGet, onRequestPost as cfModeratePost } from '${CF_FWD}/api/moderate/review.ts';
 export { createKvBackend as cfCreateKvBackend, createMemoryBackend as cfCreateMemoryBackend, RateLimiter as cfRateLimiter } from '${CF_FWD}/api/lib/rate-limit.ts';
 export { buildModerationUrl as cfBuildModerationUrl } from '${CF_FWD}/api/lib/notifications.ts';
 `;
@@ -425,7 +432,14 @@ async function loadCf() {
   cf = require(outFile);
 }
 
-/** A fake node:fs bound to globalThis.require, rooted at the sandbox. */
+/**
+ * A fake node:fs bound to globalThis.require, rooted at the sandbox.
+ *
+ * renameSync is part of it because the moderation log is written ATOMICALLY
+ * (the content goes to a temporary file and is then renamed over the target).
+ * The write path is only reached by a POST -- a GET decides nothing -- so a
+ * mock without renameSync would fail exactly where the decision is made.
+ */
 function bindEdgeFs() {
   const real = require('node:fs');
   globalThis.require = (id) => {
@@ -435,6 +449,8 @@ function bindEdgeFs() {
         readFileSync: (p, enc) => real.readFileSync(path.resolve(process.cwd(), p), enc),
         writeFileSync: (p, data, enc) => real.writeFileSync(path.resolve(process.cwd(), p), data, enc),
         mkdirSync: (p, opts) => real.mkdirSync(path.resolve(process.cwd(), p), opts),
+        renameSync: (from, to) =>
+          real.renameSync(path.resolve(process.cwd(), from), path.resolve(process.cwd(), to)),
       };
     }
     return require(id);
@@ -741,10 +757,13 @@ async function main() {
     const url = qaModerationUrl(ref, 'approve', 1, ts);
     bindEdgeFs();
     try {
+      // M-1 (wave-8A): the DECISION is the POST. A GET only shows the
+      // confirmation page, so a mail scanner that prefetches the link
+      // decides nothing.
       const r = await cfCall(
-        cf.cfModerateGet,
+        cf.cfModeratePost,
         url.replace(ORIGIN, ''),
-        'GET',
+        'POST',
         { SITE_BASE_URL: ORIGIN },
         {},
       );
@@ -753,6 +772,46 @@ async function main() {
       const record = readJsonl(REVIEWS_FILE).find((x) => x.ref === ref);
       assertEqual(record.state, 'approved', 'the link must have flipped the newest line');
       return 'the Vercel-signed link was accepted and the record was approved';
+    } finally {
+      unbindEdgeFs();
+    }
+  });
+
+  await t('B2b', 'M-1: a GET on the Cloudflare moderation link decides NOTHING', async () => {
+    const ref = 'rev_cfparity0001b';
+    fs.writeFileSync(
+      REVIEWS_FILE,
+      JSON.stringify({
+        ref,
+        type: 'review',
+        state: 'pending',
+        revision: 1,
+        name: 'Nora Edge',
+        review: 'A quote a mail scanner will prefetch.',
+        rating: '5',
+        receivedAt: new Date().toISOString(),
+      }) + '\n',
+      'utf8',
+    );
+    const ts = Math.floor(Date.now() / 1000);
+    const url = qaModerationUrl(ref, 'approve', 1, ts);
+    bindEdgeFs();
+    try {
+      const r = await cfCall(cf.cfModerateGet, url.replace(ORIGIN, ''), 'GET', { SITE_BASE_URL: ORIGIN }, {});
+      assertEqual(r.status, 200, `the GET must serve the confirmation page, got ${r.status}: ${JSON.stringify(r.body)}`);
+      const record = readJsonl(REVIEWS_FILE).find((x) => x.ref === ref);
+      assertEqual(record.state, 'pending', 'a GET must not approve anything');
+      assertEqual(
+        readJsonl(REVIEWS_FILE).filter((x) => x.ref === ref && x.state === 'approved').length,
+        0,
+        'no line may be approved by a GET',
+      );
+      // ...and the POST of the same link IS the decision.
+      const decided = await cfCall(cf.cfModeratePost, url.replace(ORIGIN, ''), 'POST', { SITE_BASE_URL: ORIGIN }, {});
+      assertEqual(decided.status, 200, `the POST must decide, got ${decided.status}: ${JSON.stringify(decided.body)}`);
+      const after = readJsonl(REVIEWS_FILE).find((x) => x.ref === ref);
+      assertEqual(after.state, 'approved', 'the POST must approve');
+      return 'the GET left the quote pending; the POST approved it';
     } finally {
       unbindEdgeFs();
     }
@@ -784,11 +843,24 @@ async function main() {
       { SITE_BASE_URL: ORIGIN },
       {},
     );
+    // The DECISION path must refuse it as well (M-1: the POST decides).
+    const posted = await cfCall(
+      cf.cfModeratePost,
+      forged.replace(ORIGIN, ''),
+      'POST',
+      { SITE_BASE_URL: ORIGIN },
+      {},
+    );
     unbindEdgeFs();
     assertEqual(r.status, 400, `a forged link must be refused, got ${r.status}: ${JSON.stringify(r.body)}`);
+    assertEqual(
+      posted.status,
+      400,
+      `a forged link must be refused on the decision path too, got ${posted.status}: ${JSON.stringify(posted.body)}`,
+    );
     const record = readJsonl(REVIEWS_FILE).find((x) => x.ref === ref);
     assertEqual(record.state, 'pending', 'a forged link must not change anything');
-    return `status=${r.status} code=${r.body && r.body.code}`;
+    return `status=${r.status} code=${r.body && r.body.code} (the POST is refused too)`;
   });
 
   await t('B4', 'a link for a superseded revision approves nothing on Cloudflare', async () => {
@@ -811,9 +883,9 @@ async function main() {
     const url = qaModerationUrl(ref, 'approve', 1, ts);
     bindEdgeFs();
     const r = await cfCall(
-      cf.cfModerateGet,
+      cf.cfModeratePost,
       url.replace(ORIGIN, ''),
-      'GET',
+      'POST',
       { SITE_BASE_URL: ORIGIN },
       {},
     );

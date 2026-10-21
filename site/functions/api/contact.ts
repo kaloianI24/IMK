@@ -1,3 +1,5 @@
+import { isProductionEnv } from '../../shared/server/portal-session.js';
+
 interface Env {
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string; // not used server-side; present for parity
@@ -8,7 +10,7 @@ interface Env {
   FORM_WEBHOOK_URL?: string;
   FORM_WEBHOOK_SECRET?: string;
   LOG_PEPPER?: string;
-  APP_ENV?: string;
+  APP_ENV?: string; // unset = production; 'development' only off-deployment
   DEV_STUB?: string; // must never be '1' in production
   KV_COUNTER?: any;
 }
@@ -76,8 +78,14 @@ const delay = (ms:number)=>new Promise(r=>setTimeout(r,ms));
 
 export const onRequestPost: any = async (ctx: any) => {
   const { request, env } = ctx;
-  // DEV_STUB guard: never in production
-  const isProd = (env.APP_ENV || 'production') === 'production';
+  // DEV_STUB guard: never in production.
+  //
+  // H-2 (wave-8A): the production test used to be
+  // `(env.APP_ENV || 'production') === 'production'`, so `APP_ENV=development`
+  // alone switched every guard off — including this one. The shared rule is
+  // used instead: a deployment is PRODUCTION when APP_ENV is unset or
+  // unknown, or NODE_ENV=production, or VERCEL=1, or the base URL is https://.
+  const isProd = isProductionEnv(env as any);
   if (isProd && env.DEV_STUB === '1') {
     return json({ error: 'misconfigured', code: 'internal' }, 500);
   }

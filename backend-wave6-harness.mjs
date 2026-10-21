@@ -65,8 +65,18 @@ const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
 
 const KEEP = process.argv.includes('--keep');
-const BASE = 'https://imk.test';
-const SECRET = 'wave6-harness-secret-0123456789';
+// The origin the harness pretends to serve. It is HTTP on purpose.
+//
+// H-2 (wave-8A): a deployment is PRODUCTION when the base URL is an
+// https:// URL (that is one of the three production signals in the brief), so
+// an https origin here would put the children in production mode — where the
+// magic-link token is NEVER written to the log and the harness could not
+// read it. A real local dev server is http://localhost:4321, so the fixture
+// now matches a local machine and the children stay in development mode.
+const BASE = 'http://imk.test';
+// At least 32 characters: H-1 refuses a shorter secret in production, and a
+// fixture that the rule would reject proves nothing.
+const SECRET = 'wave6-harness-secret-0123456789abc';
 const CLIENT_EMAIL = 'client@imk.test';
 const ADMIN_EMAIL = 'owner@imk.test';
 
@@ -212,6 +222,14 @@ async function buildMutatedBundles() {
   );
   fs.writeFileSync(MUTATED_SESSION, mutated, 'utf8');
 
+  // The mutated copy imports './secret.js' (H-1, wave-8A), so the secret
+  // module has to sit next to it or the bundle cannot be built.
+  fs.writeFileSync(
+    path.join(path.dirname(MUTATED_SESSION), 'secret.ts'),
+    fs.readFileSync(path.join(REPO, 'site', 'shared', 'server', 'secret.ts'), 'utf8'),
+    'utf8',
+  );
+
   const plugin = {
     name: 'mutated-session',
     setup(b) {
@@ -237,6 +255,23 @@ async function buildMutatedBundles() {
 
 function bundlePath(name) {
   return path.join(BUNDLES, `${name}.cjs`);
+}
+
+/**
+ * Copy a tree of TypeScript sources.
+ *
+ * The mutation probes copy a module into a sandbox and build it there. A
+ * module whose imports are relative needs its neighbours in the same relative
+ * layout, or the bundle cannot be built at all.
+ */
+function copyTree(from, to) {
+  fs.mkdirSync(to, { recursive: true });
+  for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
+    const src = path.join(from, entry.name);
+    const dst = path.join(to, entry.name);
+    if (entry.isDirectory()) copyTree(src, dst);
+    else if (entry.name.endsWith('.ts')) fs.copyFileSync(src, dst);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -975,7 +1010,9 @@ async function main() {
       }) + '\n',
       'utf8',
     );
-    // Read-only file: the read works, the write cannot.
+    // Read-only file: the read works, the write cannot. The DECISION is the
+    // POST (M-1: a GET only shows the confirmation page), so the write is
+    // attempted here.
     fs.chmodSync(file, 0o444);
     const r = runChild(
       bundlePath('vercel-moderate'),
@@ -983,9 +1020,10 @@ async function main() {
         {
           type: 'http',
           mode: 'vercel',
-          method: 'GET',
+          method: 'POST',
           url: MODERATE_URL,
-          headers: { host: 'imk.test' },
+          headers: { host: 'imk.test', 'content-type': 'application/x-www-form-urlencoded' },
+          body: '',
         },
       ],
       { FORM_WEBHOOK_SECRET: SECRET },
@@ -1000,20 +1038,10 @@ async function main() {
     return '500 {code:storage} — the decision was never stored, so it is not "approved"';
   });
 
-  await t('W4d', 'a WRITABLE store approves and says so', () => {
-    fs.mkdirSync(SANDBOX_MODERATION, { recursive: true });
-    fs.writeFileSync(
-      path.join(SANDBOX_MODERATION, 'reviews.jsonl'),
-      JSON.stringify({
-        type: 'review',
-        ref: REF,
-        revision: REVISION,
-        state: 'pending',
-        review: 'A good quote',
-        name: 'Nora',
-      }) + '\n',
-      'utf8',
-    );
+  await t('W4d', 'a GET does NOT flip the state (M-1: a mail scanner must not approve)', () => {
+    // The owner receives a GET link. Everything that touches mail fetches a
+    // link in an incoming message automatically, so a GET that decided
+    // anything would publish the owner's quotes without anybody's consent.
     const r = runChild(
       bundlePath('vercel-moderate'),
       [
@@ -1023,6 +1051,38 @@ async function main() {
           method: 'GET',
           url: MODERATE_URL,
           headers: { host: 'imk.test' },
+        },
+      ],
+      { FORM_WEBHOOK_SECRET: SECRET },
+    );
+    assertEqual(r.out[0].status, 200, `the status (body ${r.out[0].raw})`);
+    const headers = r.out[0].headers || {};
+    const contentType = String(
+      headers['content-type'] || headers['Content-Type'] || '',
+    ).toLowerCase();
+    assert(
+      contentType.includes('text/html'),
+      `a GET must answer the confirmation page, got ${contentType}`,
+    );
+    const stored = fs
+      .readFileSync(path.join(SANDBOX_MODERATION, 'reviews.jsonl'), 'utf8')
+      .trim();
+    assert(stored.includes('"pending"'), 'the state must still be pending');
+    assert(!stored.includes('"approved"'), 'a GET must never approve a quote');
+    return '200 + the confirmation page, and the store still says pending';
+  });
+
+  await t('W4e', 'the POST is the decision, and it is stored', () => {
+    const r = runChild(
+      bundlePath('vercel-moderate'),
+      [
+        {
+          type: 'http',
+          mode: 'vercel',
+          method: 'POST',
+          url: MODERATE_URL,
+          headers: { host: 'imk.test', 'content-type': 'application/x-www-form-urlencoded' },
+          body: '',
         },
       ],
       { FORM_WEBHOOK_SECRET: SECRET },
@@ -1171,9 +1231,16 @@ async function main() {
 
   await t('W5e', 'the probe can fail: the OLD lock classification leaks the raw EPERM', async () => {
     // Put the old classification back — in a COPY. The repo is not touched.
+    //
+    // The copy KEEPS THE RELATIVE LAYOUT (api/lib/rate-limit.ts) and the
+    // shared modules it imports are copied next to it, so the bundle can be
+    // built: the rate limiter imports the libSQL counter and the store
+    // access layer (wave 9). The same rule the session probe above follows —
+    // "the module has to sit next to it or the bundle cannot be built".
     const mutatedDir = path.join(SANDBOX, 'mutated');
-    fs.mkdirSync(mutatedDir, { recursive: true });
-    const mutatedFile = path.join(mutatedDir, 'rate-limit.ts');
+    const mutatedFile = path.join(mutatedDir, 'api', 'lib', 'rate-limit.ts');
+    fs.mkdirSync(path.dirname(mutatedFile), { recursive: true });
+    copyTree(path.join(REPO, 'site', 'shared'), path.join(mutatedDir, 'site', 'shared'));
     const source = fs.readFileSync(path.join(REPO, 'api', 'lib', 'rate-limit.ts'), 'utf8');
     const mutated = source.replace(
       "if (!LOCK_BUSY_CODES.has(code)) throw err;",

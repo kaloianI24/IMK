@@ -111,6 +111,7 @@ export { default as invites } from '${REPO_FWD}/api/portal/invites.ts';
 export { default as testimonials } from '${REPO_FWD}/api/portal/testimonials.ts';
 export { default as contact } from '${REPO_FWD}/api/contact.ts';
 export { default as moderate } from '${REPO_FWD}/api/moderate/review.ts';
+export { default as portalSession } from '${REPO_FWD}/api/portal/session.ts';
 `;
 
 const ROUTES = [
@@ -120,6 +121,7 @@ const ROUTES = [
   ['/api/portal/projects', 'projects'],
   ['/api/portal/invites', 'invites'],
   ['/api/portal/testimonials', 'testimonials'],
+  ['/api/portal/session', 'portalSession'],
 ];
 
 const SANDBOX_PORTAL = path.join(SANDBOX, 'site', 'data', 'portal');
@@ -351,9 +353,77 @@ function moderationUrl(ref, decision, ts, revision) {
   return `/api/moderate/review?ref=${encodeURIComponent(ref)}&decision=${encodeURIComponent(decision)}&revision=${rev}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
 }
 
+/**
+ * The signed fields of a moderation link.
+ *
+ * The signature covers `ref|decision|revision|ts`, so the same five values
+ * verify whether they travel in the query string or in the body.
+ */
+const MODERATION_FIELDS = ['ref', 'decision', 'revision', 'ts', 'sig'];
+
+/** The fields of a moderation link, as a plain object. */
+function moderationFields(url) {
+  const parsed = new URL(url, ORIGIN);
+  const fields = {};
+  for (const name of MODERATION_FIELDS) {
+    fields[name] = parsed.searchParams.get(name) || '';
+  }
+  return fields;
+}
+
+/**
+ * The hidden inputs of the confirmation page.
+ *
+ * The page is the ONLY thing a mail scanner sees, so the fields it carries
+ * are the contract: whatever the page posts must be exactly what decides.
+ */
+function parseFormFields(html) {
+  const fields = {};
+  for (const tag of String(html).match(/<input\b[^>]*>/gi) || []) {
+    const name = /name="([^"]*)"/i.exec(tag);
+    const value = /value="([^"]*)"/i.exec(tag);
+    if (name && value) fields[name[1]] = value[1];
+  }
+  return fields;
+}
+
+/**
+ * POST the moderation decision -- the way the owner's confirmation form does.
+ *
+ * M-1 (wave-8A): a GET is NOT a decision. It only shows the confirmation
+ * page; the state is changed by the POST that the form issues. The signed
+ * parameters travel in the form body, exactly as the page's hidden inputs
+ * carry them.
+ */
+async function postDecision(url) {
+  return req('POST', '/api/moderate/review', {
+    body: moderationFields(url),
+    form: true,
+  });
+}
+
+/**
+ * The owner's real flow: open the link (a GET -> the confirmation page),
+ * read the page's own hidden inputs and press the button (a POST).
+ */
+async function approveThroughTheForm(url) {
+  const page = await req('GET', url);
+  assertEqual(page.status, 200, 'the confirmation page must be served');
+  assert(
+    /<form[^>]*method="POST"/i.test(page.text),
+    'the confirmation page must offer a POST form (a GET must never decide)',
+  );
+  const fields = parseFormFields(page.text);
+  for (const name of MODERATION_FIELDS) {
+    assert(fields[name], `the confirmation form must carry "${name}"`);
+  }
+  return req('POST', '/api/moderate/review', { body: fields, form: true });
+}
+
+/** Approve a quote: the decision is the POST, never the GET. */
 async function approve(ref) {
   const ts = Math.floor(Date.now() / 1000);
-  return req('GET', moderationUrl(ref, 'approve', ts));
+  return postDecision(moderationUrl(ref, 'approve', ts));
 }
 
 async function submit(email, projectId, payload) {
@@ -398,8 +468,14 @@ async function main() {
   process.env.SITE_BASE_URL = ORIGIN;
   process.env.SITE_URL = ORIGIN;
   process.env.ADMIN_EMAILS = OWNER;
-  process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-magic-secret';
-  process.env.FORM_WEBHOOK_SECRET = 'qa-webhook-secret';
+  // H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE -- the
+  // published placeholder, or shorter than MIN_SECRET_LENGTH (32) -- is refused
+  // exactly like a missing one. This suite runs in development, but G4 flips
+  // it into production, so the fixtures are 32+ characters long: otherwise
+  // G4 would answer 500 for the wrong reason (a refused secret) instead of
+  // the one it tests (a missing RESEND_API_KEY).
+  process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-testimonials-magic-link-secret-0123456789';
+  process.env.FORM_WEBHOOK_SECRET = 'qa-testimonials-form-webhook-secret-0123456789';
   process.env.RESEND_API_KEY = 'qa-resend-key';
   process.env.RESEND_TO = OWNER;
   process.env.CONTACT_TO = OWNER;
@@ -909,7 +985,9 @@ async function main() {
 
   await t('E8', 'a valid signature approves the record', async () => {
     const ts = nowSec;
-    const res = await req('GET', moderationUrl(modRef, 'approve', ts));
+    // The DECISION is the POST (M-1, wave-8A): the GET only shows the
+    // confirmation page.
+    const res = await postDecision(moderationUrl(modRef, 'approve', ts));
     assertEqual(res.status, 200, 'status');
     assertEqual(res.json.state, 'approved', 'state');
     const stored = readJsonl(REVIEWS_FILE).filter((r) => r.ref === modRef).pop();
@@ -919,7 +997,7 @@ async function main() {
   await t('E9', 'the one-click link is idempotent (no second decision, no new line)', async () => {
     const linesBefore = readJsonl(REVIEWS_FILE).length;
     const ts = nowSec;
-    const res = await req('GET', moderationUrl(modRef, 'approve', ts));
+    const res = await postDecision(moderationUrl(modRef, 'approve', ts));
     assertEqual(res.status, 200, 'status');
     assertEqual(res.json.state, 'approved', 'state');
     assertEqual(readJsonl(REVIEWS_FILE).length, linesBefore, 'no new line may be appended');
@@ -933,9 +1011,102 @@ async function main() {
     assertEqual(res.status, 200, 'submit status');
     const ref = res.json.testimonial.ref;
     const ts = nowSec;
-    const res2 = await req('GET', moderationUrl(ref, 'reject', ts));
+    const res2 = await postDecision(moderationUrl(ref, 'reject', ts));
     assertEqual(res2.status, 200, 'status');
     assertEqual(res2.json.state, 'rejected', 'state');
+  });
+
+  // =========================================================================
+  // M-1 (wave-8A): THE METHOD IS THE POINT.
+  //
+  // The approve/reject link is a signed GET URL, and a signed GET URL is
+  // fetched AUTOMATICALLY by every mail scanner, chat preview and antivirus
+  // gateway. Before wave-8A that prefetch WAS the approval: the owner's
+  // quotes were published without the owner ever seeing them. A GET must
+  // therefore decide NOTHING -- it only shows the confirmation page, and the
+  // POST that the page's form issues is the decision.
+  // =========================================================================
+
+  await t('E11', 'M-1: a plain GET on the signed link shows the confirmation page and decides NOTHING', async () => {
+    const prjM1 = await makeProject(erin.id, 'Erin Third Website', 'completed');
+    const sub = await submit('erin@client.test', prjM1, {
+      review: 'A quote that a mail scanner will prefetch.',
+      consent: { p1: true, p2: true, p3: false },
+    });
+    assertEqual(sub.status, 200, 'submit status');
+    const ref = sub.json.testimonial.ref;
+    const before = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref).pop();
+    assertEqual(before.state, 'pending', 'the quote must start pending');
+
+    // What every mail scanner does by itself: fetch the link.
+    const page = await req('GET', moderationUrl(ref, 'approve', nowSec));
+    assertEqual(page.status, 200, 'the GET must serve the confirmation page');
+    const contentType = String(page.headers.get('content-type') || '');
+    assert(
+      contentType.includes('text/html'),
+      `the GET must answer a PAGE, not JSON (got ${contentType})`,
+    );
+    assert(/<form[^>]*method="POST"/i.test(page.text), 'the page must offer a POST form');
+    assert(/name="sig"/.test(page.text), 'the page must carry the signature in the form');
+    assert(/name="decision"/.test(page.text), 'the page must carry the decision in the form');
+    assert(/name="revision"/.test(page.text), 'the page must carry the revision in the form');
+
+    // ...and nothing at all was decided.
+    const after = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref).pop();
+    assertEqual(after.state, 'pending', 'a GET must not approve anything');
+    assertEqual(after.decidedAt, undefined, 'a GET must not stamp a decision time');
+    assertEqual(
+      readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref && r.state === 'approved').length,
+      0,
+      'no line may be approved by a GET',
+    );
+    note('E11-detail', 'a plain GET served the confirmation page and the quote stayed pending');
+  });
+
+  await t('E12', 'M-1: the confirmation page\'s own form POST is what decides the quote', async () => {
+    // A client with room in its submit bucket (5 per hour) and NOT the
+    // anonymous client of F3 -- a named quote of the anonymous client would
+    // put that name on the page and break the publish-time check.
+    const prjM1b = await makeProject(alice.id, 'Alice Fourth Website', 'completed');
+    const sub = await submit('alice@client.test', prjM1b, {
+      review: 'A quote the owner confirms on the page.',
+      consent: { p1: true, p2: true, p3: false },
+    });
+    assertEqual(sub.status, 200, 'submit status');
+    const ref = sub.json.testimonial.ref;
+
+    // The owner's real flow: open the link, press the button.
+    const res = await approveThroughTheForm(moderationUrl(ref, 'approve', nowSec));
+    assertEqual(res.status, 200, 'the form POST must be accepted');
+    assertEqual(res.json.state, 'approved', 'state');
+    const stored = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref).pop();
+    assertEqual(stored.state, 'approved', 'the stored state must be approved');
+    note('E12-detail', 'the page\'s own hidden fields decided the quote');
+  });
+
+  await t('E13', 'M-1: a GET on an already-decided quote says so and still decides nothing', async () => {
+    const prjM1c = await makeProject(bob.id, 'Bob Fifth Website', 'completed');
+    const sub = await submit('bob@client.test', prjM1c, {
+      review: 'A quote that was already decided.',
+      consent: { p1: true, p2: true, p3: false },
+    });
+    assertEqual(sub.status, 200, 'submit status');
+    const ref = sub.json.testimonial.ref;
+    const decided = await postDecision(moderationUrl(ref, 'approve', nowSec));
+    assertEqual(decided.status, 200, 'the first decision');
+    const linesBefore = readJsonl(REVIEWS_FILE).length;
+
+    const page = await req('GET', moderationUrl(ref, 'approve', nowSec));
+    assertEqual(page.status, 200, 'the GET must still serve a page');
+    assert(
+      /already\s*decided/i.test(page.text),
+      'the page must say the quote was already decided',
+    );
+    assert(
+      !/<button[^>]*type="submit"/i.test(page.text),
+      'an already-decided quote must not offer a decision button',
+    );
+    assertEqual(readJsonl(REVIEWS_FILE).length, linesBefore, 'a GET must not append a line');
   });
 
   // =========================================================================
@@ -1092,8 +1263,8 @@ async function main() {
     const storedSecond = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref).pop();
     assertEqual(storedSecond.revision, 2, 'the revision counter must have advanced');
 
-    // The owner clicks the link that was built for revision 1.
-    const approveRes = await req('GET', linkForRevision1);
+    // The owner presses the button on a link that was built for revision 1.
+    const approveRes = await postDecision(linkForRevision1);
     assertEqual(approveRes.status, 409, 'a stale link must be refused, not applied to another revision');
     assertEqual(approveRes.json.code, 'stale-revision', 'code');
     const afterStale = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref);
@@ -1109,7 +1280,7 @@ async function main() {
     );
 
     // The link for the CURRENT revision approves exactly that revision.
-    const ok = await req('GET', moderationUrl(ref, 'approve', Math.floor(Date.now() / 1000)));
+    const ok = await postDecision(moderationUrl(ref, 'approve', Math.floor(Date.now() / 1000)));
     assertEqual(ok.status, 200, 'the current link must approve');
     const approved = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref && r.state === 'approved');
     assertEqual(approved.length, 1, 'exactly one line may be approved');
@@ -1358,6 +1529,205 @@ async function main() {
     const declared = res.headers.get('content-length');
     assert(declared !== null, 'a Content-Length must be declared');
     assertEqual(Number(declared), Buffer.byteLength(res.text), 'Content-Length vs body bytes');
+  });
+
+  // =========================================================================
+  group('I — the secret rule (H-1, wave-8A): a PRESENT but UNUSABLE secret is refused');
+
+  // In production a secret is refused when it is missing, when it is the
+  // published placeholder, and when it is shorter than 32 characters. A
+  // published HMAC key is a public key: anybody who knows it can forge an
+  // admin session, a sign-in link and a moderation link.
+  const withProductionEnv = async (fn) => {
+    const savedEnv = process.env.APP_ENV;
+    delete process.env.APP_ENV; // unset = production
+    try {
+      return await fn();
+    } finally {
+      if (savedEnv !== undefined) process.env.APP_ENV = savedEnv;
+    }
+  };
+
+  /**
+   * Put an environment variable back the way it was.
+   *
+   * `process.env.X = undefined` writes the STRING "undefined" -- a 13
+   * character secret that the next request would refuse. A variable that was
+   * not set has to be DELETED again.
+   */
+  const restoreEnv = (name, value) => {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  };
+
+  await t('I1', 'H-1: in production a secret SHORTER than 32 characters is refused (500 internal)', async () => {
+    const saved = process.env.FORM_WEBHOOK_SECRET;
+    process.env.FORM_WEBHOOK_SECRET = 'qa-too-short-secret';
+    let res = null;
+    try {
+      res = await withProductionEnv(() =>
+        req('GET', moderationUrl(modRef, 'approve', Math.floor(Date.now() / 1000))),
+      );
+    } finally {
+      restoreEnv('FORM_WEBHOOK_SECRET', saved);
+    }
+    assertEqual(res.status, 500, 'a short secret must be refused');
+    assertEqual(res.json.code, 'internal', 'the answer must say the instance is misconfigured');
+    note('I1-detail', 'a 17-character FORM_WEBHOOK_SECRET -> 500 {code:internal} in production');
+  });
+
+  await t('I2', 'H-1: in production the PUBLISHED PLACEHOLDER secret is refused as well', async () => {
+    const saved = process.env.FORM_WEBHOOK_SECRET;
+    process.env.FORM_WEBHOOK_SECRET = 'your-32-byte-hex-hmac-secret-here';
+    let res = null;
+    try {
+      res = await withProductionEnv(() =>
+        req('GET', moderationUrl(modRef, 'approve', Math.floor(Date.now() / 1000))),
+      );
+    } finally {
+      restoreEnv('FORM_WEBHOOK_SECRET', saved);
+    }
+    assertEqual(res.status, 500, 'the published placeholder must be refused');
+    assertEqual(res.json.code, 'internal', 'the answer must say the instance is misconfigured');
+    note('I2-detail', 'the placeholder from site/.env.example -> 500 {code:internal} in production');
+  });
+
+  await t('I3', 'H-1: CONTROL - a secret of 32+ characters IS usable in production', async () => {
+    // A client of its own: the submit bucket holds 5 per hour.
+    const prjSecret = await makeProject(frank.id, 'Frank Secret Website', 'completed');
+    const sub = await submit('frank@client.test', prjSecret, {
+      review: 'A quote approved with a 32-character secret.',
+      consent: { p1: true, p2: true, p3: false },
+    });
+    assertEqual(sub.status, 200, 'submit status');
+    const ref = sub.json.testimonial.ref;
+
+    const good = 'qa-exactly-thirty-two-characters-01'; // 33 characters
+    assert(good.length >= 32, 'the control secret must be at least 32 characters');
+    const saved = process.env.FORM_WEBHOOK_SECRET;
+    process.env.FORM_WEBHOOK_SECRET = good;
+    let res = null;
+    try {
+      const ts = Math.floor(Date.now() / 1000);
+      const sig = require('node:crypto')
+        .createHmac('sha256', good)
+        .update(`${ref}|approve|1|${ts}`)
+        .digest('hex');
+      const url = `/api/moderate/review?ref=${encodeURIComponent(ref)}&decision=approve&revision=1&sig=${encodeURIComponent(sig)}&ts=${ts}`;
+      res = await withProductionEnv(() => postDecision(url));
+    } finally {
+      restoreEnv('FORM_WEBHOOK_SECRET', saved);
+    }
+    assertEqual(res.status, 200, `a 32+ character secret must be accepted (got ${res.status}: ${res.text})`);
+    assertEqual(res.json.state, 'approved', 'state');
+    note('I3-detail', `a ${good.length}-character secret signed and approved a quote in production`);
+  });
+
+  await t('I4', 'H-1: in production a short SIGNING secret means no session can be minted', async () => {
+    const savedSession = process.env.PORTAL_SESSION_SECRET;
+    const savedMagic = process.env.PORTAL_MAGIC_LINK_SECRET;
+    process.env.PORTAL_SESSION_SECRET = 'qa-short-session';
+    process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-short-magic';
+    let res = null;
+    try {
+      res = await withProductionEnv(() =>
+        req('POST', '/api/portal/auth/request-link', { body: { email: 'alice@client.test' } }),
+      );
+    } finally {
+      restoreEnv('PORTAL_SESSION_SECRET', savedSession);
+      restoreEnv('PORTAL_MAGIC_LINK_SECRET', savedMagic);
+    }
+    assertEqual(res.status, 500, 'a short signing secret must be refused');
+    assertEqual(res.json.code, 'internal', 'the answer must say the instance is misconfigured');
+    assertEqual(res.setCookie.length, 0, 'no session cookie may be issued');
+    note('I4-detail', 'a 16-character PORTAL_SESSION_SECRET -> 500 {code:internal}, no cookie');
+  });
+
+  // =========================================================================
+  group('J — GET /api/portal/session (the server truth about the requester)');
+
+  await t('J1', 'no session -> 401 {code:unauthorized}', async () => {
+    const res = await req('GET', '/api/portal/session');
+    assertEqual(res.status, 401, 'status');
+    assertEqual(res.json.code, 'unauthorized', 'code');
+  });
+
+  await t('J2', 'the owner -> 200 {role:admin}', async () => {
+    const res = await req('GET', '/api/portal/session', { cookie: sessions[OWNER] });
+    assertEqual(res.status, 200, 'status');
+    assertEqual(res.json.ok, true, 'ok');
+    assertEqual(res.json.authenticated, true, 'authenticated');
+    assertEqual(res.json.role, 'admin', 'role');
+    assertEqual(res.json.email, OWNER, 'email');
+    assert(typeof res.json.expiresAt === 'number', 'the expiry must be reported');
+    assert(!('clientId' in res.json), 'an owner session has no clientId');
+  });
+
+  await t('J3', 'a client -> 200 {role:client, clientId}', async () => {
+    const res = await req('GET', '/api/portal/session', { cookie: sessions['alice@client.test'] });
+    assertEqual(res.status, 200, 'status');
+    assertEqual(res.json.role, 'client', 'role');
+    assertEqual(res.json.email, 'alice@client.test', 'email');
+    assert(res.json.clientId, 'a client session must carry its clientId');
+  });
+
+  await t('J4', 'another method -> 405 {code:method}', async () => {
+    const res = await req('POST', '/api/portal/session', { cookie: sessions[OWNER], body: {} });
+    assertEqual(res.status, 405, 'status');
+    assertEqual(res.json.code, 'method', 'code');
+  });
+
+  await t('J5', 'an unset ADMIN_EMAILS -> 500 {code:internal} (a misconfiguration, not "nobody is the owner")', async () => {
+    const saved = process.env.ADMIN_EMAILS;
+    delete process.env.ADMIN_EMAILS;
+    let res = null;
+    try {
+      res = await req('GET', '/api/portal/session', { cookie: sessions[OWNER] });
+    } finally {
+      process.env.ADMIN_EMAILS = saved;
+    }
+    assertEqual(res.status, 500, 'status');
+    assertEqual(res.json.code, 'internal', 'code');
+  });
+
+  await t('J6', 'the allow-list is live: an owner whose address was removed is answered "client"', async () => {
+    const saved = process.env.ADMIN_EMAILS;
+    process.env.ADMIN_EMAILS = 'somebody.else@imk.test';
+    let res = null;
+    try {
+      res = await req('GET', '/api/portal/session', { cookie: sessions[OWNER] });
+    } finally {
+      process.env.ADMIN_EMAILS = saved;
+    }
+    assertEqual(res.status, 200, 'the session itself is still valid');
+    assertEqual(res.json.role, 'client', 'the owner powers must be gone at once');
+    note('J6-detail', 'the same owner token was answered "client" after the address left the allow-list');
+  });
+
+  await t('J7', 'H-2: an unusable session secret is a MISCONFIGURATION (500), not a silent 401', async () => {
+    // The Cloudflare twin answers 500 {code:'internal'} here ("a deployment
+    // that cannot VERIFY a session must say so loudly -- a 401 would be the
+    // silent 'signed out' symptom"). The two trees must answer the same way
+    // for the same input (spec/07 §1, D-6).
+    const savedSession = process.env.PORTAL_SESSION_SECRET;
+    const savedMagic = process.env.PORTAL_MAGIC_LINK_SECRET;
+    process.env.PORTAL_SESSION_SECRET = 'qa-short-session';
+    process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-short-magic';
+    let res = null;
+    try {
+      res = await withProductionEnv(() =>
+        req('GET', '/api/portal/session', { cookie: sessions[OWNER] }),
+      );
+    } finally {
+      restoreEnv('PORTAL_SESSION_SECRET', savedSession);
+      restoreEnv('PORTAL_MAGIC_LINK_SECRET', savedMagic);
+    }
+    assertEqual(
+      res.status,
+      500,
+      `an unusable signing secret must be loud (got ${res.status}: ${res.text}) -- the Cloudflare twin answers 500 {code:'internal'} for the same input`,
+    );
+    assertEqual(res.json.code, 'internal', 'the answer must say the instance is misconfigured');
   });
 
   // =========================================================================

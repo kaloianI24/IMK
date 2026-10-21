@@ -28,11 +28,15 @@
 //       limiter is KV-backed: the 6th request from one IP is 429, and the
 //       counter lives in KV (durable across cold starts)
 //   C4  the Cloudflare moderation endpoint ACCEPTS a link signed by the
-//       Vercel tree and rejects a forged one
+//       Vercel tree and rejects a forged one. The DECISION is the POST
+//       (M-1, wave-8A): a GET only shows the confirmation page, so a mail
+//       scanner that prefetches the link decides nothing
 //   C5  a corrupt moderation store answers 500 {code:'storage'} on the
 //       Cloudflare tree too - the same answer the Vercel tree gives (the
 //       last lenient reader in the repo, QA wave-3 D-1), and a store that
 //       cannot be reached answers 501, never "review not found"
+//   C6  the Cloudflare session endpoint (GET /api/portal/session, wave-8A)
+//       answers the same codes as the Vercel tree
 //   D1  a link signed by the Cloudflare tree verifies with the Vercel verifier
 //   D2  a link signed by the Vercel tree verifies with the Cloudflare verifier
 //   D3  both trees build the SAME link shape, from SITE_BASE_URL
@@ -99,7 +103,7 @@ export { onRequestGet as cfPlanItemsGet } from '${REPO_FWD}/site/functions/api/p
 export { onRequestGet as cfUpdatesGet } from '${REPO_FWD}/site/functions/api/portal/updates.ts';
 export { onRequestPost as cfInvitesPost } from '${REPO_FWD}/site/functions/api/portal/invites.ts';
 export { onRequestPost as cfAuthPost } from '${REPO_FWD}/site/functions/api/portal/auth.ts';
-export { onRequestGet as cfModerateGet } from '${REPO_FWD}/site/functions/api/moderate/review.ts';
+export { onRequestGet as cfModerateGet, onRequestPost as cfModeratePost } from '${REPO_FWD}/site/functions/api/moderate/review.ts';
 export * as cfNotifications from '${REPO_FWD}/site/functions/api/lib/notifications.ts';
 export * as cfSession from '${REPO_FWD}/site/functions/api/portal/session.ts';
 export * as vercelNotifications from '${REPO_FWD}/api/lib/notifications.ts';
@@ -140,7 +144,10 @@ function fakeKv() {
   };
 }
 
-const SECRET = 'cf-parity-secret';
+// H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE -- the
+// published placeholder, or shorter than MIN_SECRET_LENGTH (32) -- is refused
+// exactly like a missing one, so every fixture below is 32+ characters long.
+const SECRET = 'qa-cf-parity-form-webhook-secret-0123456789';
 const BASE = 'https://imk.test';
 // The session is a SIGNED token (audit wave-6, F-2), so a session can only
 // be minted when a signing secret is configured. This suite runs with
@@ -148,7 +155,7 @@ const BASE = 'https://imk.test';
 // so the secret has to be here, in BOTH the Worker's env and process.env:
 // cfEnv() is what the handlers verify against, and the mint below calls
 // createSession() without an env, which falls back to process.env.
-const SESSION_SECRET = 'qa-cf-parity-session-secret';
+const SESSION_SECRET = 'qa-cf-parity-session-secret-0123456789';
 
 function cfEnv(extra = {}) {
   return {
@@ -159,6 +166,10 @@ function cfEnv(extra = {}) {
     CONTACT_TO: 'owner@imk.test',
     APP_ENV: 'production',
     PORTAL_SESSION_SECRET: SESSION_SECRET,
+    // The owner allow-list is part of a working deployment (M-4): without it
+    // the owner gate refuses EVERYONE, and the checks below would prove the
+    // gate works instead of what they are about.
+    ADMIN_EMAILS: 'owner@imk.test',
     ...extra,
   };
 }
@@ -358,8 +369,11 @@ async function main() {
     const vercelUrl = cf.vercelNotifications.moderationUrl(ref, 'approve', 1, ts);
     assert(new URL(vercelUrl).searchParams.get('sig'), 'the Vercel link must carry a signature');
 
-    const accepted = await cf.cfModerateGet({
-      request: new Request(vercelUrl),
+    // The DECISION is the POST (M-1, wave-8A): a GET only shows the
+    // confirmation page. The edge has no moderation store, so the POST fails
+    // at the STORE, never at the signature.
+    const accepted = await cf.cfModeratePost({
+      request: new Request(vercelUrl, { method: 'POST' }),
       env: cfEnv(),
     });
     // The signature passed, so the handler got past the signature check and
@@ -371,16 +385,91 @@ async function main() {
     assertEqual(accepted.status, 501, 'the edge has no moderation store');
     assertEqual(acceptedBody.code, 'unimplemented', 'the missing-store code');
 
-    const forged = await cf.cfModerateGet({
+    // The same link as a GET: the confirmation page path. On the edge it
+    // fails at the store as well -- but it must never be a DECISION.
+    const scanned = await cf.cfModerateGet({
+      request: new Request(vercelUrl),
+      env: cfEnv(),
+    });
+    assert(scanned.status !== 400, `a prefetched link must not be rejected: ${scanned.status}`);
+    assertEqual(scanned.status, 501, 'the GET must fail at the store, exactly like the POST');
+
+    const forged = await cf.cfModeratePost({
       request: new Request(
         `https://imk.test/api/moderate/review?ref=${ref}&decision=approve&revision=1&sig=${'0'.repeat(64)}&ts=${ts}`,
+        { method: 'POST' },
       ),
       env: cfEnv(),
     });
     assertEqual(forged.status, 400, 'a forged signature must be rejected');
     const forgedBody = await forged.json();
     assertEqual(forgedBody.code, 'signature', 'the forged link must fail on the signature');
-    return 'vercel link accepted, forged link rejected';
+    return 'vercel link accepted by the POST, prefetched GET decides nothing, forged link rejected';
+  });
+
+  await t('C6', 'the Cloudflare session endpoint answers the same codes as the Vercel tree', async () => {
+    // GET /api/portal/session (wave-8A): the server truth about the requester.
+    const ownerToken = cf.cfSession.createSession('owner@imk.test', 'admin');
+    const clientToken = cf.cfSession.createSession('client@client.test', 'client', 'cli_1');
+
+    const owner = await cf.cfSession.onRequestGet({
+      request: new Request('https://imk.test/api/portal/session', {
+        headers: { cookie: `imk_admin_session=${ownerToken}` },
+      }),
+      env: cfEnv(),
+    });
+    assertEqual(owner.status, 200, 'the owner must get 200');
+    const ownerBody = await owner.json();
+    assertEqual(ownerBody.role, 'admin', 'the role');
+    assertEqual(ownerBody.email, 'owner@imk.test', 'the e-mail');
+    assertEqual(ownerBody.authenticated, true, 'authenticated');
+
+    const client = await cf.cfSession.onRequestGet({
+      request: new Request('https://imk.test/api/portal/session', {
+        headers: { cookie: `imk_session=${clientToken}` },
+      }),
+      env: cfEnv(),
+    });
+    assertEqual(client.status, 200, 'a client must get 200');
+    const clientBody = await client.json();
+    assertEqual(clientBody.role, 'client', 'the role');
+    assertEqual(clientBody.clientId, 'cli_1', 'the clientId');
+
+    const none = await cf.cfSession.onRequestGet({
+      request: new Request('https://imk.test/api/portal/session'),
+      env: cfEnv(),
+    });
+    assertEqual(none.status, 401, 'no session must get 401');
+    assertEqual((await none.json()).code, 'unauthorized', 'the code');
+
+    const wrongMethod = await cf.cfSession.onRequest({
+      request: new Request('https://imk.test/api/portal/session', { method: 'POST' }),
+      env: cfEnv(),
+    });
+    assertEqual(wrongMethod.status, 405, 'a wrong method must get 405');
+    assertEqual((await wrongMethod.json()).code, 'method', 'the code');
+
+    const misconfigured = await cf.cfSession.onRequestGet({
+      request: new Request('https://imk.test/api/portal/session', {
+        headers: { cookie: `imk_admin_session=${ownerToken}` },
+      }),
+      env: cfEnv({ ADMIN_EMAILS: '' }),
+    });
+    assertEqual(misconfigured.status, 500, 'an unset allow-list must get 500');
+    assertEqual((await misconfigured.json()).code, 'internal', 'the code');
+
+    // H-1: an unusable signing secret is a misconfiguration too, not a
+    // silent "signed out".
+    const shortSecret = await cf.cfSession.onRequestGet({
+      request: new Request('https://imk.test/api/portal/session', {
+        headers: { cookie: `imk_admin_session=${ownerToken}` },
+      }),
+      env: cfEnv({ PORTAL_SESSION_SECRET: 'too-short-session' }),
+    });
+    assertEqual(shortSecret.status, 500, 'a short signing secret must get 500');
+    assertEqual((await shortSecret.json()).code, 'internal', 'the code');
+
+    return 'owner 200, client 200, no cookie 401, wrong method 405, unset allow-list 500, short secret 500';
   });
 
   await t('C5', 'a corrupt Cloudflare moderation store answers 500 storage, never "review not found"', async () => {
@@ -406,6 +495,7 @@ async function main() {
           readFileSync: () => '{ this line is not json\n',
           writeFileSync: () => {},
           mkdirSync: () => {},
+          renameSync: () => {},
         };
       }
       return require(id);

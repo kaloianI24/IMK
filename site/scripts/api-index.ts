@@ -22,6 +22,10 @@ export { default as updates } from '../../api/portal/updates.ts';
 export { default as comments } from '../../api/portal/comments.ts';
 export { default as invites } from '../../api/portal/invites.ts';
 export { default as testimonials } from '../../api/portal/testimonials.ts';
+// The server-truth role endpoint (Architect §4.2, wave-8A). Without it in the
+// local bundle the portal page cannot ask the server who it is, and the owner
+// controls can never appear in local dev.
+export { default as portalSession } from '../../api/portal/session.ts';
 // The moderation endpoint belongs here too: without it the one-click approve
 // link 404s in local dev, so the flow QA exercises in production could not be
 // exercised at all locally (audit m8).

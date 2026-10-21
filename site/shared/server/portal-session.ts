@@ -70,6 +70,14 @@ export interface Session {
   email: string;
   role: Role;
   clientId?: string;
+  /**
+   * Expiry of the signed token, epoch ms.
+   *
+   * It is the `x` field of the signed payload, so the browser can be told
+   * when the session dies (Architect §4.2: `expiresAt`). It is NOT a
+   * server-side decision — the signature is.
+   */
+  expiresAt?: number;
 }
 
 /**
@@ -87,6 +95,11 @@ export interface EnvLike {
   SITE_URL?: string;
   PORTAL_SESSION_SECRET?: string;
   PORTAL_MAGIC_LINK_SECRET?: string;
+  /** The owner allow-list. Read on EVERY request (audit M-4). */
+  ADMIN_EMAILS?: string;
+  /** Vercel sets NODE_ENV=production; VERCEL=1 marks a deployed instance. */
+  NODE_ENV?: string;
+  VERCEL?: string;
 }
 
 /**
@@ -103,6 +116,11 @@ export interface SessionSource {
 }
 
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+/**
+ * Clock skew allowance. A token may not claim to live longer than the TTL
+ * plus this much (M-3) — the same rule the magic-link module applies.
+ */
+const CLOCK_SKEW_MS = 60 * 1000;
 const COOKIE_CLIENT = 'imk_session';
 const COOKIE_ADMIN = 'imk_admin_session';
 const TOKEN_VERSION = 'v1';
@@ -308,11 +326,57 @@ function defaultEnv(): EnvLike {
  * api/contact.ts. An unset APP_ENV must NOT be read as development: a
  * deployed instance with a missing RESEND_API_KEY would then print a live
  * bearer token to its log (audit M4).
+ *
+ * H-2 (wave-8A): `APP_ENV=development` alone is NOT enough to switch the
+ * fail-closed guards off. The shipped `site/.env.example` set exactly that
+ * one variable, and with it every guard in the project was silently
+ * disabled on a deployed instance:
+ *   - the session secret fell back to a PER-PROCESS random value, which on
+ *     Vercel restores the F-2 symptom (the cookie minted by one function is
+ *     refused by the next) as a silent 401 instead of a loud 500;
+ *   - a missing RESEND_API_KEY wrote the sign-in token to the log.
+ *
+ * So a deployment is PRODUCTION when ANY of these says so:
+ *   - APP_ENV is unset (the default),
+ *   - APP_ENV is anything other than 'development' (unknown -> fail closed),
+ *   - NODE_ENV=production (Vercel, and most hosts),
+ *   - VERCEL=1,
+ *   - SITE_BASE_URL / SITE_URL is an https:// URL.
+ * Only an explicit APP_ENV=development on a machine that is not deployed
+ * (no NODE_ENV=production, no VERCEL, no https base URL) is DEVELOPMENT.
  */
 export function isProductionEnv(env?: EnvLike): boolean {
   const e = env ?? defaultEnv();
-  return (e.APP_ENV || 'production') === 'production';
+  const appEnv = String(e.APP_ENV || '').trim().toLowerCase();
+  if (appEnv !== 'development') return true; // unset, 'production' or unknown -> production
+  if (String(e.NODE_ENV || '').trim().toLowerCase() === 'production') return true;
+  if (String(e.VERCEL || '').trim() === '1') return true;
+  const base = String(e.SITE_BASE_URL || e.SITE_URL || '').trim().toLowerCase();
+  if (base.startsWith('https://')) return true;
+  return false;
 }
+
+// ---------------------------------------------------------------------------
+// Secret quality — H-1 (wave-8A)
+// ---------------------------------------------------------------------------
+
+// The rule itself lives in site/shared/server/secret.ts, so the session
+// module, the magic-link module, the moderation endpoint and the contact
+// form all judge a secret the SAME way. It is re-exported here because the
+// session module is the module every handler already imports.
+export {
+  PUBLISHED_SECRET_PLACEHOLDERS,
+  MIN_SECRET_LENGTH,
+  secretProblem,
+  secretUsable,
+  type SecretProblem,
+} from './secret.js';
+
+import {
+  secretProblem as secretProblemOf,
+  secretUsable as secretUsableOf,
+  type SecretProblem,
+} from './secret.js';
 
 /**
  * The signing secret, or null when there is none.
@@ -322,20 +386,43 @@ export function isProductionEnv(env?: EnvLike): boolean {
  * secret is a MISCONFIGURATION: an empty HMAC key is a public key, so the
  * token would be forgeable. In development a per-process secret is generated
  * so the portal works with no setup.
+ *
+ * H-1 (wave-8A): in production a secret that is PRESENT but UNUSABLE — the
+ * published placeholder, or shorter than 32 characters — is refused exactly
+ * like a missing one. The caller answers 500 {code:'internal'}; it never
+ * signs with a value an attacker could guess.
  */
 export function sessionSecret(env?: EnvLike): string | null {
   const e = env ?? defaultEnv();
   const raw = (e.PORTAL_SESSION_SECRET || e.PORTAL_MAGIC_LINK_SECRET || '').trim();
-  if (raw) return raw;
+  if (raw) {
+    if (isProductionEnv(e) && !secretUsableOf(raw)) return null;
+    return raw;
+  }
   if (isProductionEnv(e)) return null; // fail closed — never sign with ''
   const g = globalThis as any;
   if (!g.__imkDevSessionSecret) g.__imkDevSessionSecret = randomHex(32);
   return g.__imkDevSessionSecret;
 }
 
-/** Is a signing secret available? False in production without one. */
+/** Is a signing secret available? False in production without a usable one. */
 export function sessionSecretConfigured(env?: EnvLike): boolean {
   return sessionSecret(env) !== null;
+}
+
+/**
+ * WHY the session secret is unusable, for the log line.
+ *
+ * 'missing' | 'placeholder' | 'too-short' | null. The reason is what tells
+ * the operator whether to paste a new value or to generate one — a bare
+ * "misconfigured" is a support ticket.
+ */
+export function sessionSecretProblem(env?: EnvLike): SecretProblem {
+  const e = env ?? defaultEnv();
+  const raw = (e.PORTAL_SESSION_SECRET || e.PORTAL_MAGIC_LINK_SECRET || '').trim();
+  if (!raw) return isProductionEnv(e) ? 'missing' : null;
+  if (!isProductionEnv(e)) return null;
+  return secretProblemOf(raw);
 }
 
 // ---------------------------------------------------------------------------
@@ -501,8 +588,15 @@ export function parseSession(token: string, env?: EnvLike): Session | null {
   if (!payload || typeof payload.e !== 'string') return null;
   if (payload.r !== 'admin' && payload.r !== 'client') return null;
   if (typeof payload.x !== 'number' || Date.now() > payload.x) return null;
+  // M-3 (wave-8A): a token must not outlive the TTL. The magic-link module
+  // has had this guard since it was written; the session module did not, so
+  // a token claiming "valid until the year 3000" was accepted forever. Only
+  // the holder of the signing secret can mint one — this is defence in depth
+  // for the day the secret leaks, and a guard against a future bug that
+  // mints with the wrong TTL.
+  if (payload.x - Date.now() > SESSION_TTL_MS + CLOCK_SKEW_MS) return null;
   if (isRevoked(token)) return null;
-  const session: Session = { email: payload.e, role: payload.r };
+  const session: Session = { email: payload.e, role: payload.r, expiresAt: payload.x };
   if (payload.c) session.clientId = payload.c;
   return session;
 }
@@ -516,6 +610,16 @@ export function parseSession(token: string, env?: EnvLike): Session | null {
  * SKIPPED, so a stale admin cookie can no longer shadow a valid client
  * cookie, and a forged cookie is simply not a session.
  *
+ * WITHOUT `preferRole` the CLIENT cookie comes first (M-5, wave-8A). It used
+ * to be the admin cookie, and that is what let a live admin cookie widen a
+ * client's read scope: the Code Reviewer executed it — a client who owns ONE
+ * project got 2 of 2 back, including a project of another client.
+ *
+ * This function is the LOW-LEVEL primitive: it does not consult the owner
+ * allow-list. A client-scoped read must use `resolveAccess` (or
+ * `resolveClientSession`), and an owner-only action must use
+ * `resolveOwnerSession` — those two apply the M-4/M-5 rules.
+ *
  * `env` is the deployment's environment — the Cloudflare tree passes the
  * request's `env`, the Vercel tree lets it default to `process.env`.
  */
@@ -527,7 +631,7 @@ export function resolveSession(
   const cookies = readSessionCookies(source);
   const order: Role[] = preferRole
     ? [preferRole, preferRole === 'admin' ? 'client' : 'admin']
-    : ['admin', 'client'];
+    : ['client', 'admin'];
   for (const role of order) {
     const token = cookies[role === 'admin' ? 'admin' : 'client'];
     if (!token) continue;
@@ -536,6 +640,227 @@ export function resolveSession(
     return session;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// The access of a request — M-4 and M-5 (wave-8A)
+// ---------------------------------------------------------------------------
+
+/**
+ * What a request is allowed to SEE and to CHANGE.
+ *
+ * Two INDEPENDENT facts, both read from the request's cookies:
+ *
+ *   client — the `imk_session` cookie resolves to a session. That is ONE
+ *            client's own session, and it is scoped to that client.
+ *   owner  — the `imk_admin_session` cookie resolves to a session whose role
+ *            claim is `admin` AND whose email is on the LIVE allow-list.
+ *            That is the OWNER, and it may act for every client.
+ *
+ * They are independent because a browser can hold BOTH cookies at once: the
+ * owner testing the client flow on their own machine, or a shared office
+ * computer. The two rules below are what stop that from being a privilege
+ * leak.
+ *
+ * THE READ RULE (M-5, Architect §4.3)
+ *   A client session narrows the read to that client — EVEN IF an owner
+ *   cookie is present. Only a request with no client session and a passing
+ *   owner gate reads every client's data.
+ *
+ * THE WRITE RULE (M-4)
+ *   An owner-only action needs the owner gate: the role claim AND the live
+ *   allow-list. The allow-list is read on EVERY request, so taking an
+ *   address off it revokes the owner's powers at once — not when the 24 h
+ *   token expires. This is the same gate /api/admin/session uses, so /admin
+ *   and /portal agree.
+ */
+export interface RequestAccess {
+  /** The client session, when the `imk_session` cookie resolves. */
+  client: Session | null;
+  /** The owner session, when the two-part owner gate passes. */
+  owner: Session | null;
+  /** The session the read path uses: the client one, else the owner's. */
+  session: Session | null;
+  /**
+   * ANY valid session, whatever its role or allow-list state.
+   *
+   * This is the answer to "is anybody signed in?". It separates the two
+   * states an owner-only action has to tell apart:
+   *   - nobody is signed in            -> 401 {code:'unauthorized'}
+   *   - somebody is signed in, but is
+   *     not the owner                   -> 403 {code:'forbidden'}
+   * The client uses 403 to mean "you are not the owner" and must not read it
+   * as "signed out" (Architect §4.2) — so a session whose address was just
+   * taken off the allow-list answers 403, not 401.
+   */
+  any: Session | null;
+}
+
+/**
+ * Work out what a request may see and change.
+ *
+ * One call, one reading of the cookies, one decision — so a handler cannot
+ * resolve the session twice and get two different answers.
+ */
+export function resolveAccess(source: SessionSource, env?: EnvLike): RequestAccess {
+  const e = env ?? defaultEnv();
+  const cookies = readSessionCookies(source);
+
+  // The client session: the `imk_session` cookie and nothing else. A cookie
+  // that does not resolve (stale or forged) is simply not a session.
+  const client = cookies.client ? parseSession(cookies.client, e) : null;
+
+  // The owner gate: the ADMIN cookie only, the role claim, and the LIVE
+  // allow-list. The client cookie is never consulted here — a client
+  // session can never be an owner session.
+  const admin = cookies.admin ? parseSession(cookies.admin, e) : null;
+  let owner: Session | null = null;
+  if (admin && admin.role === 'admin' && isAdminEmail(admin.email, e)) owner = admin;
+
+  // The read session: the CLIENT wins, even when an owner cookie is present
+  // (M-5). With no client session the owner reads everything.
+  return {
+    client,
+    owner,
+    session: client || owner,
+    any: client || admin,
+  };
+}
+
+/**
+ * The session a client-scoped READ uses.
+ *
+ * The client cookie first, the owner second — see `resolveAccess`.
+ */
+export function resolveClientSession(source: SessionSource, env?: EnvLike): Session | null {
+  return resolveAccess(source, env).session;
+}
+
+/**
+ * May this request READ the data of this client?
+ *
+ * The READ rule (M-5): a client session narrows the read to that client,
+ * even when an owner cookie is present — a live admin cookie must never
+ * widen a client's read scope. Only a request with NO client session and a
+ * passing owner gate reads every client's data.
+ */
+export function canReadClient(access: RequestAccess, clientId?: string): boolean {
+  if (access.client) {
+    if (!access.client.clientId) return false;
+    return access.client.clientId === clientId;
+  }
+  return !!access.owner;
+}
+
+/**
+ * May this request CHANGE the data of this client?
+ *
+ * The WRITE rule (M-4): the owner may act for any client (the two-part
+ * gate), a client may act only for itself.
+ */
+export function canWriteClient(access: RequestAccess, clientId?: string): boolean {
+  if (access.owner) return true;
+  if (!access.client || !access.client.clientId) return false;
+  return access.client.clientId === clientId;
+}
+
+// ---------------------------------------------------------------------------
+// The owner — the two-part gate (audit M-4, Architect §4.2)
+// ---------------------------------------------------------------------------
+
+/**
+ * The owner allow-list, parsed.
+ *
+ * An unset or empty list means NOBODY is the owner: the list is empty so
+ * nothing matches. It never means "everyone" — an unset allow-list would
+ * hand the inbox to whoever asks for it.
+ *
+ * Entries are trimmed, lower-cased and empty entries dropped, so
+ * "A@x.com , , b@y.com" is two addresses.
+ */
+export function adminAllowList(env?: EnvLike): string[] {
+  const e = env ?? defaultEnv();
+  return String(e.ADMIN_EMAILS || '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Is this email on the owner allow-list?
+ *
+ * The list is read on EVERY request, so taking an address off it revokes
+ * the owner's powers immediately — not when the 24 h token expires.
+ */
+export function isAdminEmail(email: string, env?: EnvLike): boolean {
+  const list = adminAllowList(env);
+  if (list.length === 0) return false;
+  return list.includes(String(email || '').trim().toLowerCase());
+}
+
+/**
+ * Is the owner allow-list configured at all?
+ *
+ * An unset list is a MISCONFIGURATION (the owner has no way in), not a
+ * "nobody is allowed" state: the two are told apart by the status code —
+ * 500 {code:'internal'} for the first, 401 for the second.
+ *
+ * A list that is set but EMPTY AFTER PARSING (" , ") counts as
+ * misconfigured too: it is the same mistake written differently.
+ */
+export function adminEmailsConfigured(env?: EnvLike): boolean {
+  return adminAllowList(env).length > 0;
+}
+
+/**
+ * The role this session actually has RIGHT NOW.
+ *
+ * The signed token carries the role that was true at sign-in time. The
+ * allow-list is the live truth. So:
+ *
+ *   role = (claim.role === 'admin' && isAdminEmail(claim.email)) ? 'admin' : 'client'
+ *
+ * An owner whose address was taken off the list is a client — the owner
+ * powers are gone at once (audit M-4), which is what `/admin` already did
+ * and what the portal did not.
+ */
+export function effectiveRole(session: Session | null, env?: EnvLike): Role | null {
+  if (!session) return null;
+  if (session.role !== 'admin') return 'client';
+  return isAdminEmail(session.email, env) ? 'admin' : 'client';
+}
+
+/**
+ * Resolve the OWNER session for a request.
+ *
+ * TWO checks, both required (the same gate /api/admin/session uses):
+ *   1. the session's role claim is `admin`, and
+ *   2. the session's email is on the live ADMIN_EMAILS allow-list.
+ *
+ * The ADMIN cookie is the only cookie consulted: an owner session is the one
+ * that was minted for the owner, and a client cookie can never be promoted
+ * to one (M-4).
+ *
+ * Returns null for every state that is not the owner, so a caller can
+ * answer one status code for all of them.
+ *
+ * `env` carries the allow-list, `sessionEnv` the signing secret. They are
+ * the same object in both trees, but they are kept apart so a caller can
+ * pass a Worker `env` for one and a session env for the other.
+ */
+export function resolveOwnerSession(
+  source: SessionSource,
+  env?: EnvLike,
+  sessionEnv?: EnvLike,
+): Session | null {
+  const e = env ?? defaultEnv();
+  const cookies = readSessionCookies(source);
+  if (!cookies.admin) return null;
+  const session = parseSession(cookies.admin, sessionEnv ?? e);
+  if (!session) return null;
+  if (session.role !== 'admin') return null;
+  if (!isAdminEmail(session.email, e)) return null;
+  return session;
 }
 
 // ---------------------------------------------------------------------------

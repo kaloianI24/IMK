@@ -238,6 +238,20 @@ async function main() {
 
   const namedRec = expected1.find((r) => r.consent.p2 === true);
   const anonRec = expected1.find((r) => r.consent.p2 === false);
+  // Preconditions, checked BEFORE anything dereferences them: the API suite
+  // has to have produced an approved named quote AND an approved anonymous
+  // one. Without this the harness crashed with "Cannot read properties of
+  // undefined (reading 'clientId')" and said nothing about WHY.
+  assert(
+    namedRec,
+    'the moderation store must hold an approved, NAMED quote (consent.p2 = true) -- ' +
+      'the API suite must have approved one before this build harness runs',
+  );
+  assert(
+    anonRec,
+    'the moderation store must hold an approved, ANONYMOUS quote (consent.p2 = false) -- ' +
+      'the API suite must have approved one before this build harness runs',
+  );
   // the publisher prefers the client's own display name over the owner's record
   const publishedName = (r) => String((r.consent && r.consent.displayName) || r.name || '').trim();
 

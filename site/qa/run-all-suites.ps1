@@ -10,9 +10,20 @@
 $ErrorActionPreference = 'Continue'
 $SITE = $PSScriptRoot | Split-Path -Parent
 $ART = Join-Path $SITE 'qa\artifacts'
-# One transcript per day: a run must never overwrite the evidence of an
-# earlier one.
-$LOG = Join-Path $ART ("qa-full-run-" + (Get-Date -Format 'yyyy-MM-dd') + ".txt")
+# One transcript per RUN, never one per day: a run must never overwrite the
+# evidence of an earlier one -- and the day is not enough, because two runs on
+# the same day would have replaced each other.
+$base = "qa-full-run-" + (Get-Date -Format 'yyyy-MM-dd')
+$LOG = Join-Path $ART ($base + ".txt")
+if (Test-Path $LOG) {
+  $stamp = Get-Date -Format 'HHmmss'
+  $LOG = Join-Path $ART ($base + "-" + $stamp + ".txt")
+  $n = 2
+  while (Test-Path $LOG) {
+    $LOG = Join-Path $ART ($base + "-" + $stamp + "-" + $n + ".txt")
+    $n++
+  }
+}
 
 New-Item -ItemType Directory -Force -Path $ART | Out-Null
 

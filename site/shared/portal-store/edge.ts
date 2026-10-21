@@ -5,18 +5,27 @@
 // Cloudflare has no writable filesystem — that is the whole reason this
 // migration exists).
 //
-//   PORTAL_STORE=libsql  -> libSQL/Turso adapter (production; lands in T4)
+//   PORTAL_STORE=libsql  -> libSQL/Turso adapter (production; task T4)
 //   PORTAL_STORE=file    -> rejected: there is no writable disk on the edge
+//
+// The libSQL adapter itself is Web-API only (global fetch, WebCrypto), so the
+// SAME file serves the Vercel tree and this one — the two cannot drift.
 //
 // Import path from the functions tree:
 //   site/functions/api/x.ts        -> ../../shared/portal-store/edge.js
 //   site/functions/api/portal/x.ts -> ../../../shared/portal-store/edge.js
 
 import { StorageError } from './errors.js';
+import { createLibsqlStoreFromEnv } from './libsql-store.js';
 import type { PortalStore } from './types.js';
 
 export * from './types.js';
 export { StorageError } from './errors.js';
+export { createLibsqlStore } from './libsql-adapter.js';
+export { createHttpTransport } from './libsql-transport.js';
+export { createLibsqlStoreFromEnv } from './libsql-store.js';
+export { ensureSchema, SCHEMA_STATEMENTS } from './libsql-schema.js';
+export { createLibsqlRateLimitBackend } from './durable-rate-counter.js';
 
 export function getStore(env: Record<string, string | undefined> = {}): PortalStore {
   const mode = env.PORTAL_STORE || 'libsql';
@@ -29,10 +38,8 @@ export function getStore(env: Record<string, string | undefined> = {}): PortalSt
   }
 
   if (mode === 'libsql') {
-    throw new StorageError(
-      'the libsql adapter is not implemented yet (task T4) — the edge tree has no working store until then',
-      'not-implemented',
-    );
+    // Fails closed on a missing LIBSQL_URL / LIBSQL_TOKEN.
+    return createLibsqlStoreFromEnv(env);
   }
 
   throw new StorageError(

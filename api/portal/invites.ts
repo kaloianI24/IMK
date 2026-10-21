@@ -1,26 +1,37 @@
 // api/portal/invites.ts — Vercel serverless function.
 //   POST /api/portal/invites — invite a client by email (owner only)
-// Writes site/data/portal/invited.jsonl.
+// Writes the 'invites' collection of the portal store (the 'clients'
+// collection is patched with it).
 //
 // UPSERT, not insert-only: re-submitting an existing email patches the client
 // profile (name / company / role) on BOTH the invite record and the client
 // record. That is what lets the owner add a company (or fix a name) after the
 // client has already signed in — without it, a client record can never be
-// edited, because nothing else writes to clients.jsonl.
+// edited, because nothing else writes to the client collection.
 
 import { IncomingMessage, ServerResponse } from 'node:http';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { parseJsonlStrict, guardStorage } from '../lib/jsonl.js';
 import {
-  resolveSession,
+  getPortalStore,
+  guardStore,
+  storageFailureLog,
+} from '../../site/shared/server/portal-store-access.js';
+import type { PortalStore } from '../../site/shared/portal-store/types.js';
+import {
+  resolveOwnerSession,
   expectedOrigin,
   baseUrlConfigured,
 } from './session.js';
 
-const PORTAL_DATA_DIR = path.resolve(process.cwd(), 'site/data/portal');
-const INVITED_FILE = path.join(PORTAL_DATA_DIR, 'invited.jsonl');
-const CLIENTS_FILE = path.join(PORTAL_DATA_DIR, 'clients.jsonl');
+// THE STORE (wave 9)
+//   The collections come from the PortalStore contract
+//   (site/shared/portal-store/**), not from a JSONL file: with
+//   PORTAL_STORE=libsql the portal persists on a read-only filesystem
+//   (Vercel), and with PORTAL_STORE=file the very same records land in the
+//   very same site/data/portal/*.jsonl files as before.
+//
+//   An invite record has no id of its own — the e-mail address IS its
+//   identity — so a patch names the record by its e-mail AND its invitation
+//   time. Both together match exactly one record.
 
 // Client-profile caps. These mirror the `testimonials` content collection
 // schema (site/src/types/contracts.ts -> TESTIMONIAL_MAX) and the caps in
@@ -67,24 +78,10 @@ function isValidEmail(s: string): boolean {
  * every record in it. A missing file is legitimately empty; an unparseable
  * line is an error the caller must surface, not swallow (audit M3).
  *
- * NOTE: the older `readJsonl()` here was dead code and was deleted — it
- * swallowed parse errors and would have been a trap for the next editor.
+ * The store enforces that rule itself (a corrupt store raises, it never
+ * returns an empty list), so the handler only has to let the error through
+ * to guardStore(), which answers 500 {code:'storage'}.
  */
-function readJsonlForWrite(file: string): Array<Record<string, any>> {
-  if (!fs.existsSync(file)) return [];
-  return parseJsonlStrict(fs.readFileSync(file, 'utf8'), file);
-}
-
-function appendJsonl(file: string, record: Record<string, any>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
-}
-
-function rewriteJsonl(file: string, records: Array<Record<string, any>>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const content = records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '');
-  fs.writeFileSync(file, content, 'utf8');
-}
 
 /** Mirrors controlStrip() in api/portal/testimonials.ts. */
 function controlStrip(s: string): string {
@@ -140,25 +137,39 @@ function parseProfile(body: Record<string, unknown>): {
  * path to a client record — without it, a company could never be added to a
  * client who has already signed in.
  */
-function syncClientProfile(
+async function syncClientProfile(
+  store: PortalStore,
   clientId: string | undefined,
   profile: Partial<Record<ProfileField, string>>,
-): boolean {
+): Promise<boolean> {
   if (!clientId) return false;
-  const clients = readJsonlForWrite(CLIENTS_FILE);
-  const idx = clients.findIndex((c) => c.id === clientId);
-  if (idx === -1) return false;
+  const client = await store.get('clients', { field: 'id', value: clientId });
+  if (!client) return false;
 
+  const patch: Record<string, any> = {};
   let changed = false;
   for (const [field, value] of Object.entries(profile)) {
     if (value === undefined) continue;
-    if (clients[idx][field] !== value) {
-      clients[idx][field] = value;
+    if (client[field] !== value) {
+      patch[field] = value;
       changed = true;
     }
   }
-  if (changed) rewriteJsonl(CLIENTS_FILE, clients);
+  if (changed) await store.update('clients', { id: clientId }, patch);
   return changed;
+}
+
+/**
+ * The key that names ONE invite record.
+ *
+ * An invite has no id of its own: the e-mail address is its identity. The
+ * invitation time is added so the key matches exactly one record even if the
+ * same address was invited twice.
+ */
+function inviteKey(invite: Record<string, any>): Record<string, any> {
+  const key: Record<string, any> = { email: invite.email };
+  if (typeof invite.invitedAt === 'string') key.invitedAt = invite.invitedAt;
+  return key;
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -183,10 +194,11 @@ async function handler(
     return;
   }
 
-  // The owner-only endpoint prefers the admin cookie, so a stale client
-  // cookie can never shadow it (audit m5).
-  const session = resolveSession(req, 'admin');
-  if (!session || session.role !== 'admin') {
+  // The OWNER gate (M-4): the role claim AND the live allow-list. Reading
+  // the allow-list on every request is what makes removing an address
+  // revoke the owner's powers at once, not at the next token expiry.
+  const session = resolveOwnerSession(req, process.env);
+  if (!session) {
     json(res, { error: 'forbidden', code: 'forbidden' }, 403);
     return;
   }
@@ -225,39 +237,34 @@ async function handler(
     return;
   }
 
-  let invited: Array<Record<string, any>>;
-  try {
-    invited = readJsonlForWrite(INVITED_FILE);
-  } catch {
-    json(res, { error: 'store unreadable', code: 'storage' }, 500);
-    return;
-  }
+  const store = getPortalStore();
+  const invited = await store.list('invites');
 
   const existing = invited.find((r) => String(r.email).toLowerCase() === email);
   if (existing) {
     // Upsert: patch the profile the owner just submitted. The clientId (set
     // on first sign-in) and the invite metadata are preserved.
+    const patch: Record<string, any> = {};
     let changed = false;
     for (const [field, value] of Object.entries(profile)) {
       if (value === undefined) continue;
       if (existing[field] !== value) {
-        existing[field] = value;
+        patch[field] = value;
         changed = true;
       }
     }
 
     let clientUpdated = false;
     if (changed) {
-      rewriteJsonl(INVITED_FILE, invited);
-      try {
-        clientUpdated = syncClientProfile(existing.clientId, profile);
-      } catch {
-        json(res, { error: 'store unreadable', code: 'storage' }, 500);
-        return;
-      }
+      await store.update('invites', inviteKey(existing), patch);
+      clientUpdated = await syncClientProfile(store, existing.clientId, profile);
     }
 
-    json(res, { ok: true, invited: existing, updated: changed, clientUpdated }, 200);
+    json(
+      res,
+      { ok: true, invited: { ...existing, ...patch }, updated: changed, clientUpdated },
+      200,
+    );
     return;
   }
 
@@ -271,7 +278,7 @@ async function handler(
     clientId: undefined,
   };
 
-  appendJsonl(INVITED_FILE, record);
+  await store.append('invites', record);
 
   console.log(
     JSON.stringify({
@@ -290,17 +297,10 @@ export default function (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  return guardStorage(
+  return guardStore(
     () => handler(req, res),
     (err) => {
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          outcome: 'storage_corrupt',
-          file: err.file,
-          line: err.line,
-        }),
-      );
+      console.log(JSON.stringify(storageFailureLog(err)));
       json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     },
   );

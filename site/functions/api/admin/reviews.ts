@@ -36,6 +36,8 @@ import {
 } from './session.js';
 import { buildModerationUrl } from '../lib/notifications.js';
 import { parseJsonlStrict, isStorageCorrupt } from '../../../shared/portal-store/jsonl.js';
+import { isProductionEnv } from '../../../shared/server/portal-session.js';
+import { secretProblem } from '../../../shared/server/secret.js';
 
 const REVIEWS_FILE = 'site/data/moderation/reviews.jsonl';
 
@@ -117,12 +119,20 @@ export const onRequestGet: any = async (ctx: any): Promise<Response> => {
   // Without the secret the signature would be an HMAC with an EMPTY key —
   // a public key, and anyone could mint an approve link. The moderation
   // endpoint refuses to verify anything without it.
-  if (!env.FORM_WEBHOOK_SECRET) {
+  //
+  // H-1 (wave-8A): the secret must not only EXIST, it must be USABLE — the
+  // published example placeholder is in the repository, and a published HMAC
+  // key is a public key.
+  const webhookSecretProblem = secretProblem(env.FORM_WEBHOOK_SECRET);
+  if (!env.FORM_WEBHOOK_SECRET || (isProductionEnv(env) && webhookSecretProblem !== null)) {
     console.log(
       JSON.stringify({
         ts: Date.now(),
         outcome: 'admin_misconfigured',
-        reason: 'FORM_WEBHOOK_SECRET missing',
+        reason:
+          webhookSecretProblem === 'missing'
+            ? 'FORM_WEBHOOK_SECRET missing'
+            : `FORM_WEBHOOK_SECRET ${webhookSecretProblem}`,
       }),
     );
     return json({ error: 'misconfigured', code: 'internal' }, 500);

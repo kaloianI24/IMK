@@ -6,7 +6,10 @@ import PortalComments from '../components/PortalComments.astro';
 import PortalInviteForm from '../components/PortalInviteForm.astro';
 import PortalTestimonialPrompt from '../components/PortalTestimonialPrompt.astro';
 
-// Default role for server-rendered HTML; client-side script corrects it after session validation.
+// The build-time role is ALWAYS 'client': the page is static, so the browser
+// decides the role at runtime — from the SERVER's answer (GET
+// /api/portal/session), never from this tab's sessionStorage. The prop below
+// only reaches the server-rendered markup, which is role-neutral.
 let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
 ---
 
@@ -36,6 +39,10 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
     {/* Short announcements for the content that loads in, so a screen reader
         hears that something arrived (or did not). */}
     <p id="portal-status" class="muted" role="status" aria-live="polite" style="min-height:1.5em;max-width:60ch;"></p>
+
+    {/* The role announcement. Visually hidden, so announcing the view change
+        costs no space and moves nothing on the page. */}
+    <p id="portal-role-status" class="sr-only" role="status" aria-live="polite"></p>
 
     <div id="portal-shell" hidden>
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-6); flex-wrap:wrap; gap:var(--space-4);">
@@ -116,8 +123,33 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
   <script>
     type Role = 'admin' | 'client';
 
+    /**
+     * What the SERVER says this browser is.
+     *
+     *   'admin'      - the server confirmed an owner session
+     *   'client'     - the server confirmed a client session
+     *   'unknown'    - the server could not be asked: the endpoint is not
+     *                  deployed, it answered an error, or the network failed.
+     *                  UNKNOWN IS NOT ADMIN. The client view is shown and the
+     *                  owner controls stay hidden — the screen never invents a
+     *                  role it was not told.
+     *   'signed-out' - the server answered 401: there is no session at all.
+     *   'misconfigured' - the server answered 500 {code:'internal'}: this
+     *                  deployment cannot VERIFY a session (the signing secret
+     *                  is missing, a placeholder or too short — the audit's
+     *                  H-1/H-2). That is a BROKEN DEPLOYMENT, not "you are
+     *                  signed out", and the page must never tell the owner
+     *                  their session expired when the real cause is a broken
+     *                  server.
+     */
+    type RoleState = 'admin' | 'client' | 'unknown' | 'signed-out' | 'misconfigured';
+
     const API = '/api/portal';
-    let role: Role = (sessionStorage.getItem('imk_portal_role') as Role | null) ?? 'client';
+    /** How long the role endpoint may take before the portal stops waiting. */
+    const ROLE_TIMEOUT_MS = 8000;
+
+    let role: Role = 'client';
+    let roleState: RoleState = 'unknown';
     let projects: Array<Record<string, unknown>> = [];
     let currentProjectId: string | null = null;
 
@@ -127,6 +159,7 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
     const errorTextEl = document.getElementById('portal-error-text') as HTMLParagraphElement | null;
     const retryBtn = document.getElementById('portal-retry') as HTMLButtonElement | null;
     const statusEl = document.getElementById('portal-status') as HTMLParagraphElement | null;
+    const roleStatusEl = document.getElementById('portal-role-status') as HTMLParagraphElement | null;
     const shellEl = document.getElementById('portal-shell') as HTMLDivElement | null;
     const adminControlsEl = document.getElementById('portal-admin-controls') as HTMLDivElement | null;
     const adminStatusCard = document.getElementById('admin-status-card') as HTMLDivElement | null;
@@ -180,6 +213,132 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
     // A short announcement for a screen reader: what loaded, what failed.
     function setStatus(text: string): void {
       if (statusEl) statusEl.textContent = text;
+    }
+
+    /**
+     * Announce the view the server decided on.
+     *
+     * The region is visually hidden, so the announcement costs no space and
+     * moves nothing: the role change is heard, not seen as a jump.
+     */
+    function announceRole(state: RoleState): void {
+      if (!roleStatusEl) return;
+      if (state === 'admin') roleStatusEl.textContent = 'Owner view. The owner tools are available.';
+      else if (state === 'client') roleStatusEl.textContent = 'Client view.';
+      else if (state === 'signed-out') roleStatusEl.textContent = 'Signed out.';
+      else if (state === 'misconfigured') roleStatusEl.textContent = 'The portal could not be loaded because this server is misconfigured.';
+      else roleStatusEl.textContent = 'Client view. The owner tools are not available.';
+    }
+
+    /**
+     * Ask the server who this browser is.
+     *
+     * The role comes from ONE endpoint — GET /api/portal/session — and from
+     * nowhere else. This is the fix for the defect where the owner controls
+     * were driven by sessionStorage: a NEW TAB has an empty sessionStorage
+     * while the cookie still says admin, so the old screen showed the client
+     * view to the owner and the API answered 403 to the owner's clicks. The
+     * screen and the API now read the same fact.
+     *
+     * Every answer that is not a definite role degrades to 'unknown', which
+     * means the client view. A missing endpoint (404), a wrong method (405),
+     * a target that cannot serve it (501), a server error (500), a network
+     * failure and a timeout all land there: no owner controls, no crash, no
+     * invented role.
+     */
+    async function fetchRoleState(): Promise<RoleState> {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ROLE_TIMEOUT_MS);
+      try {
+        const res = await fetch('/api/portal/session', {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        if (res.status === 401) return 'signed-out';
+        if (res.status === 500) {
+          // The endpoint answers 500 {code:'internal'} for exactly one reason:
+          // this deployment cannot VERIFY a session (the signing secret is
+          // missing, a placeholder or too short — the audit's H-1/H-2).
+          //
+          // That is a broken deployment, NOT "you are signed out". Before this
+          // distinction existed the page carried on, the next call came back
+          // 401, and the owner was told their session had expired while the
+          // real fault was never shown anywhere — the exact silent symptom
+          // H-2 closed on the server side.
+          const err = (await res.json().catch(() => null)) as { code?: unknown } | null;
+          if (String(err?.code ?? '').toLowerCase() === 'internal') return 'misconfigured';
+          return 'unknown';
+        }
+        if (!res.ok) return 'unknown';
+        const data = (await res.json().catch(() => null)) as { role?: unknown } | null;
+        const claimed = String(data?.role ?? '').trim().toLowerCase();
+        if (claimed === 'admin') return 'admin';
+        if (claimed === 'client') return 'client';
+        // A body without a usable role is not a role. Treat it as unknown.
+        return 'unknown';
+      } catch {
+        return 'unknown';
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    /**
+     * Apply the role the server gave.
+     *
+     * The owner controls are revealed ONLY here, and only for a role the
+     * server confirmed. They are hidden in the markup, so there is no flash
+     * of owner UI while the answer is in flight.
+     *
+     * sessionStorage is written, but only as a CACHE HINT carrying the
+     * server's answer — it is never read back as an authority, and a stale
+     * hint cannot survive this call.
+     */
+    function applyRole(state: RoleState): void {
+      roleState = state;
+      role = state === 'admin' ? 'admin' : 'client';
+      const isOwner = state === 'admin';
+
+      try {
+        sessionStorage.setItem('imk_portal_role', role);
+      } catch {
+        // Private mode / storage disabled: the hint is optional, the server
+        // is not.
+      }
+
+      if (adminControlsEl) adminControlsEl.style.display = isOwner ? 'flex' : 'none';
+      if (adminStatusCard) adminStatusCard.hidden = !isOwner;
+      if (inviteFormContainer) inviteFormContainer.hidden = !isOwner;
+
+      announceRole(state);
+
+      // The other components on the page (the testimonial card) take their
+      // role from here too — from the server's answer, not from storage.
+      document.dispatchEvent(
+        new CustomEvent('imk:portal-role', {
+          detail: { role, confirmed: state === 'admin' || state === 'client' },
+        }),
+      );
+    }
+
+    /**
+     * The server refused an owner-only action (403).
+     *
+     * The allow-list can change under a live session, so the screen must not
+     * keep offering buttons the server refuses. Re-read the role and hide the
+     * owner tools if the session is no longer the owner.
+     */
+    async function ownerRefused(res: Response): Promise<void> {
+      if (res.status !== 403) return;
+      // Only the owner view can lose owner tools: a client that gets a 403
+      // has nothing to hide, so the server is not asked again.
+      if (roleState !== 'admin') return;
+      const state = await fetchRoleState();
+      if (state !== 'admin') {
+        applyRole(state === 'unknown' ? 'unknown' : 'client');
+        setStatus('Your owner access has changed, so the owner tools were hidden.');
+      }
     }
 
     /**
@@ -260,9 +419,36 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
       if (notAuthEl) notAuthEl.hidden = true;
       if (errorEl) errorEl.hidden = true;
       try {
+        // The role is resolved FIRST. Two reasons: the owner controls must
+        // never appear before the server confirmed them (no flash of owner
+        // UI), and the plan-item markup below is role-dependent, so it has
+        // to be rendered with the role the server gave.
+        const state = await fetchRoleState();
+        applyRole(state);
+
+        if (state === 'misconfigured') {
+          // A broken deployment is reported as a broken deployment: never as
+          // "your session has expired", never as an empty portal. The owner
+          // tools stay hidden (applyRole already hid them) and the page says
+          // what is wrong. The retry button re-runs this, so a deployment that
+          // is fixed while the page is open recovers on its own.
+          showError(
+            'This portal is not configured correctly on this server, so it cannot be loaded. Nothing was changed. Please contact IMK at 2imk4support@gmail.com.',
+          );
+          return;
+        }
+
+        if (state === 'signed-out') {
+          // Signed out — the ONLY answer that says so.
+          if (loadingEl) loadingEl.hidden = true;
+          if (notAuthEl) notAuthEl.hidden = false;
+          return;
+        }
+
         const res = await api('/projects');
         if (res.status === 401) {
           // Signed out — the ONLY answer that says so.
+          applyRole('signed-out');
           if (loadingEl) loadingEl.hidden = true;
           if (notAuthEl) notAuthEl.hidden = false;
           return;
@@ -280,12 +466,6 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
 
         if (loadingEl) loadingEl.hidden = true;
         if (shellEl) shellEl.hidden = false;
-
-        if (role === 'admin') {
-          if (adminControlsEl) adminControlsEl.style.display = 'flex';
-          if (adminStatusCard) adminStatusCard.hidden = false;
-          if (inviteFormContainer) inviteFormContainer.hidden = false;
-        }
 
         if (projects.length > 0) {
           currentProjectId = String(projects[0].id);
@@ -307,6 +487,14 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
               },
             }),
           );
+        } else if (role === 'admin') {
+          // The owner looking at an empty portal. The client wording below
+          // ("contact us to link this email") would be nonsense here: the
+          // owner does not need a project linked, they create them.
+          if (planItemsEl) planItemsEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No plan items yet.</p>';
+          if (updatesEl) updatesEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No client projects yet. A client\u2019s project appears here as soon as they sign in.</p>';
+          if (commentsListEl) commentsListEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No comments yet. Comments from a client\u2019s project appear here.</p>';
+          setStatus('No client projects yet.');
         } else {
           if (planItemsEl) planItemsEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No plan items yet.</p>';
           if (updatesEl) updatesEl.innerHTML = '<p class="muted" style="font-size:var(--text-sm);">No updates yet. Projects are connected to the email address you were given access with. If you signed in with a different email than the one we invited, contact IMK and send proof of our conversation so we can link it for you.</p>';
@@ -434,7 +622,10 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
               body: JSON.stringify({ status: newStatus }),
             });
             if (res.ok) showMessage('plan-items-message', 'Status updated.', false);
-            else showMessage('plan-items-message', 'Failed to update status.', true);
+            else {
+              showMessage('plan-items-message', 'Failed to update status.', true);
+              await ownerRefused(res);
+            }
             await loadProjectData();
             break;
           }
@@ -502,6 +693,7 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
               await loadProjectData();
             } else {
               showMessage('update-message', 'Failed to post update.', true);
+              await ownerRefused(res);
             }
             break;
           }
@@ -560,6 +752,7 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
               showMessage('invite-message', text, false);
             } else {
               showMessage('invite-message', await inviteErrorText(res), true);
+              await ownerRefused(res);
             }
             break;
           }
@@ -620,6 +813,7 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
               : 'Could not re-request the testimonial — please try again.',
             true,
           );
+          await ownerRefused(res);
           return;
         }
         const data = (await res.json().catch(() => ({}))) as { project?: Record<string, unknown> };
@@ -662,7 +856,10 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) showMessage('plan-items-message', 'Status updated.', false);
-      else showMessage('plan-items-message', 'Failed to update status.', true);
+      else {
+        showMessage('plan-items-message', 'Failed to update status.', true);
+        await ownerRefused(res);
+      }
       await loadProjectData();
     });
 
@@ -673,8 +870,12 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
     logoutBtn?.addEventListener('click', async (e) => {
       e.preventDefault();
       await api('/auth/logout', { method: 'POST' });
+      // The hint is cleared on the way out, and the in-memory role goes with
+      // it: this tab is no longer the owner until a server says otherwise.
       sessionStorage.removeItem('imk_portal_role');
       sessionStorage.removeItem('imk_portal_email');
+      role = 'client';
+      roleState = 'signed-out';
       window.location.href = '/';
     });
 

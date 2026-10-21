@@ -6,18 +6,25 @@
 
 import { IncomingMessage, ServerResponse } from 'node:http';
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { readJsonlFile, guardStorage } from '../lib/jsonl.js';
 import {
-  resolveSession,
+  getPortalStore,
+  guardStore,
+  storageFailureLog,
+} from '../../site/shared/server/portal-store-access.js';
+import {
+  resolveAccess,
+  canReadClient,
+  canWriteClient,
   expectedOrigin,
   baseUrlConfigured,
 } from './session.js';
 
-const PORTAL_DATA_DIR = path.resolve(process.cwd(), 'site/data/portal');
-const PROJECTS_FILE = path.join(PORTAL_DATA_DIR, 'projects.jsonl');
-const COMMENTS_FILE = path.join(PORTAL_DATA_DIR, 'comments.jsonl');
+// THE STORE (wave 9)
+//   The collections come from the PortalStore contract
+//   (site/shared/portal-store/**), not from a JSONL file: with
+//   PORTAL_STORE=libsql the portal persists on a read-only filesystem
+//   (Vercel), and with PORTAL_STORE=file the very same records land in the
+//   very same site/data/portal/*.jsonl files as before.
 
 function json(
   res: ServerResponse,
@@ -38,22 +45,11 @@ function json(
  * Read a store file. A malformed line is an ERROR (audit M3 / QA D3): it must
  * not turn the collection into an empty list, because "empty" reads as "no
  * comments" — a silent outage wearing the costume of a normal answer.
+ *
+ * The store itself enforces that rule (a corrupt store raises, it never
+ * returns an empty list), so the handler only has to let the error through
+ * to guardStore(), which answers 500 {code:'storage'}.
  */
-function readJsonl(file: string): Array<Record<string, any>> {
-  return readJsonlFile(file);
-}
-
-function appendJsonl(file: string, record: Record<string, any>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
-}
-
-function rewriteJsonl(file: string, records: Array<Record<string, any>>): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const content = records.map((r) => JSON.stringify(r)).join('\n') + (records.length ? '\n' : '');
-  fs.writeFileSync(file, content, 'utf8');
-}
-
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -63,14 +59,13 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function projectAccessible(
-  project: Record<string, any>,
-  session: { email: string; role: 'admin' | 'client'; clientId?: string },
-): boolean {
-  if (session.role === 'admin') return true;
-  return project.clientId === session.clientId;
-}
-
+/**
+ * The access of this request.
+ *
+ * The READ scope is the client's own project, even when an owner cookie is
+ * present (M-5, Architect §4.3); the WRITE scope additionally lets the owner
+ * act for every client (M-4, the two-part gate).
+ */
 async function handler(
   req: IncomingMessage,
   res: ServerResponse,
@@ -79,13 +74,15 @@ async function handler(
   const pathname = url.pathname;
   const method = req.method || 'GET';
 
-  const session = resolveSession(req);
+  const access = resolveAccess(req);
+  const session = access.session;
   if (!session) {
     json(res, { error: 'authentication required', code: 'unauthorized' }, 401);
     return;
   }
 
-  const projects = readJsonl(PROJECTS_FILE);
+  const store = getPortalStore();
+  const projects = await store.list('projects');
 
   // A const arrow, not a hoisted `function`: TypeScript does not carry the
   // `session` null-narrowing into a hoisted function declaration (it could be
@@ -94,10 +91,14 @@ async function handler(
   // visible to the checker.
   const checkOwnership = (
     projectId: string,
+    write: boolean,
   ): { project: Record<string, any> } | { error: any; status: number } => {
     const project = projects.find((p) => p.id === projectId);
     if (!project) return { error: { error: 'project not found', code: 'not-found' }, status: 404 };
-    if (!projectAccessible(project, session)) {
+    const allowed = write
+      ? canWriteClient(access, project.clientId)
+      : canReadClient(access, project.clientId);
+    if (!allowed) {
       return { error: { error: 'forbidden', code: 'forbidden' }, status: 403 };
     }
     return { project };
@@ -107,20 +108,20 @@ async function handler(
   if (pathname === '/api/portal/comments' && method === 'GET') {
     const projectId = url.searchParams.get('projectId');
     const planItemId = url.searchParams.get('planItemId');
-    const all = readJsonl(COMMENTS_FILE);
+    const all = await store.list('comments');
 
     let filtered = all;
     if (projectId) {
-      const ownership = checkOwnership(projectId);
+      const ownership = checkOwnership(projectId, false);
       if ('error' in ownership) {
         json(res, ownership.error, ownership.status);
         return;
       }
       filtered = all.filter((c) => c.projectId === projectId);
     } else {
-      const accessibleProjectIds = session.role === 'admin'
-        ? projects.map((p) => p.id)
-        : projects.filter((p) => projectAccessible(p, session)).map((p) => p.id);
+      const accessibleProjectIds = projects
+        .filter((p) => canReadClient(access, p.clientId))
+        .map((p) => p.id);
       filtered = all.filter((c) => accessibleProjectIds.includes(c.projectId));
     }
     if (planItemId) {
@@ -158,7 +159,7 @@ async function handler(
 
     // body.projectId is optional in the payload. Coerced, not validated, so
     // the "project not found" behaviour for a missing id is unchanged.
-    const ownership = checkOwnership(String(body.projectId ?? ''));
+    const ownership = checkOwnership(String(body.projectId ?? ''), true);
     if ('error' in ownership) {
       json(res, ownership.error, ownership.status);
       return;
@@ -181,7 +182,7 @@ async function handler(
       createdAt: new Date().toISOString(),
     };
 
-    appendJsonl(COMMENTS_FILE, comment);
+    await store.append('comments', comment);
 
     console.log(
       JSON.stringify({
@@ -205,17 +206,10 @@ export default function (
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
-  return guardStorage(
+  return guardStore(
     () => handler(req, res),
     (err) => {
-      console.log(
-        JSON.stringify({
-          ts: Date.now(),
-          outcome: 'storage_corrupt',
-          file: err.file,
-          line: err.line,
-        }),
-      );
+      console.log(JSON.stringify(storageFailureLog(err)));
       json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     },
   );

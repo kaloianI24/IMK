@@ -1,7 +1,7 @@
 // site/functions/api/portal/invites.ts — Cloudflare Pages Function.
 //   POST /api/portal/invites — invite a client by email (owner only, deferred)
 
-import { resolveSession, expectedOrigin } from './session.js';
+import { resolveOwnerSession, expectedOrigin } from './session.js';
 
 function json(body: any, status = 200, extra: Record<string, string> = {}): Response {
   const payload = JSON.stringify(body);
@@ -13,10 +13,11 @@ function json(body: any, status = 200, extra: Record<string, string> = {}): Resp
 
 export const onRequestPost: any = async (ctx: any): Promise<Response> => {
   const { request, env } = ctx;
-  // The signing secret comes from the request's env — a Worker has no
+  // The OWNER gate (M-4): the role claim AND the live allow-list. The
+  // signing secret comes from the request's env — a Worker has no
   // process.env (audit wave-6, F-2: one shared, stateless session module).
-  const session = resolveSession(request.headers, undefined, env);
-  if (!session || session.role !== 'admin') {
+  const owner = resolveOwnerSession(request.headers, env, env);
+  if (!owner) {
     return json({ error: 'forbidden', code: 'forbidden' }, 403);
   }
   const origin = request.headers.get('origin') || '';

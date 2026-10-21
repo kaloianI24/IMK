@@ -58,8 +58,18 @@ const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
 
 const KEEP = process.argv.includes('--keep');
-const BASE = 'https://imk.test';
-const SECRET = 'f1-harness-secret-0123456789';
+// The origin the harness pretends to serve. It is HTTP on purpose.
+//
+// H-2 (wave-8A): a deployment is PRODUCTION when the base URL is an https://
+// URL (one of the three production signals in the brief), so an https origin
+// here would put the children in production mode — where the magic-link token
+// is NEVER written to the log and the harness could not read it. A real local
+// dev server is http://localhost:4321, so the fixture now matches a local
+// machine and the children stay in development mode.
+const BASE = 'http://imk.test';
+// At least 32 characters: H-1 refuses a shorter secret in production, and a
+// fixture the rule would reject proves nothing.
+const SECRET = 'f1-harness-secret-0123456789abcdef';
 const CLIENT_EMAIL = 'client@imk.test';
 const ADMIN_EMAIL = 'owner@imk.test';
 

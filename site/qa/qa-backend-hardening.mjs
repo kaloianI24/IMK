@@ -247,8 +247,13 @@ async function main() {
   delete process.env.SITE_URL;
   process.env.APP_ENV = 'development';
   process.env.ADMIN_EMAILS = 'owner@imk.test';
-  process.env.PORTAL_MAGIC_LINK_SECRET = 'hardening-magic-secret';
-  process.env.FORM_WEBHOOK_SECRET = 'hardening-webhook-secret';
+  // H-1 (wave-8A): this suite runs in development, but check L4 flips it into
+  // production (APP_ENV unset). A secret shorter than MIN_SECRET_LENGTH (32)
+  // is refused in production exactly like a missing one, so the fixtures are
+  // 32+ characters long -- otherwise L4 would answer 401 (no session) instead
+  // of the 500 it is testing.
+  process.env.PORTAL_MAGIC_LINK_SECRET = 'qa-hardening-magic-link-secret-0123456789';
+  process.env.FORM_WEBHOOK_SECRET = 'qa-hardening-form-webhook-secret-0123456789';
   process.env.RESEND_API_KEY = 'hardening-resend-key';
   process.env.RESEND_TO = 'owner@imk.test';
   process.env.CONTACT_TO = 'owner@imk.test';
@@ -503,9 +508,11 @@ async function main() {
     assertEqual(stored.revision, storedFirst.revision + 1, 'the revision counter must have advanced');
     const currentRevision = stored.revision;
 
-    // The owner clicks the link that was mailed for the OLD revision.
+    // The owner presses the button on a link that was mailed for the OLD
+    // revision. M-1 (wave-8A): the DECISION is the POST -- a GET only shows
+    // the confirmation page.
     const ts = Math.floor(Date.now() / 1000);
-    const stale = await req('GET', link(ref, 'approve', storedFirst.revision, ts));
+    const stale = await req('POST', link(ref, 'approve', storedFirst.revision, ts));
     assertEqual(stale.status, 409, 'a stale link must be refused');
     assertEqual(stale.json.code, 'stale-revision', 'the answer must name the cause');
     assertEqual(
@@ -515,13 +522,69 @@ async function main() {
     );
 
     // The link for the current revision approves exactly that revision.
-    const ok = await req('GET', link(ref, 'approve', currentRevision, ts));
+    const ok = await req('POST', link(ref, 'approve', currentRevision, ts));
     assertEqual(ok.status, 200, 'the current link must approve');
     const approved = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref && r.state === 'approved');
     assertEqual(approved.length, 1, 'exactly one line may be approved');
     assertEqual(approved[0].revision, currentRevision, 'the approved revision must be the one the link named');
     assertEqual(approved[0].review, 'REVISION TWO text', 'the approved text must be the one the link named');
     return `stale link (revision ${storedFirst.revision}) -> 409; current link -> revision ${currentRevision} only`;
+  });
+
+  await t('L1b', 'M-1: a plain GET on the signed link shows the confirmation page and approves NOTHING', async () => {
+    // A client of its own: the submit bucket holds 5 per hour.
+    const invited = await req('POST', '/api/portal/invites', {
+      cookie: ownerCookie,
+      body: { email: 'scan@client.test', name: 'Scan Prefetch' },
+    });
+    assertEqual(invited.status, 200, `the invite must be accepted (got ${invited.status}: ${invited.text})`);
+    const scanCookie = await signIn('scan@client.test');
+    const scanClient = readJsonl(CLIENTS_FILE).find((c) => c.email === 'scan@client.test');
+    assert(scanClient, 'the client record must exist after the first sign-in');
+    const projectId = await makeProject(ownerCookie, scanClient.id, 'Scanned Website');
+
+    const crypto = require('node:crypto');
+    const secret = process.env.FORM_WEBHOOK_SECRET;
+    const ts = Math.floor(Date.now() / 1000);
+    const sub = await req('POST', '/api/portal/testimonials', {
+      cookie: scanCookie,
+      body: {
+        action: 'submit',
+        projectId,
+        review: 'A quote that every mail scanner will prefetch.',
+        rating: 5,
+        consent: { p1: true, p2: true, p3: false },
+      },
+    });
+    assertEqual(sub.status, 200, 'submit status');
+    const ref = sub.json.testimonial.ref;
+    const sig = crypto.createHmac('sha256', secret).update(`${ref}|approve|1|${ts}`).digest('hex');
+    const url = `/api/moderate/review?ref=${ref}&decision=approve&revision=1&sig=${sig}&ts=${ts}`;
+
+    // What every mail scanner does by itself: fetch the link.
+    const page = await req('GET', url);
+    assertEqual(page.status, 200, 'the GET must serve the confirmation page');
+    assert(
+      /<form[^>]*method="POST"/i.test(page.text),
+      'the confirmation page must offer a POST form (a GET must never decide)',
+    );
+    assert(/name="sig"/.test(page.text), 'the page must carry the signature in the form');
+
+    // ...and nothing at all was decided.
+    const stored = readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref).pop();
+    assertEqual(stored.state, 'pending', 'a GET must not approve anything');
+    assertEqual(stored.decidedAt, undefined, 'a GET must not stamp a decision time');
+    assertEqual(
+      readJsonl(REVIEWS_FILE).filter((r) => r.ref === ref && r.state === 'approved').length,
+      0,
+      'no line may be approved by a GET',
+    );
+
+    // The POST is the decision.
+    const decided = await req('POST', url);
+    assertEqual(decided.status, 200, `the POST must decide (got ${decided.status}: ${decided.text})`);
+    assertEqual(decided.json.state, 'approved', 'state');
+    return 'a GET served the page and approved nothing; the POST approved the quote';
   });
 
   await t('L2', 'M6: the Cloudflare twin notifies, and its module is edge-safe', async () => {

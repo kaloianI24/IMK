@@ -1,0 +1,420 @@
+{
+  "capturedAt": "2026-10-21T22:00:00.639Z",
+  "files": {
+    "portal/projects.jsonl": [
+      {
+        "id": "prj_test",
+        "clientId": "cli_test",
+        "title": "Project One",
+        "status": "completed",
+        "startedAt": "<timestamp>",
+        "createdAt": "<timestamp>",
+        "updatedBy": "client@example.test",
+        "updatedAt": "<timestamp>",
+        "testimonialStatus": "snoozed"
+      },
+      {
+        "id": "<generated-id>",
+        "clientId": "cli_test",
+        "title": "Project Two",
+        "status": "discovery",
+        "startedAt": "<timestamp>",
+        "createdAt": "<timestamp>",
+        "updatedBy": "owner@example.test"
+      }
+    ],
+    "portal/clients.jsonl": [
+      {
+        "id": "cli_test",
+        "email": "client@example.test",
+        "name": "Alice Longname",
+        "company": "Acme International Ltd",
+        "role": "CTO",
+        "createdAt": "<timestamp>"
+      }
+    ],
+    "portal/invited.jsonl": [
+      {
+        "email": "client@example.test",
+        "name": "Alice Longname",
+        "company": "Acme International Ltd",
+        "role": "CTO",
+        "invitedBy": "owner@example.test",
+        "invitedAt": "<timestamp>",
+        "clientId": "cli_test"
+      },
+      {
+        "email": "new@example.test",
+        "name": "Bob",
+        "company": "Beta Ltd",
+        "role": "CEO",
+        "invitedBy": "owner@example.test",
+        "invitedAt": "<timestamp>"
+      }
+    ],
+    "portal/comments.jsonl": [
+      {
+        "id": "<generated-id>",
+        "projectId": "prj_test",
+        "authorId": "cli_test",
+        "authorRole": "client",
+        "authorName": "client@example.test",
+        "body": "A comment",
+        "createdAt": "<timestamp>"
+      }
+    ],
+    "portal/planItems.jsonl": [
+      {
+        "id": "<generated-id>",
+        "projectId": "prj_test",
+        "title": "Step one",
+        "description": "Do the thing",
+        "status": "done",
+        "order": 1,
+        "createdAt": "<timestamp>",
+        "updatedAt": "<timestamp>",
+        "approvedBy": "client@example.test",
+        "approvedAt": "<timestamp>"
+      }
+    ],
+    "portal/updates.jsonl": [
+      {
+        "id": "<generated-id>",
+        "projectId": "prj_test",
+        "title": "Update one",
+        "body": "Body text",
+        "createdBy": "client@example.test",
+        "createdAt": "<timestamp>"
+      }
+    ],
+    "moderation/reviews.jsonl": [
+      {
+        "ref": "<generated-id>",
+        "type": "review",
+        "state": "approved",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_test",
+        "projectId": "prj_test",
+        "name": "Alice Longname",
+        "company": "Acme International Ltd",
+        "role": "CTO",
+        "rating": "5",
+        "review": "Great work",
+        "consent": {
+          "p1": true,
+          "p2": true,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 1,
+        "receivedAt": "<timestamp>",
+        "updatedAt": "<timestamp>",
+        "decidedAt": "<timestamp>",
+        "decidedBy": "one-click-link"
+      },
+      {
+        "ref": "<generated-id>",
+        "type": "review",
+        "state": "snoozed",
+        "source": "portal",
+        "verifiedClient": true,
+        "clientId": "cli_test",
+        "projectId": "prj_test",
+        "name": "",
+        "company": "",
+        "role": "",
+        "rating": "",
+        "review": "",
+        "consent": {
+          "p1": false,
+          "p2": false,
+          "p3": false,
+          "displayName": ""
+        },
+        "revision": 2,
+        "receivedAt": "<timestamp>",
+        "updatedAt": "<timestamp>"
+      }
+    ]
+  },
+  "responses": [
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "project": {
+          "id": "<generated-id>",
+          "clientId": "cli_test",
+          "title": "Project Two",
+          "status": "discovery",
+          "startedAt": "<timestamp>",
+          "createdAt": "<timestamp>",
+          "updatedBy": "owner@example.test"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "project": {
+          "id": "prj_test",
+          "clientId": "cli_test",
+          "title": "Project One",
+          "status": "completed",
+          "startedAt": "<timestamp>",
+          "createdAt": "<timestamp>",
+          "updatedBy": "owner@example.test",
+          "updatedAt": "<timestamp>",
+          "testimonialStatus": "requested"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "planItem": {
+          "id": "<generated-id>",
+          "projectId": "prj_test",
+          "title": "Step one",
+          "description": "Do the thing",
+          "status": "todo",
+          "order": 1,
+          "createdAt": "<timestamp>"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "planItem": {
+          "id": "<generated-id>",
+          "projectId": "prj_test",
+          "title": "Step one",
+          "description": "Do the thing",
+          "status": "done",
+          "order": 1,
+          "createdAt": "<timestamp>",
+          "updatedAt": "<timestamp>",
+          "approvedBy": "client@example.test",
+          "approvedAt": "<timestamp>"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "update": {
+          "id": "<generated-id>",
+          "projectId": "prj_test",
+          "title": "Update one",
+          "body": "Body text",
+          "createdBy": "client@example.test",
+          "createdAt": "<timestamp>"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "comment": {
+          "id": "<generated-id>",
+          "projectId": "prj_test",
+          "authorId": "cli_test",
+          "authorRole": "client",
+          "authorName": "client@example.test",
+          "body": "A comment",
+          "createdAt": "<timestamp>"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "invited": {
+          "email": "new@example.test",
+          "name": "Bob",
+          "company": "Beta Ltd",
+          "role": "CEO",
+          "invitedBy": "owner@example.test",
+          "invitedAt": "<timestamp>"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "invited": {
+          "email": "client@example.test",
+          "name": "Alice Longname",
+          "company": "Acme Ltd",
+          "role": "CTO",
+          "invitedBy": "owner@example.test",
+          "invitedAt": "<timestamp>",
+          "clientId": "cli_test"
+        },
+        "updated": false,
+        "clientUpdated": false
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "invited": {
+          "email": "client@example.test",
+          "name": "Alice Longname",
+          "company": "Acme International Ltd",
+          "role": "CTO",
+          "invitedBy": "owner@example.test",
+          "invitedAt": "<timestamp>",
+          "clientId": "cli_test"
+        },
+        "updated": true,
+        "clientUpdated": true
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "testimonial": {
+          "ref": "<generated-id>",
+          "state": "pending",
+          "source": "portal",
+          "verifiedClient": true,
+          "rating": "5",
+          "review": "Great work",
+          "name": "Alice Longname",
+          "company": "Acme International Ltd",
+          "role": "CTO",
+          "consent": {
+            "p1": true,
+            "p2": true,
+            "p3": false,
+            "displayName": ""
+          },
+          "testimonialStatus": "requested",
+          "receivedAt": "<timestamp>",
+          "updatedAt": "<timestamp>"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "ref": "<generated-id>",
+        "state": "approved"
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "projects": [
+          {
+            "id": "prj_test",
+            "clientId": "cli_test",
+            "title": "Project One",
+            "status": "completed",
+            "startedAt": "<timestamp>",
+            "createdAt": "<timestamp>",
+            "updatedBy": "client@example.test",
+            "updatedAt": "<timestamp>",
+            "testimonialStatus": "requested"
+          },
+          {
+            "id": "<generated-id>",
+            "clientId": "cli_test",
+            "title": "Project Two",
+            "status": "discovery",
+            "startedAt": "<timestamp>",
+            "createdAt": "<timestamp>",
+            "updatedBy": "owner@example.test"
+          }
+        ]
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "planItems": [
+          {
+            "id": "<generated-id>",
+            "projectId": "prj_test",
+            "title": "Step one",
+            "description": "Do the thing",
+            "status": "done",
+            "order": 1,
+            "createdAt": "<timestamp>",
+            "updatedAt": "<timestamp>",
+            "approvedBy": "client@example.test",
+            "approvedAt": "<timestamp>"
+          }
+        ]
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "testimonial": {
+          "ref": "<generated-id>",
+          "state": "approved",
+          "source": "portal",
+          "verifiedClient": true,
+          "rating": "5",
+          "review": "Great work",
+          "name": "Alice Longname",
+          "company": "Acme International Ltd",
+          "role": "CTO",
+          "consent": {
+            "p1": true,
+            "p2": true,
+            "p3": false,
+            "displayName": ""
+          },
+          "testimonialStatus": "requested",
+          "receivedAt": "<timestamp>",
+          "updatedAt": "<timestamp>"
+        }
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "ok": true,
+        "testimonial": {
+          "ref": "<generated-id>",
+          "state": "snoozed",
+          "source": "portal",
+          "verifiedClient": true,
+          "rating": "",
+          "review": "",
+          "name": "Alice Longname",
+          "company": "Acme International Ltd",
+          "role": "CTO",
+          "consent": {
+            "p1": false,
+            "p2": false,
+            "p3": false,
+            "displayName": ""
+          },
+          "testimonialStatus": "snoozed",
+          "receivedAt": "<timestamp>",
+          "updatedAt": "<timestamp>"
+        }
+      }
+    }
+  ],
+  "dataDir": "C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\wave9-store-wiring\\2026-10-21T22-00-00-556Z\\file-mode\\site\\data"
+}

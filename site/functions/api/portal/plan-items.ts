@@ -3,7 +3,7 @@
 //   POST    /api/portal/plan-items        — create plan item (owner only, deferred)
 //   PATCH   /api/portal/plan-items/:id    — update plan item status (deferred)
 
-import { resolveSession, type Role } from './session.js';
+import { resolveAccess, resolveOwnerSession, canReadClient } from './session.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 
 const PROJECTS_FILE = 'site/data/portal/projects.jsonl';
@@ -35,14 +35,6 @@ async function readJsonl(file: string): Promise<Array<Record<string, any>>> {
   return parseJsonlStrict(fs.readFileSync(file, 'utf8'), file);
 }
 
-function projectAccessible(
-  project: Record<string, any>,
-  session: { email: string; role: Role; clientId?: string },
-): boolean {
-  if (session.role === 'admin') return true;
-  return project.clientId === session.clientId;
-}
-
 const handleGet: any = async (ctx: any): Promise<Response> => {
   const { request, env } = ctx;
   const url = new URL(request.url);
@@ -55,7 +47,12 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
 
   // The signing secret comes from the request's env — a Worker has no
   // process.env (audit wave-6, F-2: one shared, stateless session module).
-  const session = resolveSession(request.headers, undefined, env);
+  //
+  // The READ scope is the client's own, even when an owner cookie is
+  // present (M-5, Architect §4.3); the owner (no client cookie) reads every
+  // plan item.
+  const access = resolveAccess(request.headers, env);
+  const session = access.session;
   if (!session) {
     return json({ error: 'authentication required', code: 'unauthorized' }, 401);
   }
@@ -70,14 +67,14 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
     if (!project) {
       return json({ error: 'project not found', code: 'not-found' }, 404);
     }
-    if (!projectAccessible(project, session)) {
+    if (!canReadClient(access, project.clientId)) {
       return json({ error: 'forbidden', code: 'forbidden' }, 403);
     }
     filtered = items.filter((i) => i.projectId === projectId);
   } else {
-    const accessibleProjectIds = session.role === 'admin'
-      ? projects.map((p) => p.id)
-      : projects.filter((p) => projectAccessible(p, session)).map((p) => p.id);
+    const accessibleProjectIds = projects
+      .filter((p) => canReadClient(access, p.clientId))
+      .map((p) => p.id);
     filtered = items.filter((i) => accessibleProjectIds.includes(i.projectId));
   }
 
@@ -85,11 +82,23 @@ const handleGet: any = async (ctx: any): Promise<Response> => {
   return json({ ok: true, planItems: filtered }, 200);
 };
 
-export const onRequestPost: any = async (): Promise<Response> => {
+export const onRequestPost: any = async (ctx: any): Promise<Response> => {
+  // The OWNER gate (M-4) before the "not implemented" answer, so the edge
+  // twin answers the same way as the Vercel tree for a non-owner.
+  const owner = resolveOwnerSession(ctx?.request?.headers, ctx?.env, ctx?.env);
+  if (!owner) {
+    return json({ error: 'forbidden', code: 'forbidden' }, 403);
+  }
   return json({ error: 'not implemented on CF target', code: 'unimplemented' }, 501);
 };
 
-export const onRequestPatch: any = async (): Promise<Response> => {
+export const onRequestPatch: any = async (ctx: any): Promise<Response> => {
+  // The OWNER gate (M-4) before the "not implemented" answer, so the edge
+  // twin answers the same way as the Vercel tree for a non-owner.
+  const owner = resolveOwnerSession(ctx?.request?.headers, ctx?.env, ctx?.env);
+  if (!owner) {
+    return json({ error: 'forbidden', code: 'forbidden' }, 403);
+  }
   return json({ error: 'not implemented on CF target', code: 'unimplemented' }, 501);
 };
 

@@ -30,8 +30,9 @@
 
 import { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  resolveSession,
-  type EnvLike,
+  resolveOwnerSession,
+  isAdminEmail as isAdminEmailShared,
+  adminEmailsConfigured as adminEmailsConfiguredShared,
   type Session,
   type SessionSource,
 } from '../portal/session.js';
@@ -49,12 +50,7 @@ export interface AdminEnv {
  * hand the inbox to whoever asks for it.
  */
 export function isAdminEmail(email: string, env: AdminEnv): boolean {
-  const list = String(env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((entry) => entry.trim().toLowerCase())
-    .filter(Boolean);
-  if (list.length === 0) return false;
-  return list.includes(String(email || '').trim().toLowerCase());
+  return isAdminEmailShared(email, env as any);
 }
 
 /**
@@ -63,9 +59,12 @@ export function isAdminEmail(email: string, env: AdminEnv): boolean {
  * An unset list is a MISCONFIGURATION (the owner has no way in), not a
  * "nobody is allowed" state: the two are told apart by the status code —
  * 500 {code:'internal'} for the first, 401 for the second.
+ *
+ * A list that is set but EMPTY AFTER PARSING (" , ") counts as
+ * misconfigured too: it is the same mistake written differently.
  */
 export function adminEmailsConfigured(env: AdminEnv): boolean {
-  return String(env.ADMIN_EMAILS || '').trim() !== '';
+  return adminEmailsConfiguredShared(env as any);
 }
 
 /**
@@ -74,17 +73,17 @@ export function adminEmailsConfigured(env: AdminEnv): boolean {
  * Returns null for every state that is not the owner. The allow-list is
  * consulted here, on every call, so a session that was minted while the
  * address was still on the list stops working the moment it is removed.
+ *
+ * This is the SHARED two-part gate (site/shared/server/portal-session.ts) —
+ * the same one the portal's owner-only actions use (M-4), so /admin and
+ * /portal answer the same way for the same request.
  */
 export function resolveAdmin(
   source: SessionSource,
   env: AdminEnv,
-  sessionEnv?: EnvLike,
+  sessionEnv?: any,
 ): Session | null {
-  const session = resolveSession(source, 'admin', sessionEnv);
-  if (!session) return null;
-  if (session.role !== 'admin') return null;
-  if (!isAdminEmail(session.email, env)) return null;
-  return session;
+  return resolveOwnerSession(source, env as any, sessionEnv);
 }
 
 function json(
