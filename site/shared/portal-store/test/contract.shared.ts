@@ -196,6 +196,54 @@ export function describeStoreContract(
     assert.equal(await store.decideReview('rev_missing', 'approved', '2026-10-20T10:00:00.000Z'), null);
   });
 
+  // --- the revision scope (wave 10, F-2) -------------------------------------
+
+  test(`${name}: decideReview with an expected revision flips ONLY that revision`, async () => {
+    const store = await fresh();
+    await store.append('reviews', { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', revision: 1, quote: 'v1' });
+    await store.append('reviews', { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', revision: 2, quote: 'v2' });
+
+    // The newest revision is 2; the decision is for revision 1. Nothing may be
+    // flipped: approving revision 1's text would publish a quote the owner
+    // did not sign for, and the record that holds revision 2 must stay
+    // untouched too.
+    const stale = await store.decideReview(
+      'rev_1',
+      'approved',
+      '2026-10-22T10:00:00.000Z',
+      'one-click-link',
+      1,
+    );
+    assert.equal(stale, null, 'a decision for another revision must not be applied');
+
+    const untouched = await store.list('reviews');
+    assert.equal(untouched[0].state, 'pending', 'the older revision was flipped');
+    assert.equal(untouched[1].state, 'pending', 'the newest revision was flipped');
+
+    // The matching revision flips the newest record — the normal path.
+    const applied = await store.decideReview(
+      'rev_1',
+      'approved',
+      '2026-10-22T10:00:00.000Z',
+      'one-click-link',
+      2,
+    );
+    assert.equal(applied?.state, 'approved');
+    assert.equal(applied?.quote, 'v2', 'the newest revision is the one that was flipped');
+    assert.equal(applied?.decidedAt, '2026-10-22T10:00:00.000Z');
+  });
+
+  test(`${name}: decideReview with an expected revision is still idempotent`, async () => {
+    const store = await fresh();
+    await store.append('reviews', { ref: 'rev_1', type: 'review', projectId: 'p1', state: 'pending', revision: 3 });
+
+    const first = await store.decideReview('rev_1', 'approved', '2026-10-22T10:00:00.000Z', 'one-click-link', 3);
+    const second = await store.decideReview('rev_1', 'approved', '2026-10-22T11:00:00.000Z', 'one-click-link', 3);
+    assert.equal(first?.state, 'approved');
+    assert.equal(second?.state, 'approved');
+    assert.equal(second?.decidedAt, '2026-10-22T10:00:00.000Z', 'the original decision time is kept');
+  });
+
   test(`${name}: decideReview ignores a non-review record that happens to share the ref`, async () => {
     const store = await fresh();
     await store.append('reviews', { ref: 'rev_1', type: 'something-else', state: 'pending' });
@@ -242,6 +290,92 @@ export function describeStoreContract(
       'sessions',
       'updates',
     ]);
+  });
+
+  // --- the record identity (wave 12, B-1) ------------------------------------
+
+  test(`${name}: a record in the reviews collection is given an identity`, async () => {
+    const store = await fresh();
+    const stored = await store.append('reviews', {
+      ref: 'rev_1',
+      type: 'review',
+      projectId: 'p1',
+      state: 'pending',
+    });
+    assert.equal(typeof stored.recordId, 'string', 'the stored record carries no identity');
+    assert.ok((stored.recordId as string).length > 0, 'the identity is empty');
+
+    // The identity is IN the store, not only in the returned object.
+    const all = await store.list('reviews');
+    assert.equal(all.length, 1);
+    assert.equal(all[0].recordId, stored.recordId, 'the stored record does not carry the identity');
+  });
+
+  test(`${name}: two records never share an identity`, async () => {
+    const store = await fresh();
+    const identities: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const stored = await store.append('reviews', { ref: `rev_${i}`, type: 'review' });
+      identities.push(String(stored.recordId));
+    }
+    assert.equal(new Set(identities).size, identities.length, 'two records share one identity');
+  });
+
+  test(`${name}: decideReview with an expected identity flips ONLY the record it names`, async () => {
+    const store = await fresh();
+    // THE COLLISION (audit MAJOR-1): two records with the SAME ref and the
+    // SAME revision number — what two concurrent submissions produce, when
+    // both read the same current record and compute the same next revision.
+    // The revision NUMBER cannot tell them apart.
+    const first = await store.append('reviews', {
+      ref: 'rev_1',
+      type: 'review',
+      projectId: 'p1',
+      state: 'pending',
+      revision: 2,
+      quote: 'QUOTE-A',
+    });
+    const second = await store.append('reviews', {
+      ref: 'rev_1',
+      type: 'review',
+      projectId: 'p1',
+      state: 'pending',
+      revision: 2,
+      quote: 'QUOTE-B',
+    });
+    assert.notEqual(first.recordId, second.recordId, 'the two records share one identity');
+
+    // The link names QUOTE-A. The newest record for the ref is QUOTE-B, so
+    // the decision must be REFUSED — approving QUOTE-B here would publish a
+    // quote the owner was never shown.
+    const refused = await store.decideReview(
+      'rev_1',
+      'approved',
+      '2026-10-22T10:00:00.000Z',
+      'one-click-link',
+      2,
+      String(first.recordId),
+    );
+    assert.equal(refused, null, 'a decision for another record was applied');
+
+    const untouched = await store.list('reviews');
+    assert.equal(untouched[0].state, 'pending', 'the named record was flipped anyway');
+    assert.equal(untouched[1].state, 'pending', 'the OTHER record was flipped');
+
+    // The link that names the CURRENT record works — and flips only it.
+    const applied = await store.decideReview(
+      'rev_1',
+      'approved',
+      '2026-10-22T10:00:00.000Z',
+      'one-click-link',
+      2,
+      String(second.recordId),
+    );
+    assert.equal(applied?.state, 'approved');
+    assert.equal(applied?.quote, 'QUOTE-B', 'the wrong record was flipped');
+    const after = await store.list('reviews');
+    assert.equal(after[0].state, 'pending', 'the other record was flipped');
+    assert.equal(after[1].state, 'approved');
   });
 
   // --- the fidelity cases: the SQL had to be written for these ---------------

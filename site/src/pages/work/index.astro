@@ -7,7 +7,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 const cases = await getCollection('cases');
 cases.sort((a, b) => (a.data.order ?? 1) - (b.data.order ?? 1));
 ---
-<BaseLayout title="Work — IMK" description="Sample case studies from IMK: hours reduced, agents, integrations." path="/work" stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+<BaseLayout title="Work — IMK" description="Sample case studies from IMK: hours reduced, agents, integrations." path="/work" stickyCta={{ label: "Email us", href: "/contact" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Work' }]} />
     <h1>Work</h1>

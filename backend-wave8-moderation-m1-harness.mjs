@@ -38,7 +38,7 @@ import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = fs.existsSync(path.join(HERE, 'api', 'portal', 'auth.ts')) ? HERE : path.resolve(HERE, '..');
+const REPO = fs.existsSync(path.join(HERE, 'api', 'portal.ts')) ? HERE : path.resolve(HERE, '..');
 const SITE = path.join(REPO, 'site');
 const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
@@ -282,7 +282,7 @@ function runChild(bundle, ops, env = {}, cfEnv = null, withFs = true) {
 const SRC = {
   vercel: path.join(REPO, 'api', 'moderate', 'review.ts'),
   cf: path.join(REPO, 'site', 'functions', 'api', 'moderate', 'review.ts'),
-  notifications: path.join(REPO, 'api', 'lib', 'notifications.ts'),
+  notifications: path.join(REPO, 'site', 'shared', 'server', 'notifications.ts'),
 };
 
 async function bundleEntry(entry, outfile) {
@@ -327,6 +327,10 @@ async function buildMutated() {
 
   // The OLD behaviour: a GET decides the quote. The confirmation branch is
   // replaced by the decision code, exactly as it was before M-1.
+  //
+  // RE-PINNED (wave 12, B-1): the confirmation page now also carries the
+  // identity of the record the link is about (`...(recordId ? { recordId } :
+  // {})`), so the anchor below carries it too.
   const OLD_GET = `  if (method === 'GET') {
     html(
       res,
@@ -336,6 +340,7 @@ async function buildMutated() {
         revision,
         ts,
         sig,
+        ...(recordId ? { recordId } : {}),
         ...(record.state !== 'pending'
           ? { alreadyDecided: String(record.state) }
           : {}),
@@ -366,6 +371,7 @@ async function buildMutated() {
         revision,
         ts,
         sig,
+        ...(recordId ? { recordId } : {}),
         ...(record.state !== 'pending' ? { alreadyDecided: String(record.state) } : {}),
       }),
       200,

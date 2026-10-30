@@ -29,6 +29,7 @@ import { getStore as getEdgeStore } from '../edge.js';
 import { StorageError } from '../errors.js';
 import { createLibsqlStore } from '../libsql-adapter.js';
 import { createHttpTransport, type LibsqlTransport } from '../libsql-transport.js';
+import { ensureSchema } from '../libsql-schema.js';
 import { createLibsqlStoreFromEnv } from '../libsql-store.js';
 import { describeStoreContract } from './contract.shared.js';
 import { startMockPipelineServer, type MockPipelineServer } from './mock-pipeline-server.js';
@@ -208,6 +209,61 @@ test('libsql: the durable rate counter counts across stores and never loses a hi
   assert.ok(dump.projects.length >= 0);
 });
 
+// --- the baton (wave 10, F-4) -----------------------------------------------
+
+test('libsql: a PAGED answer is assembled completely (the baton is followed to the end)', async () => {
+  // A server that pages its answers: one result per page, with a baton.
+  const paged = await startMockPipelineServer({ pageSize: 1 });
+  try {
+    const transport = createHttpTransport({ url: paged.url, token: paged.token });
+
+    // The schema step sends ~20 statements in ONE pipeline. With a server
+    // that pages, the client has to follow the baton: a client that ignores
+    // it would create a fraction of the schema and then fail on the first
+    // missing table.
+    await ensureSchema(transport);
+
+    const store = createLibsqlStore({ transport, autoSchema: false });
+    await store.append('projects', { id: 'prj_1' });
+    await store.append('projects', { id: 'prj_2' });
+    const rows = await store.list('projects');
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      ['prj_1', 'prj_2'],
+      'the answer was truncated',
+    );
+
+    // The continuation request carries the baton and NO statements — that is
+    // the v2 protocol.
+    const continuation = paged.requests.find(
+      (r: any) => r && typeof r.baton === 'string' && r.baton,
+    ) as any;
+    assert.ok(continuation, 'the server never handed out a baton');
+    assert.deepEqual(continuation.requests, [], 'the continuation request carried statements');
+    assert.ok(paged.requests.length > 2, 'the answer was not paged at all');
+  } finally {
+    await paged.close();
+  }
+});
+
+test('libsql: the durable rate counter PRUNES the expired buckets', async () => {
+  await mock.reset();
+  const { createLibsqlRateLimitBackend } = await import('../durable-rate-counter.js');
+  const transport = libsqlTransport();
+  await ensureSchema(transport);
+  const backend = createLibsqlRateLimitBackend(transport);
+
+  // A bucket with a window that is already over.
+  await backend.hit('expired-bucket', 1);
+  await new Promise((r) => setTimeout(r, 20));
+
+  // The next hit prunes it: the row is gone, and the table holds only the
+  // buckets that are still inside their window.
+  await backend.hit('live-bucket', 60_000);
+  const rows = await transport.execute('SELECT bucket, reset_at FROM rate_counters');
+  assert.equal(rows.rows.length, 1, `the expired bucket was not pruned (${JSON.stringify(rows.rows)})`);
+});
+
 // --- the file adapter's own specifics --------------------------------------
 
 test('a missing file is an empty collection, not an error', async () => {
@@ -251,18 +307,27 @@ test('a corrupt file raises instead of silently returning an empty list', async 
 test('a file written by the adapter is byte-identical to the legacy rewriteJsonl format', async () => {
   const dir = tmpDir();
   const store = createFileStore({ dataDir: dir });
-  await store.append('reviews', { ref: 'rev_1', type: 'review' });
-  await store.append('reviews', { ref: 'rev_2', type: 'review' });
+  // RE-PINNED (wave 12, B-1): a record in the 'reviews' collection now
+  // carries a RECORD IDENTITY (the store assigns it — see record-id.ts), so
+  // the expected bytes are built from the records the store RETURNED. The
+  // assertion itself is unchanged and just as strict: the file is exactly
+  // the JSON of the stored records, one per line, with a trailing newline
+  // and no blank lines — the legacy rewriteJsonl format the publisher and
+  // the old handlers read.
+  const first = await store.append('reviews', { ref: 'rev_1', type: 'review' });
+  const second = await store.append('reviews', { ref: 'rev_2', type: 'review' });
   const written = fs.readFileSync(reviewsFile(dir), 'utf8');
   const legacy =
-    [
-      { ref: 'rev_1', type: 'review' },
-      { ref: 'rev_2', type: 'review' },
-    ]
+    [first, second]
       .map((r) => JSON.stringify(r))
       .join('\n') + '\n';
   assert.equal(written, legacy);
   assert.ok(!written.includes('\n\n'), 'no blank lines');
+  // The identity is present in the stored record — the file is not quietly
+  // missing it.
+  assert.equal(typeof first.recordId, 'string');
+  assert.ok((first.recordId as string).length > 0, 'the stored record carries no identity');
+  assert.notEqual(first.recordId, second.recordId, 'two records share one identity');
 });
 
 // --- store selection --------------------------------------------------------

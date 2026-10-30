@@ -1,7 +1,7 @@
 // site/qa/qa-rate-limit.mjs
 //
-// Backend-owned suite for the rate limiter (api/lib/rate-limit.ts and its
-// edge twin site/functions/api/lib/rate-limit.ts).
+// Backend-owned suite for the rate limiter (site/shared/server/rate-limit.ts
+// and its edge twin site/functions/api/lib/rate-limit.ts).
 //
 // It closes the gap QA named after the wave-2 re-run: the counters used to
 // live in a module-level Map inside the handlers, so on a serverless target
@@ -35,6 +35,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
+import { serverPath, fwd } from './handler-paths.mjs';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -78,12 +79,16 @@ const SANDBOX = path.join(
 );
 
 const REPO_FWD = REPO.replace(/\\/g, '/');
+// The limiter moved out of api/ in wave 13 (the function budget): the Vercel
+// tree now keeps it in site/shared/server/. The pin follows the file, not the
+// tree it used to live in.
+const RATE_LIMIT_FILE = fwd(serverPath('rate-limit'));
 const ENTRY = `export {
   createMemoryBackend as nodeMemory,
   createFileBackend as nodeFile,
   RateLimiter as NodeLimiter,
   createPortalRateLimiter as nodePortal,
-} from '${REPO_FWD}/api/lib/rate-limit.ts';
+} from '${RATE_LIMIT_FILE}';
 export {
   createMemoryBackend as edgeMemory,
   createKvBackend as edgeKv,

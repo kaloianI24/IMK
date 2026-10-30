@@ -54,6 +54,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
+import { serverPath, fwd } from './handler-paths.mjs';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +97,10 @@ const SANDBOX = path.join(
 );
 
 const REPO_FWD = REPO.replace(/\\/g, '/');
+// The Vercel tree's notifier moved out of api/ in wave 13 (the function
+// budget): it lives in site/shared/server/ now. The Cloudflare twin is
+// unchanged — it keeps its own file under site/functions/api/lib/.
+const VERCEL_NOTIFICATIONS = fwd(serverPath('notifications'));
 const ENTRY = `export { onRequestGet as cfTestimonialsGet, onRequestPost as cfTestimonialsPost } from '${REPO_FWD}/site/functions/api/portal/testimonials.ts';
 export { onRequestGet as cfProjectsGet, onRequestPost as cfProjectsPost } from '${REPO_FWD}/site/functions/api/portal/projects.ts';
 export { onRequestGet as cfCommentsGet } from '${REPO_FWD}/site/functions/api/portal/comments.ts';
@@ -106,7 +111,7 @@ export { onRequestPost as cfAuthPost } from '${REPO_FWD}/site/functions/api/port
 export { onRequestGet as cfModerateGet, onRequestPost as cfModeratePost } from '${REPO_FWD}/site/functions/api/moderate/review.ts';
 export * as cfNotifications from '${REPO_FWD}/site/functions/api/lib/notifications.ts';
 export * as cfSession from '${REPO_FWD}/site/functions/api/portal/session.ts';
-export * as vercelNotifications from '${REPO_FWD}/api/lib/notifications.ts';
+export * as vercelNotifications from '${VERCEL_NOTIFICATIONS}';
 `;
 
 let cf = null;

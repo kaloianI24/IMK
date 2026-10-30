@@ -1,8 +1,17 @@
-// site/functions/api/portal/session.ts — Cloudflare Pages Function AND
-// shared module.
+// site/functions/api/portal/session.ts — Cloudflare Pages Function.
 //   GET /api/portal/session — "who am I?"
 //
-// THE CLOUDFLARE TWIN OF api/portal/session.ts (spec/07 §1, D-6: the two
+//   A SEPARATE COPY of the Vercel module
+//   site/shared/portal-handlers/portal-session.ts. The two files are NOT
+//   the same code: an edit to the Vercel module does NOT reach this file.
+//
+//   PARTLY SHARED: the session logic itself is the shared module
+//   site/shared/server/portal-session.ts, which this file imports (the
+//   Vercel tree imports it too), so THAT part of the session contract
+//   cannot drift between the two trees. What is copied here is the
+//   Cloudflare-specific wrapper around it.
+//
+// THE CLOUDFLARE TWIN OF site/shared/portal-handlers/portal-session.ts (spec/07 §1, D-6: the two
 // trees must answer the same way for the same input).
 //
 // THE IMPLEMENTATION IS SHARED (audit wave-6, F-2)

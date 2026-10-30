@@ -1,6 +1,11 @@
 // site/functions/api/lib/rate-limit.ts — Cloudflare Pages Function module.
 //
-// The edge twin of api/lib/rate-limit.ts (Vercel). Same interface, same
+//   A SEPARATE COPY of the Vercel module site/shared/server/rate-limit.ts:
+//   the two files are NOT the same code, and an edit to the Vercel module
+//   does NOT reach this file. Change the Vercel module and change THIS file
+//   too.
+//
+// The edge twin of site/shared/server/rate-limit.ts (Vercel). Same interface, same
 // decision shape, same safety rules:
 //
 //   - a backend can never fail a request (in-memory fallback)

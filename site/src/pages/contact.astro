@@ -1,0 +1,326 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+---
+
+<BaseLayout
+  title="Email us — IMK"
+  description="Write to IMK about workflow automation, AI agents, integrations or audits. We reply within 24 hours."
+  path="/contact"
+>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Email us' }]} />
+    <h1>Email us</h1>
+    <p style="max-width:60ch;">Tell us what's on your plate. We reply within 24 hours — usually much faster.</p>
+  </section>
+
+  <section class="container section" style="padding-top:0;">
+    <form
+      id="contact-form"
+      method="POST"
+      action="/api/contact"
+      enctype="multipart/form-data"
+      accept-charset="UTF-8"
+      style="max-width:640px;"
+    >
+      <input type="hidden" name="type" value="contact" />
+      <input type="hidden" name="budget" value="not-sure" />
+      <input type="hidden" name="timeline" value="exploring" />
+      <input type="hidden" name="ts" id="contact-ts" value="" />
+
+      <div class="form-group">
+        <label for="contact-name">Name *</label>
+        <input id="contact-name" name="name" type="text" required maxlength="80" autocomplete="name" placeholder="Your name" />
+      </div>
+
+      <div class="form-group">
+        <label for="contact-company">Company</label>
+        <input id="contact-company" name="company" type="text" maxlength="120" autocomplete="organization" placeholder="Acme Inc." />
+        <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-1);">Optional — who it's for, if it differs from a personal project.</p>
+      </div>
+
+      <div class="form-group">
+        <label for="contact-email">Email</label>
+        <input id="contact-email" name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@company.com" />
+        <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-1);">We'll send our reply here — hit reply on our answer and it lands in your inbox.</p>
+      </div>
+
+      <div class="form-group">
+        <label>Subject</label>
+        <div id="subject-chips" role="radiogroup" aria-label="Subject" style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2);">
+          <label class="chip"><input type="radio" name="subject-preset" value="Automation audit" checked /> Automation audit</label>
+          <label class="chip"><input type="radio" name="subject-preset" value="Workflow automation" /> Workflow automation</label>
+          <label class="chip"><input type="radio" name="subject-preset" value="AI agent" /> AI agent</label>
+          <label class="chip"><input type="radio" name="subject-preset" value="Integration" /> Integration</label>
+          <label class="chip"><input type="radio" name="subject-preset" value="Automation Care" /> Automation Care</label>
+          <label class="chip"><input type="radio" name="subject-preset" value="__other__" /> Something else</label>
+        </div>
+        <input id="contact-subject-other" name="subject-other" type="text" maxlength="120" placeholder="e.g. Email automation" style="margin-top:var(--space-3);display:none;" aria-label="Custom subject" />
+        <input type="hidden" name="subject" id="contact-subject" value="Automation audit" />
+      </div>
+
+      <div class="form-group">
+        <label for="contact-message">Message</label>
+        <textarea id="contact-message" name="project" required maxlength="500" placeholder="What's manual today? What's the goal? What does done look like?" style="min-height:120px;"></textarea>
+        <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-1);">Plain text is fine — we'll turn it into the email body. Attach screenshots or a short screen recording if it helps.</p>
+      </div>
+
+      <div class="form-group">
+        <label>To: IMK — 2imk4support@gmail.com</label>
+        <div style="display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" id="attach-btn">Attach images or video</button>
+          <input type="file" id="attachments" name="attachments" multiple accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime,video/webm" aria-label="Attach images or a short video" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
+        </div>
+        <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-1);">Up to 3 files, 4 MB total. PNG, JPEG, WebP, GIF or short MP4/MOV/WebM.</p>
+        <div id="file-chips" style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2);"></div>
+      </div>
+
+      <div style="position:absolute;left:-9999px;top:auto;height:0;overflow:hidden;" aria-hidden="true">
+        <label for="contact-website">Website</label>
+        <input id="contact-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+
+      {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
+        <div style="margin:var(--space-4) 0;">
+          <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} data-theme="auto"></div>
+        </div>
+      )}
+
+      <div id="contact-toast" class="contact-toast" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" style="min-height:72px;margin-top:var(--space-4);"></div>
+
+      <div style="margin-top:var(--space-4);">
+        <button type="submit" class="btn btn-primary" id="contact-submit">Send email</button>
+      </div>
+    </form>
+  </section>
+
+  <script>
+    const form = document.getElementById('contact-form') as HTMLFormElement | null;
+    const tsInput = document.getElementById('contact-ts') as HTMLInputElement | null;
+    if (tsInput) tsInput.value = String(Date.now());
+
+    const subjectHidden = document.getElementById('contact-subject') as HTMLInputElement | null;
+    const subjectOther = document.getElementById('contact-subject-other') as HTMLInputElement | null;
+    const chips = document.querySelectorAll('input[name="subject-preset"]');
+    chips.forEach((c) => {
+      c.addEventListener('change', () => {
+        const v = (c as HTMLInputElement).value;
+        if (v === '__other__') {
+          if (subjectOther) { subjectOther.style.display = 'block'; subjectOther.focus(); }
+        } else {
+          if (subjectOther) { subjectOther.style.display = 'none'; subjectOther.value = ''; }
+        }
+        syncSubject();
+      });
+    });
+    function syncSubject() {
+      const checked = document.querySelector('input[name="subject-preset"]:checked') as HTMLInputElement | null;
+      let val = checked ? checked.value : 'Automation audit';
+      if (val === '__other__') val = (subjectOther && subjectOther.value.trim()) ? subjectOther.value.trim() : '';
+      if (subjectHidden) subjectHidden.value = val;
+    }
+    if (subjectOther) subjectOther.addEventListener('input', syncSubject);
+
+    // attachments
+    const ALLOWED = ['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/quicktime','video/webm'];
+    const MAX_FILES = 3;
+    const MAX_TOTAL = 4 * 1024 * 1024;
+    let selectedFiles: File[] = [];
+    const fileInput = document.getElementById('attachments') as HTMLInputElement | null;
+    const attachBtn = document.getElementById('attach-btn');
+    const chipsEl = document.getElementById('file-chips');
+
+    function renderChips() {
+      if (!chipsEl) return;
+      chipsEl.innerHTML = '';
+      selectedFiles.forEach((f, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'tag';
+        chip.style.display = 'inline-flex';
+        chip.style.alignItems = 'center';
+        chip.style.gap = 'var(--space-2)';
+        chip.textContent = f.name;
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.textContent = 'Remove';
+        rm.style.background = 'none';
+        rm.style.border = 'none';
+        rm.style.cursor = 'pointer';
+        rm.style.color = 'var(--color-accent-text)';
+        rm.style.font = 'inherit';
+        rm.style.padding = '0';
+        rm.addEventListener('click', () => { selectedFiles.splice(i, 1); renderChips(); });
+        chip.appendChild(rm);
+        chipsEl.appendChild(chip);
+      });
+    }
+
+    if (attachBtn && fileInput) {
+      attachBtn.addEventListener('click', () => fileInput.click());
+    }
+    if (fileInput) {
+      fileInput.addEventListener('change', () => {
+        const files = Array.from(fileInput.files || []);
+        for (const f of files) {
+          if (selectedFiles.length >= MAX_FILES) { showError('too-many-files'); break; }
+          if (!ALLOWED.includes(f.type)) { showError('unsupported-file'); continue; }
+          const total = selectedFiles.reduce((n, x) => n + x.size, 0) + f.size;
+          if (total > MAX_TOTAL) { showError('file-too-large'); continue; }
+          selectedFiles.push(f);
+        }
+        fileInput.value = '';
+        renderChips();
+      });
+    }
+
+    const toast = document.getElementById('contact-toast');
+    const submitBtn = document.getElementById('contact-submit') as HTMLButtonElement | null;
+
+    const ERROR_STRINGS: Record<string, string> = {
+      'validation': 'Please add your name, a valid email and a message — we need those to send.',
+      'challenge': 'Security check failed — please try again.',
+      'time-trap': "You sent that very quickly — take a moment and try again.",
+      'rate-limit': "You've sent a few emails in a short while — please wait before sending again.",
+      'payload-too-large': 'That file is too large — the limit is 4 MB per email. Try a shorter video or remove it.',
+      'too-many-files': 'You can attach up to 3 files — please remove one and try again.',
+      'unsupported-file': "That file type isn't supported — attach an image (PNG, JPEG, WebP, GIF) or a short video (MP4, MOV, WebM). SVG isn't accepted.",
+      'internal': 'Something went wrong while sending — please try again in a moment.',
+      'method': 'Something went wrong while sending — please try again in a moment.',
+      'server': 'Something went wrong while sending — please try again in a moment.',
+      'file-too-large': 'That file is too large — the limit is 4 MB per email. Try a shorter video or remove it.',
+      'unsupported-type': "That file type isn't supported — attach an image (PNG, JPEG, WebP, GIF) or a short video (MP4, MOV, WebM). SVG isn't accepted.",
+    };
+
+    function setToast(text: string, kind: 'success' | 'error' | 'info') {
+      if (!toast) return;
+      toast.textContent = text;
+      toast.setAttribute('role', kind === 'error' ? 'alert' : 'status');
+      toast.setAttribute('aria-live', kind === 'error' ? 'assertive' : 'polite');
+      toast.style.color = kind === 'error' ? 'var(--color-error)' : 'var(--color-success)';
+      toast.style.fontWeight = '600';
+    }
+
+    function clearToast() {
+      if (!toast) return;
+      toast.textContent = '';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
+    }
+
+    function showError(code: string) {
+      const msg = ERROR_STRINGS[code] || ERROR_STRINGS['server'];
+      setToast(msg, 'error');
+      if (toast) toast.focus();
+    }
+
+    function clientValidateFiles(): string | null {
+      if (selectedFiles.length > MAX_FILES) return 'too-many-files';
+      const total = selectedFiles.reduce((n, x) => n + x.size, 0);
+      if (total > MAX_TOTAL) return 'file-too-large';
+      for (const f of selectedFiles) {
+        if (!ALLOWED.includes(f.type)) return 'unsupported-file';
+      }
+      return null;
+    }
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearToast();
+        syncSubject();
+
+        const vErr = clientValidateFiles();
+        if (vErr) { showError(vErr); return; }
+
+        const fd = new FormData();
+        fd.append('type', 'contact');
+        fd.append('name', String((document.getElementById('contact-name') as HTMLInputElement).value || ''));
+        fd.append('email', String((document.getElementById('contact-email') as HTMLInputElement).value || ''));
+        fd.append('company', String((document.getElementById('contact-company') as HTMLInputElement).value || ''));
+        fd.append('subject', String(subjectHidden ? subjectHidden.value : ''));
+        fd.append('project', String((document.getElementById('contact-message') as HTMLTextAreaElement).value || ''));
+        fd.append('budget', 'not-sure');
+        fd.append('timeline', 'exploring');
+        fd.append('website', String((document.getElementById('contact-website') as HTMLInputElement).value || ''));
+        fd.append('ts', String(tsInput ? tsInput.value : Date.now()));
+        const turnstile = document.querySelector('.cf-turnstile') ? (document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement | null) : null;
+        if (turnstile && turnstile.value) fd.append('turnstileToken', turnstile.value);
+        // also accept cf-turnstile-response name
+        const cfResp = document.querySelector('input[name="cf-turnstile-response"]') as HTMLInputElement | null;
+        if (cfResp && cfResp.value) fd.append('cf-turnstile-response', cfResp.value);
+        for (const f of selectedFiles) fd.append('attachments', f);
+
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending…'; submitBtn.setAttribute('aria-busy', 'true'); }
+
+        try {
+          const res = await fetch('/api/contact', { method: 'POST', body: fd });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data && data.ok && data.emailed === true) {
+            setToast("Thanks — your email is in. We'll review it and reply within 24 hours.", 'success');
+            const resetBtn = document.createElement('button');
+            resetBtn.type = 'button';
+            resetBtn.className = 'btn btn-secondary';
+            resetBtn.textContent = 'Send another email';
+            resetBtn.style.marginTop = 'var(--space-3)';
+            resetBtn.addEventListener('click', () => {
+              form.reset();
+              selectedFiles = [];
+              renderChips();
+              clearToast();
+              if (tsInput) tsInput.value = String(Date.now());
+              syncSubject();
+              if (subjectOther) { subjectOther.style.display = 'none'; subjectOther.value = ''; }
+              const first = document.getElementById('contact-name') as HTMLElement | null;
+              if (first) first.focus();
+              // remove reset button
+              resetBtn.remove();
+            });
+            if (toast) toast.appendChild(resetBtn);
+            if (resetBtn) resetBtn.focus();
+          } else {
+            const code = (data && data.code) ? String(data.code) : 'server';
+            if (code === 'challenge') showError('challenge');
+            else if (code === 'validation') showError('validation');
+            else if (code === 'time-trap') showError('time-trap');
+            else if (code === 'rate-limit') showError('rate-limit');
+            else if (code === 'payload-too-large') showError('payload-too-large');
+            else if (code === 'too-many-files') showError('too-many-files');
+            else if (code === 'unsupported-file') showError('unsupported-file');
+            else showError('server');
+            // if emailed false but ok true, show server error with email
+            if (res.ok && data && data.ok && data.emailed === false) {
+              setToast('Something went wrong while sending — please try again in a moment, or email 2imk4support@gmail.com.', 'error');
+            }
+            if (toast) toast.focus();
+          }
+        } catch {
+          showError('server');
+          if (toast) toast.focus();
+        } finally {
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Send email'; submitBtn.removeAttribute('aria-busy'); }
+        }
+      });
+    }
+  </script>
+
+  {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && <script async src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
+</BaseLayout>
+
+<style>
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    font-size: var(--text-sm);
+    user-select: none;
+  }
+  .chip input { margin: 0; }
+  .contact-toast { padding: var(--space-3); border-radius: var(--radius-md); background: var(--color-neutral-soft); }
+  @media (max-width: 640px) {
+    #contact-submit { width: 100%; min-height: 44px; }
+  }
+</style>

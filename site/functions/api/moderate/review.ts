@@ -4,7 +4,10 @@
 // Mirrors api/moderate/review.ts (Vercel) so both targets share the same
 // HMAC-signed approve/reject behavior. Kept in sync by design (spec/07 §1, D-6).
 //
-// Query params: ref, decision, revision, sig, ts — see api/moderate/review.ts
+// Query params: ref, decision, revision, recordId, sig, ts — see
+// api/moderate/review.ts. `recordId` is the identity of the record the link
+// is about (wave 12, B-1); it is optional, and a link minted before wave 12
+// carries none.
 //
 // THE METHOD IS THE POINT (audit M-1, wave-8A)
 //   GET  → shows a CONFIRMATION PAGE. It NEVER changes the state.
@@ -187,7 +190,7 @@ async function handle(ctx: any, commit: boolean): Promise<Response> {
   if (!parsed.ok) {
     return json(parsed.body, parsed.status);
   }
-  const { ref, decision, revision, ts, sig } = parsed.params;
+  const { ref, decision, revision, ts, sig, recordId } = parsed.params;
 
   // The secret must not only EXIST, it must be USABLE (audit H-1): the
   // shipped example placeholder is published in the repository, and a
@@ -208,7 +211,7 @@ async function handle(ctx: any, commit: boolean): Promise<Response> {
     return json({ error: 'misconfigured', code: 'internal' }, 500);
   }
 
-  const ok = await verifyModerationSignature(env as Env, ref, decision, revision, ts, sig);
+  const ok = await verifyModerationSignature(env as Env, ref, decision, revision, ts, sig, recordId);
   if (!ok) {
     return json({ error: 'invalid signature', code: 'signature' }, 400);
   }
@@ -250,7 +253,19 @@ async function handle(ctx: any, commit: boolean): Promise<Response> {
 
   const record = reviews[idx];
   const currentRevision = Number(record.revision || 0);
-  if (currentRevision !== revision) {
+  const currentRecordId = String(record.recordId || '');
+
+  // THE TWO SCOPES (wave 10 F-2, wave 12 B-1).
+  //
+  //   revision — WHICH VERSION of the quote the link is about.
+  //   identity — WHICH RECORD the link is about. A revision NUMBER is not an
+  //              identity: two concurrent submissions compute the same
+  //              revision from the same read, so two records can share
+  //              (ref, revision) — and the number alone cannot say which of
+  //              them the owner was shown (audit MAJOR-1).
+  const identityStale = recordId !== undefined && recordId !== '' && recordId !== currentRecordId;
+
+  if (currentRevision !== revision || identityStale) {
     // The client changed the quote after this link was mailed: approving it
     // would publish text the owner never saw.
     console.log(
@@ -279,6 +294,8 @@ async function handle(ctx: any, commit: boolean): Promise<Response> {
           rating: record.rating || '—',
           review: record.review || '',
           revision: currentRevision,
+          // The fresh link names the CURRENT record (wave 12, B-1).
+          recordId: currentRecordId,
           updated: true,
         });
       } catch {
@@ -306,6 +323,7 @@ async function handle(ctx: any, commit: boolean): Promise<Response> {
         revision,
         ts,
         sig,
+        ...(recordId ? { recordId } : {}),
         ...(record.state !== 'pending' ? { alreadyDecided: String(record.state) } : {}),
       }),
       200,
@@ -316,13 +334,91 @@ async function handle(ctx: any, commit: boolean): Promise<Response> {
     return json({ ok: true, ref, state: record.state, decidedAt: record.decidedAt }, 200);
   }
 
-  record.state = decision === 'approve' ? 'approved' : 'rejected';
-  record.decidedAt = new Date().toISOString();
-  record.decidedBy = 'one-click-link';
+  // THE REVISION SCOPE (wave 10, F-2) AND THE IDENTITY SCOPE (wave 12, B-1).
+  //
+  // The decision must land on the revision that was VERIFIED. The log above
+  // was read at the start of this request; if the client appended a newer
+  // revision in the meantime, flipping that older record would approve text
+  // the owner never saw. So the log is read AGAIN, the newest revision of
+  // this ref is compared with the link's revision, and only a record that
+  // still carries that revision is written.
+  //
+  // The identity is the second scope: a revision NUMBER is not an identity
+  // (two concurrent submissions produce two records with the same
+  // (ref, revision)), so the record the link names must also be the record
+  // that is written.
+  let fresh: Array<Record<string, any>>;
+  try {
+    fresh = readReviews();
+  } catch (err) {
+    if (err instanceof StoreUnreachableError) {
+      return json(
+        { error: 'moderation store unavailable on this target', code: 'unimplemented' },
+        501,
+      );
+    }
+    if (isStorageCorrupt(err)) {
+      console.log(
+        JSON.stringify({
+          ts: Date.now(),
+          outcome: 'storage_corrupt',
+          file: err.file,
+          line: err.line,
+        }),
+      );
+      return json({ error: 'storage unavailable', code: 'storage' }, 500);
+    }
+    throw err;
+  }
+
+  let freshIdx = -1;
+  for (let i = 0; i < fresh.length; i++) {
+    if (fresh[i].ref === ref && fresh[i].type === 'review') freshIdx = i;
+  }
+  if (freshIdx === -1) {
+    return json({ error: 'review not found', code: 'not-found' }, 404);
+  }
+
+  const freshRecord = fresh[freshIdx];
+  const freshRevision = Number(freshRecord.revision || 0);
+  const freshRecordId = String(freshRecord.recordId || '');
+  const freshIdentityStale =
+    recordId !== undefined && recordId !== '' && recordId !== freshRecordId;
+  if (freshRevision !== revision || freshIdentityStale) {
+    // The record MOVED between the check and the write: the same answer as
+    // the stale revision above, and nothing is written.
+    console.log(
+      JSON.stringify({
+        ts: Date.now(),
+        ref,
+        outcome: 'review_revision_moved_at_write',
+        linkRevision: revision,
+        currentRevision: freshRevision,
+        state: freshRecord.state,
+      }),
+    );
+    return json(
+      {
+        error: 'this review was changed after the link was sent',
+        code: 'stale-revision',
+        ref,
+        revision: freshRevision,
+      },
+      409,
+    );
+  }
+
+  if (freshRecord.state !== 'pending') {
+    return json({ ok: true, ref, state: freshRecord.state, decidedAt: freshRecord.decidedAt }, 200);
+  }
+
+  freshRecord.state = decision === 'approve' ? 'approved' : 'rejected';
+  freshRecord.decidedAt = new Date().toISOString();
+  freshRecord.decidedBy = 'one-click-link';
   // The decision is only real once it is stored. A write that fails must not
   // be answered with "approved": the owner would believe the quote is
   // published while the store still says pending.
-  if (!writeReviews(reviews)) {
+  if (!writeReviews(fresh)) {
     console.log(JSON.stringify({ ts: Date.now(), ref, outcome: 'storage_write_failed' }));
     return json({ error: 'storage unavailable', code: 'storage' }, 500);
   }
@@ -330,14 +426,14 @@ async function handle(ctx: any, commit: boolean): Promise<Response> {
   try {
     await notifyReviewDecided(env as Env, {
       ref,
-      name: record.name || '—',
-      decision: record.state,
+      name: freshRecord.name || '—',
+      decision: freshRecord.state,
     });
   } catch {
     // notification failures never fail the request
   }
 
-  return json({ ok: true, ref, state: record.state }, 200);
+  return json({ ok: true, ref, state: freshRecord.state }, 200);
 }
 
 /** GET — the confirmation page. The state is never changed here. */

@@ -13,7 +13,7 @@ const { Content } = await render(c);
 const d = c.data;
 const slug = c.id;
 ---
-<BaseLayout title={`${d.title} — IMK`} description={d.outcome} path={`/work/${slug}`} stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+<BaseLayout title={`${d.title} — IMK`} description={d.outcome} path={`/work/${slug}`} stickyCta={{ label: "Email us", href: "/contact" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Work', href: '/work' }, { label: d.title }]} />
     <div class="tag">Sample project</div>
@@ -32,6 +32,6 @@ const slug = c.id;
       {d.quote && <blockquote class="callout" style="font-style:italic;">"{d.quote.quote}" — {d.quote.name}, {d.quote.role}</blockquote>}
     </div>
   </section>
-  <CtaBand title="Could this fit you?" text="A 15-minute call is enough to tell whether your situation matches. No pitch." ctaLabel="Book a 15-minute call" ctaHref="/book" />
+  <CtaBand title="Could this fit you?" text="A 15-minute call is enough to tell whether your situation matches. No pitch." ctaLabel="Email us" ctaHref="/contact" />
   <section class="container section"><div class="prose"><Content /></div></section>
 </BaseLayout>

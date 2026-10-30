@@ -1,0 +1,156 @@
+{
+  "suite": "qa-anchor-nonvacuity",
+  "startedAt": "2026-10-22T14:19:48.625Z",
+  "findings": [
+    {
+      "id": "P2-control",
+      "what": "the publisher copy (unmodified) still passes N1/N2/N3",
+      "ok": true,
+      "detail": "N1=PASS N2=PASS N3=PASS   (suite exit 0)"
+    },
+    {
+      "id": "P2-mutant",
+      "what": "the publisher SKIPS a malformed line -> N1/N2/N3 go RED (non-vacuity proof)",
+      "ok": true,
+      "detail": "N1=FAIL N2=FAIL N3=FAIL   (suite exit 1)   all failing checks: N1, N2, N3"
+    },
+    {
+      "id": "P2-liveness",
+      "what": "if the publisher text drifts, the P2 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792678776940\\p2-drift.mjs:     try {\n      records.push(JSON.parse(line));\n    } catch "
+    },
+    {
+      "id": "D2-control",
+      "what": "the tree copy (unmodified) still passes B1/B1b/B2/B3/B4",
+      "ok": true,
+      "detail": "B1=PASS B1b=PASS B2=PASS B3=PASS B4=PASS   (suite exit 0)"
+    },
+    {
+      "id": "D2-mutant",
+      "what": "the store failure is unguarded again -> B4 goes RED while the control B1 stays GREEN (non-vacuity proof)",
+      "ok": true,
+      "detail": "B1=PASS B1b=PASS B2=PASS B3=FAIL B4=FAIL   (suite exit 1)   B4 said: the handler threw instead of answering: StorageError: cannot write C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-wave5-2026-10-22T14-19-38-583Z\\site\\data\\modera"
+    },
+    {
+      "id": "D2-liveness",
+      "what": "if guardStore disappears, the D2 check FAILS loudly (no silent pass)",
+      "ok": true,
+      "detail": "D2=FAIL   the D2 check said: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-wave5-2026-10-22T14-19-39-061Z\\work\\copy-f3\\site\\shared\\server\\portal-store-access.ts: export async function guardStore<"
+    },
+    {
+      "id": "W9-1-control",
+      "what": "the wave-9 queue check passes against an unmodified copy of the tree",
+      "ok": true,
+      "detail": "W9-1=PASS   (suite exit 0)"
+    },
+    {
+      "id": "W9-1-mutant",
+      "what": "the inbox reads a DIFFERENT collection -> the wave-9 queue check goes RED (non-vacuity proof)",
+      "ok": true,
+      "detail": "W9-1=FAIL   (suite exit 1)   failing sub-assertions: W9-1.a2, W9-1.a3, W9-1.a4, W9-1.a5, W9-1.b1, W9-1.b2, W9-1.b3, W9-1.b4, W9-1.b5"
+    },
+    {
+      "id": "P1-control",
+      "what": "the tree copy (unmodified) still passes M1/M2",
+      "ok": true,
+      "detail": "M1=PASS M2=PASS   (suite exit 0)"
+    },
+    {
+      "id": "P1-mutant",
+      "what": "ALL THREE layers of the stale-revision guard are removed -> M1/M2 go RED (non-vacuity proof)",
+      "ok": true,
+      "detail": "M1=FAIL M2=FAIL   (suite exit 1)   all failing checks: M1, M2, M4, M4b, M5"
+    },
+    {
+      "id": "P1-half-handler",
+      "what": "only the HANDLER layer is removed -> M1/M2 stay GREEN (the STORE still refuses: the second layer is load-bearing)",
+      "ok": true,
+      "detail": "M1=PASS M2=PASS   (suite exit 0)"
+    },
+    {
+      "id": "P1-half-store",
+      "what": "only the STORE layer is removed -> M1/M2 stay GREEN (the HANDLER still refuses: the first layer is load-bearing)",
+      "ok": true,
+      "detail": "M1=PASS M2=PASS   (suite exit 0)"
+    },
+    {
+      "id": "P1-half-identity",
+      "what": "only the STORE IDENTITY scope is removed -> M1/M2 stay GREEN (the HANDLER and the revision scope still refuse: the third layer is load-bearing)",
+      "ok": true,
+      "detail": "M1=PASS M2=PASS   (suite exit 0)"
+    },
+    {
+      "id": "P1-liveness-handler",
+      "what": "if the handler guard text drifts, the P1 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792678776940\\p1-drift-handler\\api\\moderate\\review.ts: if (currentRevision !== revision || identityStale) {"
+    },
+    {
+      "id": "P1-liveness-store",
+      "what": "if the store scope text drifts, the P1 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792678776940\\p1-drift-store\\site\\shared\\portal-store\\file-adapter.ts: if (expectedRevision !== undefined && revisionNumber(record)"
+    },
+    {
+      "id": "P1-liveness-identity",
+      "what": "if the identity scope text drifts, the P1 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792678776940\\p1-drift-identity\\site\\shared\\portal-store\\file-adapter.ts:       if (expectedRecordId !== undefined && expectedRecordId"
+    },
+    {
+      "id": "E14-control",
+      "what": "the tree (unmodified) still passes E9 and E14",
+      "ok": true,
+      "detail": "E9=PASS E14=PASS   (suite exit 0)"
+    },
+    {
+      "id": "E14-mutant",
+      "what": "the CF inbox reads the moderation log again -> E14 goes RED while the Vercel tree (E9) stays GREEN (non-vacuity proof)",
+      "ok": true,
+      "detail": "E9=PASS E14=FAIL   (suite exit 1)   E14 said: the CF twin with a filesystem must still answer 501 -- this target serves no queue (got 200: {\"ok\":true,\"counts\":{\"pendingReviews\":1,\"decidedToday\":0,\"openNotes"
+    },
+    {
+      "id": "E14-liveness",
+      "what": "if the CF inbox text drifts, the E16 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792678776940\\e14-drift\\site\\functions\\api\\admin\\reviews.ts:   return json(\n    { error: 'moderation store unavailable on"
+    },
+    {
+      "id": "R11-control",
+      "what": "the tree copy (unmodified) still passes R11 (the empty carrier is a clean 404)",
+      "ok": true,
+      "detail": "R11=PASS   (suite exit 0)   R11 said: "
+    },
+    {
+      "id": "R11-mutant-entry",
+      "what": "the ENTRY POINT falls through to the header again -> R11 goes RED (non-vacuity proof)",
+      "ok": true,
+      "detail": "R11=FAIL   (suite exit 1)   R11 said: an EMPTY carrier answered 401, not 404: {\"error\":\"authentication required\",\"code\":\"unauthorized\"} -- expected 404, got 401"
+    },
+    {
+      "id": "R11-mutant-resolver",
+      "what": "the RESOLVER treats an empty carrier as ABSENT again -> R11 goes RED (non-vacuity proof)",
+      "ok": true,
+      "detail": "R11=FAIL   (suite exit 1)   R11 said: an EMPTY carrier answered 500, not 404: {\"error\":\"route resolution failed\",\"code\":\"route-resolution\"} -- expected 404, got 500"
+    },
+    {
+      "id": "R11-liveness-entry",
+      "what": "if the entry point text drifts, the R11 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792678776940\\r11-drift-entry\\api\\portal.ts:   if (fromQuery !== null) return fromQuery;"
+    },
+    {
+      "id": "R11-liveness-resolver",
+      "what": "if the resolver text drifts, the R11 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792678776940\\r11-drift-resolver\\site\\shared\\portal-router.ts:   if (carrier !== null) {"
+    },
+    {
+      "id": "tree-untouched",
+      "what": "the shipped tree is byte-identical after the proofs",
+      "ok": true,
+      "detail": "api/, site/shared/, site/scripts/ and site/functions/ are unchanged"
+    }
+  ]
+}

@@ -28,6 +28,14 @@
 //                                                 "affected_row_count": 0,
 //                                                 "last_insert_rowid": null } } } ] }
 //
+// THE BATON (wave 10, F-4)
+//   A page that answers with a non-null "baton" is NOT the whole answer: the
+//   server sends the rest of the results when the client repeats the request
+//   with that baton and an EMPTY requests array. A client that ignores the
+//   baton drops the results that did not fit on the first page — a truncated
+//   result set that looks complete. This transport follows the baton to the
+//   end, and it honours a "base_url" the server sends with the page.
+//
 // THE TRAP (the reason this module exists): a failed statement comes back as
 //   { "type": "error", "error": { "message": …, "code": … } }
 // INSIDE results[], while the HTTP status is still 200. A client that only
@@ -193,7 +201,6 @@ function redact(value: string): string {
  * One statement per call, or several in one pipeline round trip.
  */
 export function createHttpTransport(options: HttpTransportOptions): LibsqlTransport {
-  const endpoint = pipelineEndpoint(options.url);
   const token = options.token;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const doFetch = options.fetchImpl ?? globalThis.fetch;
@@ -205,20 +212,32 @@ export function createHttpTransport(options: HttpTransportOptions): LibsqlTransp
     );
   }
 
-  async function pipeline(
-    requests: unknown[],
-  ): Promise<Array<{ type: string; response?: any; error?: any }>> {
+  /**
+   * THE MAXIMUM NUMBER OF PAGES of one pipeline.
+   *
+   * A page is a baton continuation. A server that keeps handing out a baton
+   * would otherwise make this loop for ever, so the number of pages is
+   * bounded: past the bound the answer is an error, never a truncated result
+   * set that looks complete.
+   */
+  const MAX_PAGES = 100;
+
+  /** One round trip: the request body goes out, the page comes back. */
+  async function pipelinePage(
+    body: unknown,
+    endpointUrl: string,
+  ): Promise<{ results: any[]; baton: string | null; baseUrl: string | null }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
-      response = await doFetch(endpoint, {
+      response = await doFetch(endpointUrl, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ baton: null, requests }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
     } catch (err) {
@@ -239,18 +258,65 @@ export function createHttpTransport(options: HttpTransportOptions): LibsqlTransp
       );
     }
 
-    let body: any;
+    let payload: any;
     try {
-      body = await response.json();
+      payload = await response.json();
     } catch (err) {
       throw new StorageError('libsql: the database answer was not JSON', 'storage-unavailable', err);
     }
 
-    const results = Array.isArray(body?.results) ? body.results : null;
+    const results = Array.isArray(payload?.results) ? payload.results : null;
     if (!results) {
       throw new StorageError('libsql: the database answer had no results array', 'storage-unavailable');
     }
-    return results;
+
+    // THE BATON (wave 10, F-4).
+    //
+    // A page that carries a baton is NOT the whole answer: the server sends
+    // the rest of the results when the client repeats the request with that
+    // baton. A client that ignores the baton silently drops the results that
+    // did not fit on the first page — a truncated result set that looks
+    // complete (the schema step, which sends 20 statements in one pipeline,
+    // is exactly the case that loses them).
+    const baton = typeof payload?.baton === 'string' && payload.baton ? payload.baton : null;
+    const baseUrl =
+      typeof payload?.base_url === 'string' && payload.base_url ? payload.base_url : null;
+
+    return { results, baton, baseUrl };
+  }
+
+  /**
+   * Run the requests and FOLLOW THE BATON to the end.
+   *
+   * The first request carries the statements; every continuation carries the
+   * baton and an EMPTY requests array — the baton itself encodes what is
+   * left to do (https://github.com/tursodatabase/libsql HTTP v2 spec).
+   */
+  async function pipeline(
+    requests: unknown[],
+  ): Promise<Array<{ type: string; response?: any; error?: any }>> {
+    const collected: Array<{ type: string; response?: any; error?: any }> = [];
+    let baton: string | null = null;
+    let endpointUrl = pipelineEndpoint(options.url);
+
+    for (let page = 0; ; page++) {
+      if (page >= MAX_PAGES) {
+        throw new StorageError(
+          `libsql: the database sent more than ${MAX_PAGES} pages for one pipeline`,
+          'storage-unavailable',
+        );
+      }
+
+      const body = baton === null ? { baton: null, requests } : { baton, requests: [] };
+      const answer = await pipelinePage(body, endpointUrl);
+      collected.push(...answer.results);
+
+      // The server may tell the client to talk to another node from now on.
+      if (answer.baseUrl) endpointUrl = pipelineEndpoint(answer.baseUrl);
+
+      if (!answer.baton) return collected;
+      baton = answer.baton;
+    }
   }
 
   function toResult(result: any): SqlResult {

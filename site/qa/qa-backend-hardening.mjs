@@ -48,6 +48,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { build } from 'esbuild';
+import { handlerPath, fwd } from './handler-paths.mjs';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -122,12 +123,15 @@ function readJsonl(file) {
     .filter(Boolean);
 }
 
-const REPO_FWD = REPO.replace(/\\/g, '/');
-const ENTRY = `export { default as auth } from '${REPO_FWD}/api/portal/auth.ts';
-export { default as projects } from '${REPO_FWD}/api/portal/projects.ts';
-export { default as invites } from '${REPO_FWD}/api/portal/invites.ts';
-export { default as testimonials } from '${REPO_FWD}/api/portal/testimonials.ts';
-export { default as moderate } from '${REPO_FWD}/api/moderate/review.ts';
+// The handler modules under test. The bodies moved out of api/ in wave 13
+// (the function budget) and live in site/shared/portal-handlers/ now; the pin
+// follows the PRODUCT's route table so it cannot drift from the tree.
+const ROOTS = { apiDir: path.join(REPO, 'api'), sharedDir: path.join(SITE, 'shared') };
+const ENTRY = `export { default as auth } from '${fwd(handlerPath('portal-auth', ROOTS))}';
+export { default as projects } from '${fwd(handlerPath('portal-projects', ROOTS))}';
+export { default as invites } from '${fwd(handlerPath('portal-invites', ROOTS))}';
+export { default as testimonials } from '${fwd(handlerPath('portal-testimonials', ROOTS))}';
+export { default as moderate } from '${fwd(handlerPath('moderate', ROOTS))}';
 `;
 
 const ROUTES = [
@@ -875,29 +879,79 @@ async function main() {
       `the route manifest check failed:\n${run.stdout}\n${run.stderr}`,
     );
     assert(
-      run.stdout.includes('OK: every called path has a function file in both trees'),
+      run.stdout.includes('OK: every called path has a function file'),
       'the check must report success',
+    );
+    // Wave 13 (the function budget): the check now also accepts a route-table
+    // entry point as the serving function, so the summary says so. The stable
+    // part of the message is asserted above; this one proves the NEW clause is
+    // there, because a check that silently stopped accepting entry points
+    // would let a broken route table through.
+    assert(
+      run.stdout.includes('(or a route-table entry point) in both trees'),
+      'the check must report that a route-table entry point can serve a path',
+    );
+    const apiFiles = (run.stdout.match(/api\/ holds (\d+) \.ts file\(s\)/) || [])[1];
+    assert(
+      apiFiles !== undefined && Number(apiFiles) <= 12,
+      `api/ must hold at most 12 function files (the Vercel Hobby cap) -- it holds ${apiFiles}`,
     );
     const routes = (run.stdout.match(/^\[check-api-routes\] (\/api\S+)/gm) || []).length;
     assert(routes >= 10, `the manifest must list the portal routes, found ${routes}`);
-    return `${routes} routes, both trees`;
+    return `${routes} routes, both trees, api/ holds ${apiFiles} files`;
   });
 
   await t('N2', 'the route files exist in both trees and export a handler', async () => {
     // The paths the front-end calls that Vercel and Cloudflare used to
     // answer 404 for: the sign-in door and the by-id edits.
+    //
+    // WAVE 13 (the function budget): the by-id edits no longer have a file
+    // of their own in the Vercel tree -- they are route-table entries served
+    // by api/portal.ts, which dispatches to the handler module the table
+    // names. So the assertion changed SHAPE, not MEANING: the URL must still
+    // be SERVED by a file that exports a handler, and "served" now means
+    // "its own file" OR "a route-table entry whose handler module exists".
+    //
+    // The Cloudflare tree is unchanged: one file per URL.
     const expected = [
       { url: '/api/portal/auth/request-link', file: 'portal/auth/request-link' },
       { url: '/api/portal/auth/verify', file: 'portal/auth/verify' },
       { url: '/api/portal/auth/logout', file: 'portal/auth/logout' },
-      { url: '/api/portal/projects/<id>', file: 'portal/projects/[id]' },
-      { url: '/api/portal/plan-items/<id>', file: 'portal/plan-items/[id]' },
+      { url: '/api/portal/projects/<id>', file: 'portal/projects/[id]', family: '/api/portal/projects/*' },
+      { url: '/api/portal/plan-items/<id>', file: 'portal/plan-items/[id]', family: '/api/portal/plan-items/*' },
     ];
+    const table = JSON.parse(
+      fs.readFileSync(path.join(SITE, 'shared', 'portal-routes.json'), 'utf8'),
+    );
     for (const item of expected) {
-      const vercel = path.join(REPO, 'api', `${item.file}.ts`);
       const cf = path.join(SITE, 'functions', 'api', `${item.file}.ts`);
-      assert(fs.existsSync(vercel), `the Vercel route file for ${item.url} is missing: ${vercel}`);
       assert(fs.existsSync(cf), `the Cloudflare route file for ${item.url} is missing: ${cf}`);
+
+      const vercel = path.join(REPO, 'api', `${item.file}.ts`);
+      if (item.family) {
+        // Served through the route table: the family entry point AND the
+        // handler module it names must both be there, or the URL is a 404 in
+        // production while the local dev server answers 200.
+        const family = table.families['/api/portal'];
+        assert(family, 'the route table has no /api/portal family');
+        const entry = path.join(REPO, family.entry);
+        assert(fs.existsSync(entry), `the family entry point is missing: ${entry}`);
+        const handlerName = family.routes[item.family];
+        assert(
+          handlerName,
+          `the route table does not serve ${item.family} (the URL would 404 in production)`,
+        );
+        const handlerFile = path.join(REPO, table.handlers[handlerName]);
+        assert(
+          fs.existsSync(handlerFile),
+          `the handler module behind ${item.family} is missing: ${handlerFile}`,
+        );
+      } else {
+        assert(
+          fs.existsSync(vercel),
+          `the Vercel route file for ${item.url} is missing: ${vercel}`,
+        );
+      }
     }
 
     // And they are not empty placeholders: each one exports a handler.
@@ -907,11 +961,9 @@ async function main() {
     fs.writeFileSync(
       entry,
       [
-        `export { default as requestLink } from '${REPO_FWD}/api/portal/auth/request-link.ts';`,
-        `export { default as verify } from '${REPO_FWD}/api/portal/auth/verify.ts';`,
-        `export { default as logout } from '${REPO_FWD}/api/portal/auth/logout.ts';`,
-        `export { default as projectById } from '${REPO_FWD}/api/portal/projects/[id].ts';`,
-        `export { default as planItemById } from '${REPO_FWD}/api/portal/plan-items/[id].ts';`,
+        `export { default as requestLink } from '${fwd(handlerPath('portal-auth', ROOTS))}';`,
+        `export { default as projectById } from '${fwd(handlerPath('portal-projects', ROOTS))}';`,
+        `export { default as planItemById } from '${fwd(handlerPath('portal-plan-items', ROOTS))}';`,
       ].join('\n'),
       'utf8',
     );
@@ -929,7 +981,7 @@ async function main() {
     for (const [name, fn] of Object.entries(routes)) {
       assertEqual(typeof fn, 'function', `the route module ${name} must export a handler`);
     }
-    return `${expected.length} route files in both trees, ${Object.keys(routes).length} handlers bundled`;
+    return `${expected.length} route URLs served in both trees, ${Object.keys(routes).length} handlers bundled`;
   });
 
   // ---- teardown ------------------------------------------------------------

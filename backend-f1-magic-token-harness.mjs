@@ -13,7 +13,7 @@
 // HOW IT EXECUTES THE REAL HANDLERS
 //   1. esbuild bundles each ROUTE FILE as its OWN entry point
 //      (api/portal/auth/request-link.ts, api/portal/auth/verify.ts,
-//      api/portal/auth.ts, site/functions/api/portal/auth.ts) — the way the
+//      site/shared/portal-handlers/portal-auth.ts, site/functions/api/portal/auth.ts) — the way the
 //      deploy target does.
 //   2. every request runs in a CHILD PROCESS, so no module state and no
 //      globalThis can be shared between the request-link function and the
@@ -51,7 +51,7 @@ const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // This file lives in the repository root (next to api/ and site/). If it is
 // run from somewhere else, walk up until the repo root is found.
-const REPO = fs.existsSync(path.join(HERE, 'api', 'portal', 'auth.ts')) ? HERE : path.resolve(HERE, '..');
+const REPO = fs.existsSync(path.join(HERE, 'api', 'portal.ts')) ? HERE : path.resolve(HERE, '..');
 const SITE = path.join(REPO, 'site');
 // esbuild is a devDependency of site/ — resolve it from there.
 const siteRequire = createRequire(path.join(SITE, 'package.json'));
@@ -146,8 +146,8 @@ function writeInvitedStore() {
 const BUNDLE_ENTRIES = {
   'vercel-request-link': path.join(REPO, 'api', 'portal', 'auth', 'request-link.ts'),
   'vercel-verify': path.join(REPO, 'api', 'portal', 'auth', 'verify.ts'),
-  'vercel-auth': path.join(REPO, 'api', 'portal', 'auth.ts'),
-  'vercel-projects': path.join(REPO, 'api', 'portal', 'projects.ts'),
+  'vercel-auth': path.join(REPO, 'site', 'shared', 'portal-handlers', 'portal-auth.ts'),
+  'vercel-projects': path.join(REPO, 'site', 'shared', 'portal-handlers', 'portal-projects.ts'),
   'cf-auth': path.join(REPO, 'site', 'functions', 'api', 'portal', 'auth.ts'),
 };
 
@@ -406,13 +406,13 @@ const OLD_IMPORT = `import {
   magicLinkMisconfigured,
   magicLinkUrl,
   PORTAL_MAGIC_PURPOSE,
-} from '../../site/shared/server/magic-link.js';`;
+} from '../server/magic-link.js';`;
 
 const OLD_FUNCTIONS = `import {
   magicLinkMisconfigured,
   magicLinkUrl,
   PORTAL_MAGIC_PURPOSE,
-} from '../../site/shared/server/magic-link.js';
+} from '../server/magic-link.js';
 
 const OLD_MAGIC_TTL_MS = 15 * 60 * 1000;
 const magicTokens = new Map<string, {
@@ -507,7 +507,7 @@ async function buildOldTree() {
   copyDir(path.join(REPO, 'api'), path.join(oldRoot, 'api'));
   copyDir(path.join(REPO, 'site', 'shared'), path.join(oldRoot, 'site', 'shared'));
 
-  const file = path.join(oldRoot, 'api', 'portal', 'auth.ts');
+  const file = path.join(oldRoot, 'site', 'shared', 'portal-handlers', 'portal-auth.ts');
   let src = fs.readFileSync(file, 'utf8');
   const patches = [
     [OLD_IMPORT, OLD_FUNCTIONS],
@@ -596,7 +596,7 @@ async function main() {
     return '200, session cookie issued';
   });
 
-  await t('V1c', 'the combined api/portal/auth.ts bundle still serves both routes', async () => {
+  await t('V1c', 'the combined portal-auth.ts bundle still serves both routes', async () => {
     // The local dev server bundles everything from ONE entry point
     // (site/scripts/api-index.ts). That path must keep working.
     const mint = runChild(V.auth, 'vercel', [requestLinkStep(CLIENT_EMAIL, '198.51.100.20')], {
@@ -848,7 +848,7 @@ async function main() {
   await t('G1', 'the session cookie from verify IS accepted by another function', async () => {
     // F-1 (the magic-link token) is closed by this change. The SESSION half is
     // a different finding (F-2): site/shared/server/portal-session.ts holds a
-    // signed, stateless session, but NOTHING imports it — api/portal/session.ts
+    // signed, stateless session, but NOTHING imports it — the session handler
     // is still the module-scope Map that every handler uses. So the cookie the
     // verify function issues lives in that function's own Map and another
     // function cannot resolve it. This check asserts the FIXED behaviour: the

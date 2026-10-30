@@ -1,0 +1,140 @@
+{
+  "results": [
+    {
+      "id": "R1",
+      "group": "R -- the route table, executed",
+      "name": "every PORTAL URL is served by the right handler",
+      "status": "PASS",
+      "detail": "9 portal URLs served"
+    },
+    {
+      "id": "R2",
+      "group": "R -- the route table, executed",
+      "name": "every ADMIN URL is served by the right handler",
+      "status": "PASS",
+      "detail": "2 admin URLs served"
+    },
+    {
+      "id": "R3",
+      "group": "R -- the route table, executed",
+      "name": "the CARRIER (query parameter) form serves the same route",
+      "status": "PASS",
+      "detail": "9 portal URLs served through the carrier"
+    },
+    {
+      "id": "R4",
+      "group": "R -- the route table, executed",
+      "name": "the CARRIER (header) form serves the same route",
+      "status": "PASS",
+      "detail": "the x-imk-route header served /api/portal/projects"
+    },
+    {
+      "id": "R5",
+      "group": "R -- the route table, executed",
+      "name": "an unknown path is a 404",
+      "status": "PASS",
+      "detail": "404 {code:not-found}"
+    },
+    {
+      "id": "R6",
+      "group": "R -- the route table, executed",
+      "name": "the entry point reached with NO route is a LOUD 500, never a silent 404",
+      "status": "PASS",
+      "detail": "500 {code:route-resolution} on both entry points"
+    },
+    {
+      "id": "R7",
+      "group": "R -- the route table, executed",
+      "name": "the original QUERY survives the carrier, and the carrier parameter is removed",
+      "status": "PASS",
+      "detail": "the query survives, the carrier parameter is removed"
+    },
+    {
+      "id": "R8",
+      "group": "R -- the route table, executed",
+      "name": "a forged carrier cannot cross the families",
+      "status": "PASS",
+      "detail": "neither entry point serves the other family"
+    },
+    {
+      "id": "R9",
+      "group": "R -- the route table, executed",
+      "name": "DEPLOYED SHAPE: the CARRIER decides the route (the path does NOT identify it)",
+      "status": "PASS",
+      "detail": "the same path, two carriers, two handlers -- the carrier decides"
+    },
+    {
+      "id": "R9b",
+      "group": "R -- the route table, executed",
+      "name": "LOCAL SHAPE (a platform that did not rewrite): the PATH still wins over the carrier",
+      "status": "PASS",
+      "detail": "the path is served by its own handler"
+    },
+    {
+      "id": "R10",
+      "group": "R -- the route table, executed",
+      "name": "DEPLOYED SHAPE: a forged carrier is CONTAINED (no cross-family, no standalone, the handler still authorises itself)",
+      "status": "PASS",
+      "detail": "no cross-family reach, no standalone reach, the handler gate still applies"
+    },
+    {
+      "id": "R11",
+      "group": "R -- the route table, executed",
+      "name": "DEPLOYED SHAPE: an EMPTY query carrier is an INVALID carrier (404), never a fall-through to the header",
+      "status": "PASS",
+      "detail": "an empty carrier is a clean 404 from the router; the header channel is unchanged"
+    },
+    {
+      "id": "MP-R1",
+      "group": "M -- mutation probes",
+      "name": "the entry point answers a SILENT 404 when it is reached with no route -> R6 goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control R6=PASS, mutant R6=FAIL"
+    },
+    {
+      "id": "MP-R2",
+      "group": "M -- mutation probes",
+      "name": "the original query string is LOST when the route is carried -> R7 goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control R7=PASS, mutant R7=FAIL"
+    },
+    {
+      "id": "MP-R3",
+      "group": "M -- mutation probes",
+      "name": "the FAMILY SEPARATION is gone: the portal entry point also serves the owner routes -> R8 goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control R8=PASS, mutant R8=FAIL"
+    },
+    {
+      "id": "MP-R4",
+      "group": "M -- mutation probes",
+      "name": "the FAMILY CONTAINMENT is gone (the table AND the code check): a forged carrier crosses the family -> R10 goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control R10=PASS, mutant R10=FAIL"
+    },
+    {
+      "id": "MP-R5",
+      "group": "M -- mutation probes",
+      "name": "the HANDLER AUTHORISES ITSELF is gone: a carrier-selected route answers without a session -> R10 goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control R10=PASS, mutant R10=FAIL"
+    },
+    {
+      "id": "MP-R6",
+      "group": "M -- mutation probes",
+      "name": "the EMPTY carrier falls through to the client-controlled header again (wave 15, B-1 reverted) -> R11 goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control R11=PASS, mutant R11=FAIL"
+    },
+    {
+      "id": "MP-R7",
+      "group": "M -- mutation probes",
+      "name": "the RESOLVER treats an empty carrier as ABSENT again (wave 15, B-1 reverted) -> R11 goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control R11=PASS, mutant R11=FAIL"
+    }
+  ],
+  "passed": 19,
+  "failed": 0,
+  "at": "2026-10-22T14:19:51.780Z"
+}

@@ -4,7 +4,7 @@
 //
 // WHAT THIS PROVES (by running the REAL handlers, not by reading them)
 //   S  the route contract in BOTH trees — the Vercel handler
-//      (api/portal/session.ts) and the Cloudflare twin
+//      (site/shared/portal-handlers/portal-session.ts) and the Cloudflare twin
 //      (site/functions/api/portal/session.ts):
 //        200 {ok, authenticated, role}   a signed-in requester
 //        401 {code:'unauthorized'}       nobody is signed in
@@ -30,9 +30,9 @@
 //
 // THE REPO IS NEVER TOUCHED
 //   Every handler is built from a COPY of the tree in a temp sandbox. The
-//   relative import layout is preserved exactly, so `api/portal/session.ts`
-//   still finds `../../site/shared/server/portal-session.js` and the Cloudflare
-//   twin still finds `../../../shared/server/portal-session.js`.
+//   relative import layout is preserved exactly, so the Vercel session module
+//   still finds `../server/portal-session.js` and the Cloudflare twin still finds
+//   `../../../shared/server/portal-session.js`.
 //
 // USAGE
 //   node backend-wave8-session-endpoint-harness.mjs [--keep]
@@ -47,7 +47,7 @@ import { Readable } from 'node:stream';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = fs.existsSync(path.join(HERE, 'api', 'portal', 'auth.ts')) ? HERE : path.resolve(HERE, '..');
+const REPO = fs.existsSync(path.join(HERE, 'api', 'portal.ts')) ? HERE : path.resolve(HERE, '..');
 const SITE = path.join(REPO, 'site');
 const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
@@ -120,7 +120,7 @@ const BUNDLES = path.join(SANDBOX, 'bundles');
 const SRC = {
   shared: path.join(SITE, 'shared', 'server', 'portal-session.ts'),
   sharedDir: path.join(SITE, 'shared', 'server'),
-  vercel: path.join(REPO, 'api', 'portal', 'session.ts'),
+  vercel: path.join(REPO, 'site', 'shared', 'portal-handlers', 'portal-session.ts'),
   cf: path.join(REPO, 'site', 'functions', 'api', 'portal', 'session.ts'),
 };
 
@@ -133,7 +133,7 @@ const SRC = {
 function writeTree(dir, overrides = {}) {
   const sharedDir = path.join(dir, 'site', 'shared', 'server');
   fs.mkdirSync(sharedDir, { recursive: true });
-  fs.mkdirSync(path.join(dir, 'api', 'portal'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'site', 'shared', 'portal-handlers'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'site', 'functions', 'api', 'portal'), { recursive: true });
 
   for (const name of fs.readdirSync(SRC.sharedDir)) {
@@ -150,7 +150,7 @@ function writeTree(dir, overrides = {}) {
     'utf8',
   );
   fs.writeFileSync(
-    path.join(dir, 'api', 'portal', 'session.ts'),
+    path.join(dir, 'site', 'shared', 'portal-handlers', 'portal-session.ts'),
     overrides.vercel ?? fs.readFileSync(SRC.vercel, 'utf8'),
     'utf8',
   );
@@ -172,7 +172,11 @@ async function bundleTree(dir, tag) {
     external: ['node:http', 'node:crypto', 'node:fs', 'node:path', 'node:stream'],
     logLevel: 'silent',
   };
-  await build({ ...opts, entryPoints: [path.join(dir, 'api', 'portal', 'session.ts')], outfile: vercelOut });
+  await build({
+    ...opts,
+    entryPoints: [path.join(dir, 'site', 'shared', 'portal-handlers', 'portal-session.ts')],
+    outfile: vercelOut,
+  });
   await build({
     ...opts,
     entryPoints: [path.join(dir, 'site', 'functions', 'api', 'portal', 'session.ts')],
@@ -503,7 +507,7 @@ async function main() {
   });
 
   // --- The route, in BOTH trees ---------------------------------------------
-  group('GET /api/portal/session — the Vercel tree (api/portal/session.ts)');
+  group('GET /api/portal/session — the Vercel tree (portal-session.ts)');
   for (const sc of SCENARIOS) {
     await t(`V-${sc.id}`, sc.name, async () => {
       const res = await callVercel(real.vercel, {

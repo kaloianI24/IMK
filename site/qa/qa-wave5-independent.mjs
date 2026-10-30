@@ -58,6 +58,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn, execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
+import { handlerPath, serverPath, fwd } from './handler-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -79,6 +80,9 @@ const ONLY = argv.includes('--only')
 const API_DIR = path.resolve(process.env.QA_W5_API_DIR || path.join(REPO, 'api'));
 const SHARED_DIR = path.resolve(process.env.QA_W5_SHARED_DIR || path.join(SITE, 'shared'));
 const CF_DIR = path.resolve(process.env.QA_W5_CF_DIR || path.join(SITE, 'functions'));
+
+// The roots of the tree under test, for the handler-path resolver.
+const ROOTS = { apiDir: API_DIR, sharedDir: SHARED_DIR };
 
 const STAMP = new Date().toISOString().replace(/[:.]/g, '-');
 const SANDBOX = path.join(os.tmpdir(), 'opencode', `qa-wave5-${STAMP}`);
@@ -568,20 +572,32 @@ async function startChild(name, bundlePath, opts) {
 // bundling (QA's own esbuild calls)
 // ---------------------------------------------------------------------------
 const BUNDLE_DEFS = {
-  auth: { dir: () => API_DIR, code: `export { default as handler } from './portal/auth.ts';` },
-  projects: { dir: () => API_DIR, code: `export { default as handler } from './portal/projects.ts';` },
-  comments: { dir: () => API_DIR, code: `export { default as handler } from './portal/comments.ts';` },
-  combined: {
-    dir: () => API_DIR,
-    code:
-      `export { default as authHandler } from './portal/auth.ts';\n` +
-      `export { default as projectsHandler } from './portal/projects.ts';`,
+  auth: {
+    dir: () => SHARED_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('portal-auth', ROOTS))}';`,
   },
-  moderate: { dir: () => API_DIR, code: `export { default as handler } from './moderate/review.ts';` },
-  rate: {
-    dir: () => API_DIR,
+  projects: {
+    dir: () => SHARED_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('portal-projects', ROOTS))}';`,
+  },
+  comments: {
+    dir: () => SHARED_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('portal-comments', ROOTS))}';`,
+  },
+  combined: {
+    dir: () => SHARED_DIR,
     code:
-      `import { portalRateLimiter, createFileBackend, createMemoryBackend, RateLimiter } from './lib/rate-limit.ts';\n` +
+      `export { default as authHandler } from '${fwd(handlerPath('portal-auth', ROOTS))}';\n` +
+      `export { default as projectsHandler } from '${fwd(handlerPath('portal-projects', ROOTS))}';`,
+  },
+  moderate: {
+    dir: () => API_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('moderate', ROOTS))}';`,
+  },
+  rate: {
+    dir: () => SHARED_DIR,
+    code:
+      `import { portalRateLimiter, createFileBackend, createMemoryBackend, RateLimiter } from '${fwd(serverPath('rate-limit', ROOTS))}';\n` +
       `export { portalRateLimiter, createFileBackend, createMemoryBackend, RateLimiter };\n` +
       `export async function rateHit(key, limit, windowMs) {\n` +
       `  return await portalRateLimiter.consume(key, limit, windowMs);\n` +
@@ -980,11 +996,25 @@ async function main() {
       !/from\s+['"]node:/.test(text),
       'the shared session module imports a node: builtin -- it cannot load in a Worker',
     );
-    const vercel = fs.readFileSync(path.join(API_DIR, 'portal', 'session.ts'), 'utf8');
+    // WAVE 13 (the function budget): the Vercel tree's session handler is
+    // no longer api/portal/session.ts -- it is the shared handler module
+    // site/shared/portal-handlers/portal-session.ts, which the portal entry
+    // point serves. It imports the shared session module with a RELATIVE
+    // path ('../server/portal-session.js'), the Cloudflare twin with
+    // '../../../shared/server/portal-session.js'. What the check asserts is
+    // the CONTRACT -- one shared implementation, no second Map -- not the
+    // spelling of the path.
+    const vercel = fs.readFileSync(
+      path.join(SHARED_DIR, 'portal-handlers', 'portal-session.ts'),
+      'utf8',
+    );
     const edge = fs.readFileSync(path.join(CF_DIR, 'api', 'portal', 'session.ts'), 'utf8');
-    for (const [name, text2] of [['api/portal/session.ts', vercel], ['site/functions/api/portal/session.ts', edge]]) {
+    for (const [name, text2] of [
+      ['site/shared/portal-handlers/portal-session.ts', vercel],
+      ['site/functions/api/portal/session.ts', edge],
+    ]) {
       assert(
-        /shared\/server\/portal-session\.js/.test(text2),
+        /server\/portal-session\.js/.test(text2),
         `${name} does not re-export the shared session module -- the trees can drift again`,
       );
       assert(
@@ -1545,7 +1575,13 @@ async function main() {
 
   await t('D1', 'F-2 reverted (a Map session) -> the cross-bundle check goes RED', async () => {
     const root = copyTree('f2');
-    const sessionFile = path.join(root, 'api', 'portal', 'session.ts');
+    // WAVE 13 (the function budget): the shared session IMPLEMENTATION is
+    // site/shared/server/portal-session.ts -- that is the module both
+    // bundles import, so that is where the pre-wave-6 Map has to go back to.
+    // (It used to be patched in api/portal/session.ts, which no longer
+    // exists; patching the moved copy of the file would have left the shared
+    // implementation signed and the probe would have proved nothing.)
+    const sessionFile = path.join(root, 'site', 'shared', 'server', 'portal-session.ts');
     // The pre-wave-6 session: a module-scope Map. Each bundle gets its own
     // copy, so the cookie minted in one function is unknown to the next.
     fs.writeFileSync(
@@ -1684,8 +1720,9 @@ async function main() {
         '  if (!isAdminEmail(s.email, env)) return null;',
         '  return s;',
         '}',
-        // The route file itself (wave-8A): the fake is a module, not a
-        // handler, so the route answers "not found".
+        // The shared implementation is a MODULE, not a route: the route is the
+        // handler module that imports it. The default export is kept so the
+        // fake is a drop-in for the file it replaces.
         'export default async function handler(req: any, res: any): Promise<void> {',
         "  res.writeHead(404, { 'Content-Type': 'application/json' });",
         "  res.end(JSON.stringify({ error: 'not found', code: 'not-found' }));",
@@ -1749,7 +1786,9 @@ async function main() {
 
   await t('D3', 'F-4 reverted (only EEXIST is busy) -> the delete-pending check goes RED', async () => {
     const root = copyTree('f4');
-    const rateFile = path.join(root, 'api', 'lib', 'rate-limit.ts');
+    // WAVE 13 (the function budget): the Vercel tree's limiter moved out of
+    // api/ and into site/shared/server/, so the patch has to land there.
+    const rateFile = path.join(root, 'site', 'shared', 'server', 'rate-limit.ts');
     const raw = fs.readFileSync(rateFile, 'utf8');
     const anchor = 'if (!LOCK_BUSY_CODES.has(code)) throw err;';
     assert(raw.includes(anchor), `the patch anchor was not found in ${rateFile}`);

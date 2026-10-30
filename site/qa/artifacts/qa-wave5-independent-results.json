@@ -1,6 +1,6 @@
 {
   "suite": "qa-wave5-independent",
-  "startedAt": "2026-10-21T22:20:27.707Z",
+  "startedAt": "2026-10-22T14:19:27.374Z",
   "apiDir": "C:\\Users\\Kalch\\Documents\\IXI\\api",
   "sharedDir": "C:\\Users\\Kalch\\Documents\\IXI\\site\\shared",
   "cfDir": "C:\\Users\\Kalch\\Documents\\IXI\\site\\functions",
@@ -10,7 +10,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "CONTROL: inside ONE bundle/process the session is accepted",
       "status": "PASS",
-      "ms": 60,
+      "ms": 64,
       "detail": "one bundle: request-link 200, verify 200, projects 200"
     },
     {
@@ -18,7 +18,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "a session minted by one bundle is accepted by ANOTHER bundle (Vercel)",
       "status": "PASS",
-      "ms": 106,
+      "ms": 110,
       "detail": "role=admin, cross-bundle projects -> 200"
     },
     {
@@ -26,7 +26,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "the same cookie is accepted by a THIRD, freshly started process",
       "status": "PASS",
-      "ms": 106,
+      "ms": 114,
       "detail": "a client session minted in one process is accepted in another"
     },
     {
@@ -34,7 +34,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "a client session carries its clientId and the projects are filtered by it",
       "status": "PASS",
-      "ms": 104,
+      "ms": 106,
       "detail": "1 of 2 projects visible; the foreign one is filtered out"
     },
     {
@@ -42,7 +42,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "a FORGED cookie is refused by every bundle",
       "status": "PASS",
-      "ms": 91,
+      "ms": 94,
       "detail": "401 {code:unauthorized} for both cookie names"
     },
     {
@@ -50,7 +50,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "in production without a signing secret NO session can be minted",
       "status": "PASS",
-      "ms": 90,
+      "ms": 91,
       "detail": "createSession -> null, request-link -> 500 {code:internal}, no cookie"
     },
     {
@@ -58,7 +58,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "a token signed with another secret is refused; the right secret still works",
       "status": "PASS",
-      "ms": 128,
+      "ms": 126,
       "detail": "v1.<payload>.<sig>; another secret -> null, the right secret -> the session"
     },
     {
@@ -66,7 +66,7 @@
       "group": "A -- the session survives a per-file bundle boundary (F-2)",
       "name": "the shared session module is edge-safe and BOTH trees re-export it",
       "status": "PASS",
-      "ms": 1,
+      "ms": 0,
       "detail": "no node: imports; both trees re-export site/shared/server/portal-session.ts"
     },
     {
@@ -74,7 +74,7 @@
       "group": "B -- writeReviews fails closed (F-3)",
       "name": "CONTROL: a valid moderation link approves and the store is updated",
       "status": "PASS",
-      "ms": 55,
+      "ms": 54,
       "detail": "approved and written to reviews.jsonl"
     },
     {
@@ -82,7 +82,7 @@
       "group": "B -- writeReviews fails closed (F-3)",
       "name": "M-1: a GET on the signed link shows the confirmation page and decides NOTHING",
       "status": "PASS",
-      "ms": 57,
+      "ms": 54,
       "detail": "the GET served the page and approved nothing; the POST approved the quote"
     },
     {
@@ -90,7 +90,7 @@
       "group": "B -- writeReviews fails closed (F-3)",
       "name": "a MISSING store answers 501, never 404 \"review not found\"",
       "status": "PASS",
-      "ms": 47,
+      "ms": 49,
       "detail": "501 {code:'unimplemented'}"
     },
     {
@@ -98,7 +98,7 @@
       "group": "B -- writeReviews fails closed (F-3)",
       "name": "a CORRUPT store answers 500 {code:storage} with no stack trace",
       "status": "PASS",
-      "ms": 48,
+      "ms": 51,
       "detail": "500 {code:'storage'}, the store is untouched"
     },
     {
@@ -106,7 +106,7 @@
       "group": "B -- writeReviews fails closed (F-3)",
       "name": "an UNWRITABLE store answers 500 {code:storage} and approves NOTHING",
       "status": "PASS",
-      "ms": 52,
+      "ms": 53,
       "detail": "500 {code:storage}, no throw, the record is still pending"
     },
     {
@@ -114,7 +114,7 @@
       "group": "B -- writeReviews fails closed (F-3)",
       "name": "the Cloudflare twin with NO filesystem answers 501 (the real edge runtime)",
       "status": "PASS",
-      "ms": 31,
+      "ms": 34,
       "detail": "501 {code:unimplemented} with no filesystem"
     },
     {
@@ -122,7 +122,7 @@
       "group": "B -- writeReviews fails closed (F-3)",
       "name": "the Cloudflare twin answers the SAME codes as the Vercel tree (tree parity)",
       "status": "PASS",
-      "ms": 3,
+      "ms": 5,
       "detail": "missing -> 501, corrupt -> 500 (the same codes as the Vercel tree)"
     },
     {
@@ -130,7 +130,7 @@
       "group": "C -- the durable counter survives a lock race (F-4)",
       "name": "CONTROL: one process, N keys -> N buckets with the exact counts",
       "status": "PASS",
-      "ms": 73,
+      "ms": 71,
       "detail": "10 buckets, all count 1"
     },
     {
@@ -138,7 +138,7 @@
       "group": "C -- the durable counter survives a lock race (F-4)",
       "name": "4 concurrent writer processes x 10 keys x 4 rounds -> nothing is lost",
       "status": "PASS",
-      "ms": 495,
+      "ms": 490,
       "detail": "4 writers x 10 keys x 4 rounds -> every bucket holds exactly 16"
     },
     {
@@ -146,7 +146,7 @@
       "group": "C -- the durable counter survives a lock race (F-4)",
       "name": "a lock file that EXISTS (EEXIST) is waited out, not treated as broken",
       "status": "PASS",
-      "ms": 871,
+      "ms": 884,
       "detail": "the writer waited for the lock and the durable counter was used"
     },
     {
@@ -154,7 +154,7 @@
       "group": "C -- the durable counter survives a lock race (F-4)",
       "name": "a DELETE-PENDING lock (EPERM) is waited out and the counter is NOT abandoned",
       "status": "PASS",
-      "ms": 858,
+      "ms": 872,
       "detail": "busy code EPERM (delete-pending) waited out; the durable counter still holds both hits"
     },
     {
@@ -162,15 +162,15 @@
       "group": "C -- the durable counter survives a lock race (F-4)",
       "name": "a genuinely broken backend degrades instead of failing the request",
       "status": "PASS",
-      "ms": 47,
-      "detail": "degraded:true, one log line with a code: {\"ts\":1792621223697,\"outcome\":\"rate_limit_degraded\",\"backend\":\"durable\",\"code\":\"EEXIST\",\"reason\":\"the durable counter is"
+      "ms": 52,
+      "detail": "degraded:true, one log line with a code: {\"ts\":1792678763334,\"outcome\":\"rate_limit_degraded\",\"backend\":\"durable\",\"code\":\"EEXIST\",\"reason\":\"the durable counter is"
     },
     {
       "id": "C6",
       "group": "C -- the durable counter survives a lock race (F-4)",
       "name": "the durable counter holds no client id and no IP",
       "status": "PASS",
-      "ms": 50,
+      "ms": 52,
       "detail": "2 buckets, every key a 64-hex SHA-256"
     },
     {
@@ -178,15 +178,15 @@
       "group": "C -- the durable counter survives a lock race (F-4)",
       "name": "the edge twin degrades the same way (a throwing KV)",
       "status": "PASS",
-      "ms": 11,
-      "detail": "degraded:true, one log line: {\"ts\":1792621223760,\"outcome\":\"rate_limit_degraded\",\"backend\":\"kv\",\"code\":\"ECONNREFUSED\",\"reason\":\"the durable counter i"
+      "ms": 15,
+      "detail": "degraded:true, one log line: {\"ts\":1792678763402,\"outcome\":\"rate_limit_degraded\",\"backend\":\"kv\",\"code\":\"ECONNREFUSED\",\"reason\":\"the durable counter i"
     },
     {
       "id": "D1",
       "group": "D -- mutation probes -- the checks are not vacuous",
       "name": "F-2 reverted (a Map session) -> the cross-bundle check goes RED",
       "status": "PASS",
-      "ms": 850,
+      "ms": 842,
       "detail": "mutated copy: A1=PASS (one bundle still works), A2=FAIL (cross-bundle is broken again)"
     },
     {
@@ -194,7 +194,7 @@
       "group": "D -- mutation probes -- the checks are not vacuous",
       "name": "F-3 reverted (an unguarded store failure) -> the unwritable-store check goes RED",
       "status": "PASS",
-      "ms": 468,
+      "ms": 504,
       "detail": "mutated copy: B4=FAIL (the handler throws out of the store failure again)"
     },
     {
@@ -202,7 +202,7 @@
       "group": "D -- mutation probes -- the checks are not vacuous",
       "name": "F-4 reverted (only EEXIST is busy) -> the delete-pending check goes RED",
       "status": "PASS",
-      "ms": 2617,
+      "ms": 2614,
       "detail": "mutated copy: C3=PASS (a merely busy lock is still fine), C4=FAIL (EPERM latches the backend again)"
     },
     {
@@ -210,7 +210,7 @@
       "group": "D -- mutation probes -- the checks are not vacuous",
       "name": "the repository is byte-identical after the probes",
       "status": "PASS",
-      "ms": 11,
+      "ms": 12,
       "detail": "the api/, site/shared/ and site/functions/ trees are byte-for-byte unchanged"
     }
   ],

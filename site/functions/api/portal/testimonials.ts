@@ -2,7 +2,13 @@
 //   GET  /api/portal/testimonials?projectId=<id>
 //   POST /api/portal/testimonials
 //
-// Mirrors api/portal/testimonials.ts (Vercel) so both targets share the same
+//   A SEPARATE COPY of the Vercel module
+//   site/shared/portal-handlers/portal-testimonials.ts. The two files are
+//   NOT the same code: an edit to the Vercel module does NOT reach this
+//   file, and this file does NOT import it. Change the Vercel module and
+//   change THIS file too.
+//
+// Mirrors site/shared/portal-handlers/portal-testimonials.ts (Vercel) so both targets share the same
 // contract, the same validation and the same server-derived provenance
 // (verifiedClient + source are never taken from the request body).
 //
@@ -15,6 +21,7 @@
 
 import { resolveAccess, expectedOrigin, baseUrlConfigured } from './session.js';
 import { notifyReviewSubmitted } from '../lib/notifications.js';
+import { newRecordId } from '../../../shared/portal-store/record-id.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 import { createPortalRateLimiter } from '../lib/rate-limit.js';
 
@@ -71,6 +78,8 @@ interface TestimonialRecord {
   revision: number;
   receivedAt: string;
   updatedAt: string;
+  /** The identity of this record (wave 12, B-1) — the signed link names it. */
+  recordId: string;
   revoked?: boolean;
   withdrawnAt?: string;
 }
@@ -578,6 +587,14 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
     revision: (existing?.revision || 0) + 1,
     receivedAt: existing?.receivedAt || now,
     updatedAt: now,
+    // THE IDENTITY OF THIS RECORD (wave 12, B-1).
+    //
+    // A revision NUMBER is not an identity: two concurrent submissions read
+    // the same current record and both compute the same next revision, so
+    // two records can share (ref, revision) — and the signed one-click link
+    // would then approve the wrong one (audit MAJOR-1). The identity names
+    // THIS record, and it travels signed with the link.
+    recordId: newRecordId(),
   };
 
   if (action === 'decline' && existing?.state === 'approved') {
@@ -639,6 +656,9 @@ const handlePost: any = async (ctx: any): Promise<Response> => {
         // The revision travels with the link: the one-click approve may only
         // approve the exact text the owner was shown (audit M5).
         revision: record.revision,
+        // ...and so does the identity of this record (wave 12, B-1): the
+        // number says WHICH VERSION, the identity says WHICH RECORD.
+        recordId: record.recordId,
       });
     } catch {
       console.log(JSON.stringify({ ts: Date.now(), ref: record.ref, outcome: 'notify_fail' }));

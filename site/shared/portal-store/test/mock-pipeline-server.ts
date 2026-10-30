@@ -189,6 +189,16 @@ export interface MockPipelineServer {
 
 export interface MockPipelineOptions {
   token?: string;
+  /**
+   * How many RESULTS one page may carry.
+   *
+   * 0 (the default) means "one page": the server never hands out a baton and
+   * the client is never tested against a paged answer. A positive number
+   * makes the server page its results and hand out a baton, exactly like a
+   * database that has more results than fit on one page — the case the
+   * transport has to follow (wave 10, F-4).
+   */
+  pageSize?: number;
 }
 
 /**
@@ -198,10 +208,32 @@ export async function startMockPipelineServer(
   options: MockPipelineOptions = {},
 ): Promise<MockPipelineServer> {
   const token = options.token ?? 'imk-test-token';
+  const pageSize = options.pageSize ?? 0;
   const engine = new SqliteEngine(findPython(), findSqliteWorker());
   engine.start();
 
   const requests: unknown[] = [];
+
+  // The pages that are still to be handed out, keyed by their baton.
+  const pending = new Map<string, { results: unknown[] }>();
+  let batonCounter = 0;
+
+  /**
+   * Split an answer into pages.
+   *
+   * The first page carries at most `pageSize` results and a baton; the rest
+   * waits for the continuation request that carries that baton.
+   */
+  function pageResults(results: unknown[]): { results: unknown[]; baton: string | null } {
+    if (!pageSize || pageSize <= 0 || results.length <= pageSize) {
+      return { results, baton: null };
+    }
+    const head = results.slice(0, pageSize);
+    const tail = results.slice(pageSize);
+    const baton = `imk-test-baton-${++batonCounter}`;
+    pending.set(baton, { results: tail });
+    return { results: head, baton };
+  }
   const server: Server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -252,6 +284,24 @@ export async function startMockPipelineServer(
         const list: any[] = Array.isArray(body?.requests) ? body.requests : [];
         requests.push(body);
 
+        // A CONTINUATION request: it carries the baton and no statements. The
+        // baton says what is left of the previous answer.
+        if (typeof body?.baton === 'string' && body.baton) {
+          const waiting = pending.get(body.baton);
+          if (!waiting) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'unknown baton' }));
+            return;
+          }
+          pending.delete(body.baton);
+          const page = pageResults(waiting.results);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({ baton: page.baton, base_url: null, results: page.results }),
+          );
+          return;
+        }
+
         const results: unknown[] = [];
         for (const request of list) {
           if (request?.type === 'close') {
@@ -286,8 +336,9 @@ export async function startMockPipelineServer(
           });
         }
 
+        const page = pageResults(results);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ baton: null, base_url: null, results }));
+        res.end(JSON.stringify({ baton: page.baton, base_url: null, results: page.results }));
       })();
     });
   });

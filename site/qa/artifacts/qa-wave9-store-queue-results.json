@@ -1,0 +1,83 @@
+{
+  "suite": "qa-wave9-store-queue",
+  "startedAt": "2026-10-22T14:19:30.323Z",
+  "results": [
+    {
+      "id": "W9-1",
+      "group": "W9 -- one queue (wave 9)",
+      "name": "the owner inbox and the moderation link are ONE queue, and file mode still behaves like before wave 9",
+      "status": "PASS",
+      "ms": 33,
+      "detail": "13/13 sub-assertions passed; the pre-wave-9 fixture git agrees (2211dc66da4f); legacy tree self-contained (jsonl.ts: frozen at a4b10a8 (git agrees, 31b5d1be7a8c); notifications.ts: frozen at a4b10a8 (git agrees, def777b3a1b7))",
+      "sub": [
+        {
+          "id": "W9-1.a0",
+          "ok": true,
+          "detail": "self-contained: jsonl.ts: frozen at a4b10a8 (git agrees, 31b5d1be7a8c); notifications.ts: frozen at a4b10a8 (git agrees, def777b3a1b7)"
+        },
+        {
+          "id": "W9-1.a0b",
+          "ok": true,
+          "detail": "self-contained: api/admin/session.ts: frozen at a4b10a8 (git agrees, bd481fdb4d89); api/portal/session.ts: frozen at a4b10a8 (git agrees, 363a4b8d9e03)"
+        },
+        {
+          "id": "W9-1.a1",
+          "ok": true,
+          "detail": "both 200"
+        },
+        {
+          "id": "W9-1.a2",
+          "ok": true,
+          "detail": "keys [counts,notesAvailable,ok,recent,reviews], counts identical"
+        },
+        {
+          "id": "W9-1.a3",
+          "ok": true,
+          "detail": "2 pending + 1 recent, identical"
+        },
+        {
+          "id": "W9-1.a4",
+          "ok": true,
+          "detail": "same path, same parameters, signature verified with QA's own HMAC"
+        },
+        {
+          "id": "W9-1.a5",
+          "ok": true,
+          "detail": "both 500 {code:'storage'}"
+        },
+        {
+          "id": "W9-1.a6",
+          "ok": true,
+          "detail": "both use getPortalStore() on the 'reviews' collection, neither reads the file"
+        },
+        {
+          "id": "W9-1.b1",
+          "ok": true,
+          "detail": "pending: inq_wave9_a,inq_wave9_b"
+        },
+        {
+          "id": "W9-1.b2",
+          "ok": true,
+          "detail": "approve link for inq_wave9_a"
+        },
+        {
+          "id": "W9-1.b3",
+          "ok": true,
+          "detail": "200 {\"ok\":true,\"ref\":\"inq_wave9_a\",\"state\":\"approved\"}"
+        },
+        {
+          "id": "W9-1.b4",
+          "ok": true,
+          "detail": "pending 1, inq_wave9_a moved to recent"
+        },
+        {
+          "id": "W9-1.b5",
+          "ok": true,
+          "detail": "the store file holds the decision (files: reviews.jsonl)"
+        }
+      ]
+    }
+  ],
+  "passed": 1,
+  "failed": 0
+}

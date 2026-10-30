@@ -1,0 +1,60 @@
+{
+  "suite": "qa-anchor-nonvacuity",
+  "startedAt": "2026-10-21T23:06:12.851Z",
+  "findings": [
+    {
+      "id": "P2-control",
+      "what": "the publisher copy (unmodified) still passes N1/N2/N3",
+      "ok": true,
+      "detail": "N1=PASS N2=PASS N3=PASS   (suite exit 0)"
+    },
+    {
+      "id": "P2-mutant",
+      "what": "the publisher SKIPS a malformed line -> N1/N2/N3 go RED (non-vacuity proof)",
+      "ok": true,
+      "detail": "N1=FAIL N2=FAIL N3=FAIL   (suite exit 1)   all failing checks: N1, N2, N3"
+    },
+    {
+      "id": "P2-liveness",
+      "what": "if the publisher text drifts, the P2 probe FAILS LOUDLY (no silent pass)",
+      "ok": true,
+      "detail": "the probe would abort loudly: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-anchor-nonvacuity-1792623967023\\p2-drift.mjs:     try {\n      records.push(JSON.parse(line));\n    } catch "
+    },
+    {
+      "id": "D2-control",
+      "what": "the tree copy (unmodified) still passes B1/B1b/B2/B3/B4",
+      "ok": true,
+      "detail": "B1=PASS B1b=PASS B2=PASS B3=PASS B4=PASS   (suite exit 0)"
+    },
+    {
+      "id": "D2-mutant",
+      "what": "the store failure is unguarded again -> B4 goes RED while the control B1 stays GREEN (non-vacuity proof)",
+      "ok": true,
+      "detail": "B1=PASS B1b=PASS B2=PASS B3=FAIL B4=FAIL   (suite exit 1)   B4 said: the handler threw instead of answering: StorageError: cannot write C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-wave5-2026-10-21T23-06-08-531Z\\site\\data\\modera"
+    },
+    {
+      "id": "D2-liveness",
+      "what": "if guardStore disappears, the D2 check FAILS loudly (no silent pass)",
+      "ok": true,
+      "detail": "D2=FAIL   the D2 check said: the patch anchor was not found in C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-wave5-2026-10-21T23-06-09-001Z\\work\\copy-f3\\site\\shared\\server\\portal-store-access.ts: export async function guardStore<"
+    },
+    {
+      "id": "W9-1-control",
+      "what": "the wave-9 queue check passes against an unmodified copy of the tree",
+      "ok": true,
+      "detail": "W9-1=PASS   (suite exit 0)"
+    },
+    {
+      "id": "W9-1-mutant",
+      "what": "the inbox reads a DIFFERENT collection -> the wave-9 queue check goes RED (non-vacuity proof)",
+      "ok": true,
+      "detail": "W9-1=FAIL   (suite exit 1)   failing sub-assertions: W9-1.a2, W9-1.a3, W9-1.a4, W9-1.a5, W9-1.b1, W9-1.b2, W9-1.b3, W9-1.b4, W9-1.b5"
+    },
+    {
+      "id": "tree-untouched",
+      "what": "the shipped tree is byte-identical after the proofs",
+      "ok": true,
+      "detail": "api/, site/shared/, site/scripts/ and site/functions/ are unchanged"
+    }
+  ]
+}

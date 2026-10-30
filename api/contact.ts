@@ -27,6 +27,16 @@
 
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { isProductionEnv } from '../site/shared/server/portal-session.js';
+import {
+  platformAddress,
+  trustCfConnectingIp,
+} from '../site/shared/server/platform-address.js';
+import {
+  parseMultipart,
+  sniffMime,
+  ALLOWED_MIMES,
+  toBase64,
+} from '../site/shared/server/multipart.js';
 
 type Kind = 'contact' | 'review';
 
@@ -35,6 +45,7 @@ interface ContactReq {
   email: string;
   company?: string;
   project: string;
+  subject?: string;
   budget: string;
   timeline: string;
   website?: string;
@@ -51,7 +62,7 @@ const MAX = {
   email: 254,
   company: 120,
   project: 500,
-  body: 8192,
+  body: 4194304,
   recent: 3000,
   stale: 4 * 60 * 60 * 1000,
   skew: 60000,
@@ -156,11 +167,18 @@ async function rateLimit(ip: string, hour: string): Promise<boolean> {
   return true;
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBodyBytes(req: IncomingMessage, cap: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    let total = 0;
+    let aborted = false;
+    req.on('data', (c: Buffer) => {
+      if (aborted) return;
+      total += c.length;
+      if (total > cap) { aborted = true; reject(new Error('too-large')); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => { if (!aborted) resolve(Buffer.concat(chunks)); });
     req.on('error', reject);
   });
 }
@@ -194,24 +212,38 @@ export default async function handler(
     return;
   }
 
-  const wantsJson = (headers['content-type'] || '').includes('application/json');
+  const ct = headers['content-type'] || '';
+  const wantsJson = ct.includes('application/json') || ct.includes('multipart');
 
-  // 1. body size
-  const len = parseInt(headers['content-length'] || '0', 10);
-  if (len && len > MAX.body) {
+  // files collected from a multipart submission
+  let files: { filename: string; contentType: string; data: Uint8Array }[] = [];
+  let isMultipart = ct.includes('multipart');
+
+  // 1. body size (Content-Length + bytes actually read)
+  const declaredLen = parseInt(headers['content-length'] || '0', 10);
+  if (declaredLen && declaredLen > MAX.body) {
     return wantsJson
       ? json(res, { error: 'request too large', code: 'payload-too-large' }, 413)
-      : (() => {
-          text(res, 'Request too large', 413);
-        })();
+      : (() => { text(res, 'Request too large', 413); })();
   }
-  const raw = await readBody(req);
-  if (raw.length > MAX.body) {
+  let rawBuf: Buffer;
+  try {
+    rawBuf = await readBodyBytes(req, MAX.body);
+  } catch {
     return wantsJson
       ? json(res, { error: 'request too large', code: 'payload-too-large' }, 413)
-      : (() => {
-          text(res, 'Request too large', 413);
-        })();
+      : (() => { text(res, 'Request too large', 413); })();
+  }
+  // Content-Length lie detection
+  if (declaredLen && declaredLen !== rawBuf.length) {
+    return wantsJson
+      ? json(res, { error: 'invalid payload', code: 'validation' }, 400)
+      : (() => { text(res, 'Bad request', 400); })();
+  }
+  if (rawBuf.length > MAX.body) {
+    return wantsJson
+      ? json(res, { error: 'request too large', code: 'payload-too-large' }, 413)
+      : (() => { text(res, 'Request too large', 413); })();
   }
 
   // 2. parse
@@ -224,11 +256,11 @@ export default async function handler(
     type: 'contact',
   };
   let isUrlencoded = false;
-  const ct = headers['content-type'] || '';
+  const raw = rawBuf.toString('utf8');
   try {
     if (ct.includes('application/json')) {
       input = { ...input, ...JSON.parse(raw || '{}') };
-    } else if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart')) {
+    } else if (ct.includes('application/x-www-form-urlencoded')) {
       isUrlencoded = true;
       const params = new URLSearchParams(raw);
       input = {
@@ -237,6 +269,7 @@ export default async function handler(
         email: params.get('email') || '',
         company: params.get('company') || '',
         linkedin: params.get('linkedin') || '',
+        subject: params.get('subject') || '',
         project: params.get('project') || '',
         budget: params.get('budget') as any,
         timeline: params.get('timeline') as any,
@@ -245,19 +278,55 @@ export default async function handler(
         ts: params.get('ts') ? Number(params.get('ts')) : undefined,
         turnstileToken: params.get('turnstileToken') || params.get('cf-turnstile-response') || undefined,
       };
+    } else if (ct.includes('multipart')) {
+      const parsed = parseMultipart(new Uint8Array(rawBuf), ct);
+      if (!parsed.ok) {
+        const code = parsed.code;
+        const status = code === 'payload-too-large' ? 413 : 400;
+        return wantsJson
+          ? json(res, { error: 'invalid payload', code }, status)
+          : (() => { text(res, 'Bad request', status); })();
+      }
+      const params = parsed.fields;
+      input = {
+        ...input,
+        name: params['name'] || '',
+        email: params['email'] || '',
+        company: params['company'] || '',
+        linkedin: params['linkedin'] || '',
+        subject: params['subject'] || '',
+        project: params['project'] || '',
+        budget: (params['budget'] || '') as any,
+        timeline: (params['timeline'] || '') as any,
+        type: (params['type'] || 'contact') as Kind,
+        website: params['website'] || '',
+        ts: params['ts'] ? Number(params['ts']) : undefined,
+        turnstileToken: params['turnstileToken'] || params['cf-turnstile-response'] || undefined,
+      };
+      files = parsed.files.map((f) => ({ filename: f.filename, contentType: f.contentType, data: f.data }));
+      if (files.length > 3) {
+        return wantsJson
+          ? json(res, { error: 'too many files', code: 'too-many-files' }, 413)
+          : (() => { text(res, 'Too many files', 413); })();
+      }
+      for (const f of files) {
+        const sniffed = sniffMime(f.data);
+        const declared = f.contentType.toLowerCase();
+        if (!sniffed || !ALLOWED_MIMES.has(sniffed) || sniffed !== declared) {
+          return wantsJson
+            ? json(res, { error: 'unsupported file type', code: 'unsupported-file' }, 415)
+            : (() => { text(res, 'Unsupported file', 415); })();
+        }
+      }
     } else {
       return wantsJson
         ? json(res, { error: 'unsupported content type', code: 'validation' }, 400)
-        : (() => {
-            text(res, 'Bad request', 400);
-          })();
+        : (() => { text(res, 'Bad request', 400); })();
     }
   } catch {
     return wantsJson
       ? json(res, { error: 'invalid payload', code: 'validation' }, 400)
-      : (() => {
-          text(res, 'Bad request', 400);
-        })();
+      : (() => { text(res, 'Bad request', 400); })();
   }
 
   // 2b. review submissions are closed here — they belong in the portal.
@@ -286,7 +355,21 @@ export default async function handler(
   }
 
   // 3. Turnstile (only when the secret is configured — unset locally degrades gracefully)
-  const ip = (headers['cf-connecting-ip'] || headers['x-forwarded-for'] || null) as string | null;
+  //
+  // THE ADDRESS IS THE PLATFORM-CONTROLLED ONE (wave 12, B-2). The old
+  // expression took `cf-connecting-ip` first and then the WHOLE
+  // `x-forwarded-for` chain: on the launch target (Vercel) the first header
+  // is set by nobody and the second starts with whatever the client sent —
+  // so the Turnstile `remoteip` and the per-IP rate limit below could both
+  // be chosen by the client. The same rule as the portal's sign-in limiter
+  // now applies (site/shared/server/platform-address.ts).
+  const ip = platformAddress(
+    (name) => {
+      const value = headers[name];
+      return typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
+    },
+    { trustCfConnectingIp: trustCfConnectingIp(process.env) },
+  );
   if (process.env.TURNSTILE_SECRET_KEY && process.env.DEV_STUB !== '1') {
     const token = (input as any).turnstileToken || (input as any).cfTurnstileResponse || (input as any)['cf-turnstile-response'];
     if (!token || typeof token !== 'string') {
@@ -315,6 +398,7 @@ export default async function handler(
   if (!input.email || typeof input.email !== 'string' || input.email.length < 1 || input.email.length > MAX.email || !isValidEmail(input.email)) errors.push('email');
   if (input.company && (typeof input.company !== 'string' || input.company.length > MAX.company)) errors.push('company');
   if (!input.project || typeof input.project !== 'string' || input.project.length < 1 || input.project.length > MAX.project) errors.push('project');
+  if (input.subject && (typeof input.subject !== 'string' || input.subject.length > 120)) errors.push('subject');
   if (!BUDGETS.includes(input.budget)) errors.push('budget');
   if (!TIMELINES.includes(input.timeline)) errors.push('timeline');
 
@@ -369,26 +453,45 @@ export default async function handler(
   // 9. Resend e-mail
   const from = process.env.RESEND_FROM || 'IMK <2imk4support@gmail.com>';
   const to = process.env.RESEND_TO || process.env.CONTACT_TO || '';
-  const subject = 'New IMK inquiry';
+  const rawSubject = (input as any).subject ? String((input as any).subject) : '';
+  const cleanSubject = rawSubject.replace(/[\r\n\t\x00-\x1f\x7f]/g, ' ').trim().slice(0, 120);
+  const subject = ('IMK enquiry - ' + (cleanSubject || 'New message')).slice(0, 150);
   const ipHashVal = ip ? await ipHash(ip, process.env.LOG_PEPPER || 'dev', day) : 'no-ip';
+  const attachmentNames = files.map((f) => f.filename).join(', ');
   const htmlBody = `<h2>New inquiry (${ref})</h2>
 <p><b>Name:</b> ${escapeHtml(name)}</p>
 <p><b>Email:</b> ${escapeHtml(email)}</p>
 <p><b>Company:</b> ${escapeHtml(company || '—')}</p>
+<p><b>Subject:</b> ${escapeHtml(cleanSubject || 'New message')}</p>
 <p><b>Budget:</b> ${escapeHtml(input.budget)}</p>
 <p><b>Timeline:</b> ${escapeHtml(input.timeline)}</p>
 <p><b>Project:</b></p><p>${escapeHtml(project).replace(/\n/g, '<br>')}</p>
+${attachmentNames ? `<p><b>Attachments:</b> ${escapeHtml(attachmentNames)}</p>` : ''}
 <hr><p style="color:#888;font-size:12px;">ref ${ref} · ${new Date(now).toISOString()} · ip ${escapeHtml(ipHashVal)} · env ${escapeHtml(process.env.APP_ENV || 'production')}</p>`;
-  const textBody = `New inquiry (${ref})\n\nName: ${name}\nEmail: ${email}\nCompany: ${company || '—'}\nBudget: ${input.budget}\nTimeline: ${input.timeline}\nProject: ${project}\n\nref ${ref} env ${process.env.APP_ENV || 'production'}`;
+  const textBody = `New inquiry (${ref})\n\nName: ${name}\nEmail: ${email}\nCompany: ${company || '—'}\nSubject: ${cleanSubject || 'New message'}\nBudget: ${input.budget}\nTimeline: ${input.timeline}\nProject: ${project}\n${attachmentNames ? 'Attachments: ' + attachmentNames + '\n' : ''}\nref ${ref} env ${process.env.APP_ENV || 'production'}`;
 
+  const attachments = files.map((f) => ({ filename: f.filename, content: Buffer.from(f.data).toString('base64') }));
+  let encodedSize = 0;
+  for (const a of attachments) encodedSize += a.content.length;
+  if (encodedSize > 5872025) {
+    return wantsJson
+      ? json(res, { error: 'request too large', code: 'payload-too-large' }, 413)
+      : (() => { text(res, 'Request too large', 413); })();
+  }
+
+  let emailed = false;
   if (process.env.RESEND_API_KEY && to) {
     try {
+      const resendBody: any = { from, to: [to], subject, html: htmlBody, text: textBody, reply_to: email || undefined };
+      if (attachments.length) resendBody.attachments = attachments;
       const r = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to: [to], subject, html: htmlBody, text: textBody, reply_to: email || undefined }),
+        body: JSON.stringify(resendBody),
       });
-      if (!r.ok) {
+      if (r.ok) {
+        emailed = true;
+      } else {
         console.log(JSON.stringify({ ts: now, ref, outcome: 'email_fail', ipHash: ipHashVal }));
       }
     } catch {
@@ -433,6 +536,8 @@ export default async function handler(
       ipHash: ipHashVal,
       type: 'contact',
       hasCompany: !!company,
+      fileCount: files.length,
+      fileBytes: files.reduce((n, f) => n + f.data.length, 0),
     }),
   );
 
@@ -442,5 +547,5 @@ export default async function handler(
     res.end();
     return;
   }
-  json(res, { ok: true, ref }, 200);
+  json(res, { ok: true, emailed, ref }, 200);
 }

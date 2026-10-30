@@ -38,6 +38,7 @@
 
 import { StorageError } from './errors.js';
 import { ensureSchema } from './libsql-schema.js';
+import { newRecordId, recordIdentity } from './record-id.js';
 import { toSqlArg, type LibsqlTransport, type SqlArg } from './libsql-transport.js';
 import type {
   Collection,
@@ -72,13 +73,13 @@ interface CollectionSpec {
  * The table and the derived columns of every collection.
  *
  * The field names come from the handlers that write the records:
- *   projects   api/portal/projects.ts:302   { id, clientId, title, status, … }
- *   clients    api/portal/auth.ts:487       { id, email, name, company, … }
- *   invites    api/portal/invites.ts:263    { email, name, company, clientId, … }
- *   comments   api/portal/comments.ts:172   { id, projectId, authorId, … }
- *   planItems  api/portal/plan-items.ts:298 { id, projectId, title, status, order, … }
- *   updates    api/portal/updates.ts:174    { id, projectId, title, body, … }
- *   reviews    api/portal/testimonials.ts:580 { ref, type, state, revision, … }
+ *   projects   portal-handlers/portal-projects.ts   { id, clientId, title, status, … }
+ *   clients    portal-handlers/portal-auth.ts       { id, email, name, company, … }
+ *   invites    portal-handlers/portal-invites.ts    { email, name, company, clientId, … }
+ *   comments   portal-handlers/portal-comments.ts   { id, projectId, authorId, … }
+ *   planItems  portal-handlers/portal-plan-items.ts { id, projectId, title, status, order, … }
+ *   updates    portal-handlers/portal-updates.ts    { id, projectId, title, body, … }
+ *   reviews    portal-handlers/portal-testimonials.ts { ref, type, state, revision, … }
  *   sessions   portal/sessions.jsonl        { token, expiresAt }
  */
 const COLLECTIONS: Record<Collection, CollectionSpec> = {
@@ -162,6 +163,27 @@ function jsonPath(field: string): string {
   if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) return `$.${field}`;
   // A quoted key: SQLite's JSON path accepts `$."key with spaces"`.
   return `$."${field.replace(/"/g, '')}"`;
+}
+
+/**
+ * THE IDENTITY OF A RECORD (wave 12, B-1).
+ *
+ * A record in the 'reviews' collection is given an identity when it is
+ * appended: an opaque value that names THIS record and no other. The caller
+ * cannot choose it — the store assigns it — so two records can never share
+ * one, and the moderation link can say which record the owner was shown.
+ *
+ * The revision NUMBER cannot do that job: two concurrent submissions read
+ * the same current record and both compute the same next revision, so two
+ * records share (ref, revision) and a link carrying only the number approves
+ * the wrong one (audit MAJOR-1).
+ *
+ * The record is COPIED, not mutated: the caller gets the stored record back
+ * from append() and must use THAT one.
+ */
+function withRecordIdentity(record: StoreRecord): StoreRecord {
+  if (recordIdentity(record) !== '') return { ...record };
+  return { ...record, recordId: newRecordId() };
 }
 
 /**
@@ -323,7 +345,26 @@ export function createLibsqlStore(options: LibsqlStoreOptions): PortalStore {
   let schemaReady: Promise<void> | null = null;
   function ready(): Promise<void> {
     if (!autoSchema) return Promise.resolve();
-    if (!schemaReady) schemaReady = ensureSchema(transport);
+    if (!schemaReady) {
+      const attempt = ensureSchema(transport);
+      schemaReady = attempt;
+      // A REJECTED schema promise must NOT stay cached (wave 9B).
+      //
+      // The schema step runs once per store instance, so a database that was
+      // briefly unreachable at the first request — a cold start during a
+      // database restart, a failover, a network blip — would otherwise leave
+      // this instance DEAD for its whole life: every later call would reject
+      // with that very same error, and the instance would only recover when
+      // it recycled. A serverless instance that lives for minutes must be
+      // able to recover on its own.
+      //
+      // The eviction runs in a microtask after the rejection, which is always
+      // BEFORE the next request: the catch handler was registered here, at
+      // creation time, so it is queued before any awaiting continuation.
+      attempt.catch(() => {
+        if (schemaReady === attempt) schemaReady = null;
+      });
+    }
     return schemaReady;
   }
 
@@ -358,14 +399,20 @@ export function createLibsqlStore(options: LibsqlStoreOptions): PortalStore {
       return parseRecord(result.rows[0][0], spec.table);
     },
 
-    async append(coll: Collection, record: StoreRecord): Promise<void> {
+    async append(coll: Collection, record: StoreRecord): Promise<StoreRecord> {
       await ready();
       const spec = COLLECTIONS[coll];
+      // The 'reviews' collection is a REVISION LOG, and a record in it needs
+      // an IDENTITY (wave 12, B-1): the signed moderation link names the
+      // exact record the owner was shown. The identity is written INTO the
+      // record (the `data` column), so no schema change is needed and both
+      // adapters read it the same way.
+      const stored = coll === 'reviews' ? withRecordIdentity(record) : record;
       const columns = ['data', ...spec.columns.map((c) => c.column)];
       const values: Array<string | number | boolean | null> = [
-        JSON.stringify(record),
+        JSON.stringify(stored),
         ...spec.columns.map((c) => {
-          const value = record[c.field];
+          const value = stored[c.field];
           return value === undefined ? null : (value as string | number | boolean | null);
         }),
       ];
@@ -374,6 +421,7 @@ export function createLibsqlStore(options: LibsqlStoreOptions): PortalStore {
         `INSERT INTO ${spec.table} (${columns.join(', ')}) VALUES (${placeholders})`,
         values.map(toSqlArg),
       );
+      return stored;
     },
 
     async update(coll: Collection, key: Where, patch: StoreRecord): Promise<number> {
@@ -479,6 +527,8 @@ export function createLibsqlStore(options: LibsqlStoreOptions): PortalStore {
       decision: ReviewDecision,
       at: string,
       decidedBy = 'one-click-link',
+      expectedRevision?: number,
+      expectedRecordId?: string,
     ): Promise<StoreRecord | null> {
       await ready();
       const spec = COLLECTIONS['reviews'];
@@ -487,6 +537,42 @@ export function createLibsqlStore(options: LibsqlStoreOptions): PortalStore {
       // review record, and only while it is still pending. The `state =
       // 'pending'` guard is what makes "never flip an already-decided record,
       // not even the other way" a property of the statement.
+      //
+      // THE REVISION SCOPE (wave 10, F-2): `revision = ?` makes the flip
+      // apply ONLY to the revision that was verified. The `revision` column
+      // is the record's own revision (written from the record at insert
+      // time), and it is NULL for a record without one — so a record that
+      // moved on never matches, and the statement updates nothing.
+      //
+      // THE IDENTITY SCOPE (wave 12, B-1): `json_extract(data, '$.recordId')
+      // = ?` makes the flip apply ONLY to the record the signed link names.
+      // A revision number is NOT an identity — two concurrent submissions
+      // produce two records that share (ref, revision), and the number alone
+      // cannot say which of them the owner approved (audit MAJOR-1). The
+      // predicate lives INSIDE the statement, so the scope is atomic: the
+      // flip lands on the named record or on nothing at all.
+      const revisionClause = expectedRevision === undefined ? '' : '\n             AND revision = ?';
+      const identityClause =
+        expectedRecordId === undefined || expectedRecordId === ''
+          ? ''
+          : "\n             AND json_extract(data, '$.recordId') = ?";
+      const args: SqlArg[] = [
+        { type: 'text', value: decision },
+        { type: 'text', value: jsonPath('state') },
+        { type: 'text', value: JSON.stringify(decision) },
+        { type: 'text', value: jsonPath('decidedAt') },
+        { type: 'text', value: JSON.stringify(at) },
+        { type: 'text', value: jsonPath('decidedBy') },
+        { type: 'text', value: JSON.stringify(decidedBy) },
+        { type: 'text', value: ref },
+      ];
+      if (expectedRevision !== undefined) {
+        args.push({ type: 'integer', value: String(expectedRevision) });
+      }
+      if (expectedRecordId !== undefined && expectedRecordId !== '') {
+        args.push({ type: 'text', value: expectedRecordId });
+      }
+
       const result = await transport.execute(
         `UPDATE ${spec.table}
             SET state = ?,
@@ -494,18 +580,9 @@ export function createLibsqlStore(options: LibsqlStoreOptions): PortalStore {
           WHERE seq = (SELECT seq FROM ${spec.table}
                         WHERE ref = ? AND type = 'review'
                         ORDER BY seq DESC LIMIT 1)
-            AND state = 'pending'
+            AND state = 'pending'${revisionClause}${identityClause}
         RETURNING data`,
-        [
-          { type: 'text', value: decision },
-          { type: 'text', value: jsonPath('state') },
-          { type: 'text', value: JSON.stringify(decision) },
-          { type: 'text', value: jsonPath('decidedAt') },
-          { type: 'text', value: JSON.stringify(at) },
-          { type: 'text', value: jsonPath('decidedBy') },
-          { type: 'text', value: JSON.stringify(decidedBy) },
-          { type: 'text', value: ref },
-        ],
+        args,
       );
 
       if (result.rows.length > 0) {
@@ -513,17 +590,42 @@ export function createLibsqlStore(options: LibsqlStoreOptions): PortalStore {
       }
 
       // Nothing was updated: either the ref is unknown, or the newest revision
-      // is already decided. The second SELECT tells the two apart and returns
-      // the already-decided record unchanged (the idempotency the contract
-      // test asserts).
+      // is already decided, or the record moved on (a newer revision, or a
+      // different record that shares the revision). The second SELECT tells
+      // the cases apart and returns the already-decided record unchanged (the
+      // idempotency the contract test asserts).
       const existing = await transport.execute(
-        `SELECT data FROM ${spec.table}
+        `SELECT data, revision FROM ${spec.table}
           WHERE ref = ? AND type = 'review'
           ORDER BY seq DESC LIMIT 1`,
         [{ type: 'text', value: ref }],
       );
       if (existing.rows.length === 0) return null;
-      return parseRecord(existing.rows[0][0], spec.table);
+
+      const existingRecord = parseRecord(existing.rows[0][0], spec.table);
+
+      // THE IDENTITY SCOPE, again: the newest record for this ref is NOT the
+      // one the link named, so the decision was not applied and the caller
+      // must answer "the record moved" instead of a false success.
+      if (expectedRecordId !== undefined && expectedRecordId !== '') {
+        if (recordIdentity(existingRecord) !== expectedRecordId) return null;
+      }
+
+      // The revision the record carries NOW. A NULL revision is 0, exactly as
+      // the file adapter computes it (`Number(record.revision || 0)`); a
+      // revision that is not a number is NaN and therefore never matches.
+      if (expectedRevision !== undefined) {
+        const raw = existing.rows[0][1];
+        const numeric =
+          raw === null || raw === undefined ? 0 : typeof raw === 'number' ? raw : Number(raw);
+        if (!Number.isFinite(numeric) || numeric !== expectedRevision) {
+          // The record MOVED: the decision was not applied and the caller must
+          // answer "stale revision" instead of a false success.
+          return null;
+        }
+      }
+
+      return existingRecord;
     },
 
     async exportAll(): Promise<Record<Collection, string[]>> {

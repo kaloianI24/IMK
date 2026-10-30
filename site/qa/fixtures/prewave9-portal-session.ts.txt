@@ -1,0 +1,43 @@
+// ---------------------------------------------------------------------
+// FROZEN PRE-WAVE-9 FIXTURE -- api/portal/session.ts as it was BEFORE the wave-13 function-budget refactor.
+//
+// Provenance : git a4b10a8:api/portal/session.ts
+//              ("checkpoint: wave 6 complete -- admin inbox, signed sessions,")
+// SHA-256    : 363a4b8d9e03741b87b72e682c2d54013d583cd5fa1612ea35f87eec92f720aa
+//              (of everything BELOW the marker line, UTF-8, unmodified)
+//
+// the frozen pre-wave-9 notifier imported it:
+//     import { ... } from '../portal/session.js';
+// It had a file of its own until wave 13; the portal family is now ONE
+// function (api/portal.ts) and the route table names the handler. The
+// legacy tree therefore needs its OWN copy, taken from this checkpoint,
+// so the legacy sandbox does not depend on the product file existing.
+// It re-exports site/shared/server/portal-session.js, which the legacy
+// tree already carries.
+//
+// The QA wave-9 queue suite copies it into the scratch "legacy" tree, so
+// the legacy tree is SELF-CONTAINED: the pre-wave-9 comparison is
+// byte-for-byte faithful and independent of the current product tree.
+// ===== END OF PROVENANCE HEADER =====
+// api/portal/session.ts — Vercel serverless shared module.
+// Session management for the IMK client/owner portal.
+//
+// THE IMPLEMENTATION IS SHARED (audit wave-6, F-2)
+//   It lives in site/shared/server/portal-session.ts and is imported by the
+//   Cloudflare twin as well, so the two trees cannot drift apart on a
+//   security contract — and so a session minted on one target is accepted by
+//   the other.
+//
+//   The session used to be a module-scope `Map` in THIS file. Vercel builds
+//   one function per file under api/, so /api/portal/auth/verify and
+//   /api/portal/projects each got their own copy of the Map: the cookie the
+//   verify function issued was refused by the projects function with
+//   401 {code:'unauthorized'}, and no client could sign in. The session is now
+//   a SIGNED token — stateless, per instance, per cold start, per bundle.
+//
+//   The module has no `node:` imports, so it also loads in the edge runtime.
+//
+//   This file is a thin re-export: the Vercel tree calls the session API
+//   without an explicit environment, which defaults to `process.env`.
+
+export * from '../../site/shared/server/portal-session.js';

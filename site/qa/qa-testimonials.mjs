@@ -32,6 +32,7 @@ import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
+import { handlerPath, fwd } from './handler-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE = path.resolve(__dirname, '..');
@@ -104,14 +105,17 @@ function rmrf(target) {
   }
 }
 
-const REPO_FWD = REPO.replace(/\\/g, '/');
-const ENTRY = `export { default as auth } from '${REPO_FWD}/api/portal/auth.ts';
-export { default as projects } from '${REPO_FWD}/api/portal/projects.ts';
-export { default as invites } from '${REPO_FWD}/api/portal/invites.ts';
-export { default as testimonials } from '${REPO_FWD}/api/portal/testimonials.ts';
-export { default as contact } from '${REPO_FWD}/api/contact.ts';
-export { default as moderate } from '${REPO_FWD}/api/moderate/review.ts';
-export { default as portalSession } from '${REPO_FWD}/api/portal/session.ts';
+// The handler modules under test. The bodies moved out of api/ in wave 13
+// (the function budget) and live in site/shared/portal-handlers/ now; the pin
+// follows the PRODUCT's route table so it cannot drift from the tree.
+const ROOTS = { apiDir: path.join(REPO, 'api'), sharedDir: path.join(SITE, 'shared') };
+const ENTRY = `export { default as auth } from '${fwd(handlerPath('portal-auth', ROOTS))}';
+export { default as projects } from '${fwd(handlerPath('portal-projects', ROOTS))}';
+export { default as invites } from '${fwd(handlerPath('portal-invites', ROOTS))}';
+export { default as testimonials } from '${fwd(handlerPath('portal-testimonials', ROOTS))}';
+export { default as contact } from '${fwd(handlerPath('contact', ROOTS))}';
+export { default as moderate } from '${fwd(handlerPath('moderate', ROOTS))}';
+export { default as portalSession } from '${fwd(handlerPath('portal-session', ROOTS))}';
 `;
 
 const ROUTES = [

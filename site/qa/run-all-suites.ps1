@@ -2,7 +2,10 @@
 # QA runner: executes every QA suite against the real handlers in isolated
 # sandboxes and writes the transcripts next to the results.
 #
-#   pwsh -File site/qa/run-all-suites.ps1
+#   powershell -NoProfile -ExecutionPolicy Bypass -File site\qa\run-all-suites.ps1
+#
+# (PowerShell 7 / pwsh is NOT installed on this PC -- use "powershell", i.e.
+# Windows PowerShell 5.1.)
 #
 # Every suite is sandboxed on its own port; port 4321 (the running dev
 # server) is never used.
@@ -123,6 +126,42 @@ $code11 = RunSuite 'qa-wave5-independent.mjs (QA independent wave-5)' 'qa\qa-wav
 $admJson = Join-Path $ART 'qa-admin-independent-results.json'
 $code12 = RunSuite 'qa-admin-independent.mjs (QA independent admin inbox)' 'qa\qa-admin-independent.mjs' @('--json', $admJson)
 
+# 13 -- QA's own INDEPENDENT wave-9 suite (the inbox and the moderation link
+#      are ONE queue, and file mode still behaves like before wave 9)
+$w9Json = Join-Path $ART 'qa-wave9-store-queue-results.json'
+$code13 = RunSuite 'qa-wave9-store-queue.mjs (QA independent wave-9 queue)' 'qa\qa-wave9-store-queue.mjs' @('--json', $w9Json)
+
+# 14 -- QA's own INDEPENDENT wave-9 STORE suite (no JSONL fallback, the
+#      publisher, the shared rate counter, loud store errors + 4 mutation
+#      probes). Suite 13 was already taken by the wave-9 queue check, so this
+#      one is numbered 14.
+$w9iJson = Join-Path $ART 'qa-wave9-store-independent-results.json'
+$code14 = RunSuite 'qa-wave9-store-independent.mjs (QA independent wave-9 store)' 'qa\qa-wave9-store-independent.mjs' @('--json', $w9iJson)
+
+# 15 -- the ANCHOR NON-VACUITY PROVER (the re-pinned mutation anchors P2 and
+#      D2 must still redden when the defect is put back in a copy)
+$anchorJson = Join-Path $ART 'qa-anchor-nonvacuity-results.json'
+$code15 = RunSuite 'qa-anchor-nonvacuity.mjs (anchor non-vacuity prover)' 'qa\qa-anchor-nonvacuity.mjs' @('--json', $anchorJson)
+
+# 16 -- the WAVE-13 ROUTING LAYER, executed (the resolver, the route table
+#      and the two entry points -- the layer wave 13 put between the platform
+#      and the handlers, which no other suite executes)
+$w13Json = Join-Path $ART 'qa-wave13-routing-results.json'
+$code16 = RunSuite 'qa-wave13-routing.mjs (wave-13 routing layer, executed)' 'qa\qa-wave13-routing.mjs' @('--json', $w13Json)
+
+# 17 -- the WAVE-14 CARRIER CONTAINMENT harness (the Backend's own harness,
+#      re-run by QA on the current tree: the containment of a forged carrier
+#      and the two deploy-gate fixes). It lives in the repo root, so it is
+#      reached from the site directory with '..'.
+$code17 = RunSuite 'backend-wave14-carrier-containment-harness.mjs (wave-14 carrier containment)' '..\backend-wave14-carrier-containment-harness.mjs' @()
+
+# 18 -- the WAVE-15 EMPTY-CARRIER harness (the Backend's own harness, re-run
+#      by QA on the current tree: the query carrier, when PRESENT, decides --
+#      an empty __imk_route is an INVALID carrier -> 404, never a fall-through
+#      to the client-controlled x-imk-route header). It lives in the repo
+#      root, so it is reached from the site directory with '..'.
+$code18 = RunSuite 'backend-wave15-empty-carrier-harness.mjs (wave-15 empty carrier)' '..\backend-wave15-empty-carrier-harness.mjs' @()
+
 Say ("=" * 72)
 Say "SUMMARY"
 Say ("=" * 72)
@@ -138,11 +177,17 @@ Say ("check:routes (npm run)        exit " + $code9)
 Say ("qa-wave4-independent.mjs      exit " + $code10)
 Say ("qa-wave5-independent.mjs      exit " + $code11)
 Say ("qa-admin-independent.mjs      exit " + $code12)
+Say ("qa-wave9-store-queue.mjs      exit " + $code13)
+Say ("qa-wave9-store-independent.mjs exit " + $code14)
+Say ("qa-anchor-nonvacuity.mjs      exit " + $code15)
+Say ("qa-wave13-routing.mjs        exit " + $code16)
+Say ("backend-wave14-carrier-containment-harness.mjs exit " + $code17)
+Say ("backend-wave15-empty-carrier-harness.mjs exit " + $code18)
 Say ("finished: " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'))
 
 [System.IO.File]::WriteAllText($LOG, ($out -join "`r`n"))
 Write-Host ""
 Write-Host "transcript: $LOG"
 
-if ($code1 -or $code2 -or $code3 -or $code4 -or $code5 -or $code6 -or $code7 -or $code8 -or $code9 -or $code10 -or $code11 -or $code12) { exit 1 }
+if ($code1 -or $code2 -or $code3 -or $code4 -or $code5 -or $code6 -or $code7 -or $code8 -or $code9 -or $code10 -or $code11 -or $code12 -or $code13 -or $code14 -or $code15 -or $code16 -or $code17 -or $code18) { exit 1 }
 exit 0

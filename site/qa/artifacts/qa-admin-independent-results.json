@@ -1,8 +1,8 @@
 {
   "suite": "qa-admin-independent",
-  "at": "2026-10-21T22:20:29.060Z",
-  "checks": 16,
-  "passed": 16,
+  "at": "2026-10-22T14:19:29.716Z",
+  "checks": 17,
+  "passed": 17,
   "failed": 0,
   "results": [
     {
@@ -10,7 +10,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "CONTROL: the owner signs in through the real flow and is the owner",
       "status": "PASS",
-      "ms": 4,
+      "ms": 3,
       "detail": "owner owner@imk.test -> 200 {\"ok\":true,\"role\":\"admin\",\"email\":\"owner@imk.test\"}"
     },
     {
@@ -18,7 +18,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "no cookie at all -> 401 {code:unauthorized}",
       "status": "PASS",
-      "ms": 0,
+      "ms": 1,
       "detail": "401 {\"error\":\"unauthorized\",\"code\":\"unauthorized\"}"
     },
     {
@@ -58,7 +58,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "the allow-list is read on EVERY request: the same token stops working at once",
       "status": "PASS",
-      "ms": 45,
+      "ms": 47,
       "detail": "the token is still valid, the allow-list is not -> 401"
     },
     {
@@ -66,7 +66,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "an unset ADMIN_EMAILS is a MISCONFIGURATION -> 500, not \"everybody is the owner\"",
       "status": "PASS",
-      "ms": 42,
+      "ms": 41,
       "detail": "500 {\"error\":\"misconfigured\",\"code\":\"internal\"}"
     },
     {
@@ -74,7 +74,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "GET /api/admin/reviews: a non-owner is 401, the owner sees the queue",
       "status": "PASS",
-      "ms": 5,
+      "ms": 6,
       "detail": "pending=1, openNotes=null"
     },
     {
@@ -82,7 +82,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "the approve link the inbox mints is HMAC-valid and /api/moderate/review accepts it",
       "status": "PASS",
-      "ms": 13,
+      "ms": 16,
       "detail": "sig verified independently; the GET approved nothing, the POST made the quote approved"
     },
     {
@@ -90,7 +90,7 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "the Cloudflare twin answers the SAME gate codes as the Vercel tree",
       "status": "PASS",
-      "ms": 25,
+      "ms": 23,
       "detail": "owner 200, client 401, no cookie 401 - same as the Vercel tree"
     },
     {
@@ -106,31 +106,39 @@
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "a STALE admin cookie does not shadow a valid client cookie",
       "status": "PASS",
-      "ms": 3,
+      "ms": 2,
       "detail": "the stale admin cookie was skipped, the client session won"
     },
     {
       "id": "E14",
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
-      "name": "the Cloudflare queue twin answers like the Vercel tree (edge runtime and with a filesystem)",
+      "name": "the Cloudflare inbox serves NO queue on either runtime -- 501, and the gate still comes first",
       "status": "PASS",
-      "ms": 133,
-      "detail": "edge runtime 501 {code:unimplemented}; with a filesystem the same queue as the Vercel tree"
+      "ms": 263,
+      "detail": "edge 501 and filesystem 501; the gate (401 / 500) comes first on both trees; the Vercel tree serves the queue"
     },
     {
       "id": "E15",
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "MUTATION PROBE: with the allow-list check removed, E6 goes RED",
       "status": "PASS",
-      "ms": 527,
+      "ms": 539,
       "detail": "mutated copy: E1=PASS (the owner still gets in), E6=FAIL (the allow-list no longer decides)"
     },
     {
       "id": "E16",
       "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
+      "name": "MUTATION PROBE: with a JSONL read put back into the CF inbox, E14 goes RED",
+      "status": "PASS",
+      "ms": 810,
+      "detail": "mutated copy: E9=PASS (the Vercel tree still serves the queue), E14=FAIL (the CF inbox with a JSONL read was caught)"
+    },
+    {
+      "id": "E17",
+      "group": "E -- the /admin owner inbox gate (wave 6, T7.14)",
       "name": "the repository is byte-identical after the probe",
       "status": "PASS",
-      "ms": 9,
+      "ms": 11,
       "detail": "api/, site/shared/ and site/functions/ are byte-for-byte unchanged"
     }
   ]

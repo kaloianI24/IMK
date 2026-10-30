@@ -59,7 +59,7 @@ import { spawnSync, spawn } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = fs.existsSync(path.join(HERE, 'api', 'portal', 'auth.ts')) ? HERE : path.resolve(HERE, '..');
+const REPO = fs.existsSync(path.join(HERE, 'api', 'portal.ts')) ? HERE : path.resolve(HERE, '..');
 const SITE = path.join(REPO, 'site');
 const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
@@ -153,13 +153,13 @@ function writeInvitedStore() {
 const BUNDLE_ENTRIES = {
   'vercel-request-link': path.join(REPO, 'api', 'portal', 'auth', 'request-link.ts'),
   'vercel-verify': path.join(REPO, 'api', 'portal', 'auth', 'verify.ts'),
-  'vercel-projects': path.join(REPO, 'api', 'portal', 'projects.ts'),
+  'vercel-projects': path.join(REPO, 'site', 'shared', 'portal-handlers', 'portal-projects.ts'),
   'vercel-moderate': path.join(REPO, 'api', 'moderate', 'review.ts'),
   'cf-auth': path.join(REPO, 'site', 'functions', 'api', 'portal', 'auth.ts'),
   'cf-invites': path.join(REPO, 'site', 'functions', 'api', 'portal', 'invites.ts'),
   'cf-session': path.join(REPO, 'site', 'functions', 'api', 'portal', 'session.ts'),
   'shared-session': path.join(REPO, 'site', 'shared', 'server', 'portal-session.ts'),
-  'rate-limit': path.join(REPO, 'api', 'lib', 'rate-limit.ts'),
+  'rate-limit': path.join(REPO, 'site', 'shared', 'server', 'rate-limit.ts'),
 };
 
 async function bundleAll() {
@@ -1232,16 +1232,16 @@ async function main() {
   await t('W5e', 'the probe can fail: the OLD lock classification leaks the raw EPERM', async () => {
     // Put the old classification back — in a COPY. The repo is not touched.
     //
-    // The copy KEEPS THE RELATIVE LAYOUT (api/lib/rate-limit.ts) and the
+    // The copy KEEPS THE RELATIVE LAYOUT (site/shared/server/rate-limit.ts) and the
     // shared modules it imports are copied next to it, so the bundle can be
     // built: the rate limiter imports the libSQL counter and the store
     // access layer (wave 9). The same rule the session probe above follows —
     // "the module has to sit next to it or the bundle cannot be built".
     const mutatedDir = path.join(SANDBOX, 'mutated');
-    const mutatedFile = path.join(mutatedDir, 'api', 'lib', 'rate-limit.ts');
+    const mutatedFile = path.join(mutatedDir, 'site', 'shared', 'server', 'rate-limit.ts');
     fs.mkdirSync(path.dirname(mutatedFile), { recursive: true });
     copyTree(path.join(REPO, 'site', 'shared'), path.join(mutatedDir, 'site', 'shared'));
-    const source = fs.readFileSync(path.join(REPO, 'api', 'lib', 'rate-limit.ts'), 'utf8');
+    const source = fs.readFileSync(path.join(REPO, 'site', 'shared', 'server', 'rate-limit.ts'), 'utf8');
     const mutated = source.replace(
       "if (!LOCK_BUSY_CODES.has(code)) throw err;",
       "if (code !== 'EEXIST') throw err;",

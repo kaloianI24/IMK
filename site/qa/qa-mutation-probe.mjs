@@ -12,8 +12,11 @@
 // system temp directory, and the copy is removed afterwards.
 //
 // PROBES
-//   P1  M5  the stale-revision guard is removed from the moderation handler
-//           -> M1/M2/M3 (a stale link must not approve) must FAIL
+//   P1  M5  the stale-revision guard is removed -- ALL THREE layers (the
+//           handler guard in api/moderate/review.ts, the revision scope in
+//           site/shared/portal-store/file-adapter.ts and the IDENTITY scope
+//           in the same file; wave 10 F-2 and wave 12 B-1)
+//           -> M1/M2 (a stale link must not approve) must FAIL
 //   P2  m2  the publish script skips a malformed line instead of failing
 //           -> N1/N2/N3 (a malformed store must refuse to publish) must FAIL
 //   P3  m6  the rate-limit slot is consumed BEFORE validation
@@ -58,8 +61,16 @@ function copyDir(from, to) {
 
 /**
  * Copy the handler tree in a way that keeps the RELATIVE layout intact.
- * api/lib/jsonl.ts imports ../../site/shared/portal-store/jsonl.js, so the
- * shared tree has to travel with it under the same root.
+ *
+ * The handler bodies moved out of api/ in wave 13 (the function budget): they
+ * live in site/shared/portal-handlers/ and the shared server code in
+ * site/shared/server/. The shared tree therefore has to travel with the api/
+ * tree under the same root, and a patched copy of the tree has to carry BOTH
+ * -- otherwise the suite would measure the repo's handlers instead of its own.
+ *
+ * The copy of site/shared/portal-store/** is the ONE the sandboxed run uses,
+ * so the store's own guards (e.g. the revision and identity scopes of wave 10
+ * F-2 and wave 12 B-1) are patchable there too -- PROBE 1 needs exactly that.
  */
 function copyApiTree(root) {
   copyDir(path.join(REPO, 'api'), path.join(root, 'api'));
@@ -107,16 +118,61 @@ let allGood = true;
 try {
   // =====================================================================
   // PROBE 1 -- M5: remove the stale-revision guard
+  //
+  // THE GUARD HAS THREE LAYERS (wave 10 F-2, wave 12 B-1).
+  //   layer 1 -- the HANDLER: api/moderate/review.ts refuses when the
+  //              revision OR the record identity in the signed link is not
+  //              the one in the store (409 stale-revision).
+  //   layer 2 -- the STORE, revision scope: the file adapter flips only the
+  //              revision that was verified.
+  //   layer 3 -- the STORE, identity scope: the file adapter flips only the
+  //              RECORD the link names (a revision NUMBER is not an
+  //              identity -- two concurrent submissions share one).
+  //
+  // Removing ONE layer is NOT enough to make the checks red -- the others
+  // still refuse -- so this probe removes ALL THREE. That is the honest way
+  // to prove the end-to-end protection is not vacuous: the defect that
+  // matters is "a stale link can approve a quote the owner never saw", and
+  // that defect needs every layer gone.
+  //
+  // Each layer is proven to be load-bearing on its own in
+  // qa-anchor-nonvacuity.mjs (P1-half-*): with two of the three removed the
+  // checks must STILL be green, and only the third one turns them red.
   // =====================================================================
   const p1Root = path.join(WORK, 'p1');
   copyApiTree(p1Root);
   const apiCopy = path.join(p1Root, 'api');
+  const sharedCopy = path.join(p1Root, 'site', 'shared');
+  // layer 1 -- the handler guard (revision AND identity)
   patch(
     path.join(apiCopy, 'moderate', 'review.ts'),
-    'if (currentRevision !== revision) {',
+    'if (currentRevision !== revision || identityStale) {',
     'if (false) {',
   );
-  const p1 = runSuite({ QA_API_DIR: apiCopy, QA_PORT: '4431' });
+  // layer 2 -- the store's revision scope
+  patch(
+    path.join(sharedCopy, 'portal-store', 'file-adapter.ts'),
+    'if (expectedRevision !== undefined && revisionNumber(record) !== expectedRevision) {',
+    'if (false) {',
+  );
+  // layer 3 -- the store's identity scope
+  patch(
+    path.join(sharedCopy, 'portal-store', 'file-adapter.ts'),
+    `      if (expectedRecordId !== undefined && expectedRecordId !== '') {
+        if (recordIdentity(record) !== expectedRecordId) return null;
+      }`,
+    `      if (false) {
+        return null;
+      }`,
+  );
+  // PORTAL_STORE=file so the probe always measures the file adapter (the
+  // layer it patches) and never a database that happens to be configured.
+  const p1 = runSuite({
+    QA_API_DIR: apiCopy,
+    QA_SHARED_DIR: sharedCopy,
+    QA_PORT: '4431',
+    PORTAL_STORE: 'file',
+  });
   const p1ExpectFail = ['M1', 'M2'];
   const p1Ok = p1ExpectFail.every((id) => statusOf(p1.results, id) === 'FAIL');
   const p1AllFailed = p1.results.results
@@ -125,7 +181,8 @@ try {
     .join(', ');
   probes.push({
     probe: 'P1',
-    defect: 'M5 - the stale-revision guard is removed',
+    defect:
+      'M5 - the stale-revision guard is removed (ALL THREE layers: the handler guard, the store revision scope and the store identity scope)',
     expect: `${p1ExpectFail.join(', ')} must FAIL`,
     actual: p1ExpectFail.map((id) => `${id}=${statusOf(p1.results, id)}`).join(' '),
     allFailed: p1AllFailed,
@@ -178,7 +235,14 @@ try {
   // =====================================================================
   const p3Root = path.join(WORK, 'p3');
   copyApiTree(p3Root);
-  const tsFile = path.join(p3Root, 'api', 'portal', 'testimonials.ts');
+  // The testimonials handler moved to site/shared/portal-handlers/ in wave 13.
+  const tsFile = path.join(
+    p3Root,
+    'site',
+    'shared',
+    'portal-handlers',
+    'portal-testimonials.ts',
+  );
   patch(
     tsFile,
     `      if (!consent.p1) {
@@ -198,7 +262,11 @@ try {
         return;
       }`,
   );
-  const p3 = runSuite({ QA_API_DIR: path.join(p3Root, 'api'), QA_PORT: '4433' });
+  const p3 = runSuite({
+    QA_API_DIR: path.join(p3Root, 'api'),
+    QA_SHARED_DIR: path.join(p3Root, 'site', 'shared'),
+    QA_PORT: '4433',
+  });
   const p3ExpectFail = ['O3'];
   const p3Ok = p3ExpectFail.every((id) => statusOf(p3.results, id) === 'FAIL');
   probes.push({
@@ -220,15 +288,21 @@ try {
   // =====================================================================
   const p4Root = path.join(WORK, 'p4');
   copyApiTree(p4Root);
+  // The rate limiter moved out of api/ in wave 13 (the function budget): it
+  // lives in site/shared/server/ now.
   patch(
-    path.join(p4Root, 'api', 'lib', 'rate-limit.ts'),
+    path.join(p4Root, 'site', 'shared', 'server', 'rate-limit.ts'),
     `    return {
       allowed: count <= limit,`,
     `    return {
       // MUTATION: the limiter never blocks.
       allowed: true,`,
   );
-  const p4 = runSuite({ QA_API_DIR: path.join(p4Root, 'api'), QA_PORT: '4434' });
+  const p4 = runSuite({
+    QA_API_DIR: path.join(p4Root, 'api'),
+    QA_SHARED_DIR: path.join(p4Root, 'site', 'shared'),
+    QA_PORT: '4434',
+  });
   const p4ExpectFail = ['O4'];
   const p4Ok = p4ExpectFail.every((id) => statusOf(p4.results, id) === 'FAIL');
   probes.push({
@@ -259,7 +333,11 @@ try {
     `  if (method === 'GET') {`,
     `  if (false) { // MUTATION: the GET decides again`,
   );
-  const p5 = runSuite({ QA_API_DIR: path.join(p5Root, 'api'), QA_PORT: '4435' });
+  const p5 = runSuite({
+    QA_API_DIR: path.join(p5Root, 'api'),
+    QA_SHARED_DIR: path.join(p5Root, 'site', 'shared'),
+    QA_PORT: '4435',
+  });
   const p5ExpectFail = ['M4b'];
   const p5Ok = p5ExpectFail.every((id) => statusOf(p5.results, id) === 'FAIL');
   probes.push({

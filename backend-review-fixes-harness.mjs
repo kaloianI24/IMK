@@ -46,7 +46,7 @@ import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = fs.existsSync(path.join(HERE, 'api', 'portal', 'testimonials.ts')) ? HERE : path.resolve(HERE, '..');
+const REPO = fs.existsSync(path.join(HERE, 'api', 'portal.ts')) ? HERE : path.resolve(HERE, '..');
 const SITE = path.join(REPO, 'site');
 const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
@@ -99,7 +99,7 @@ const BUNDLES = path.join(ROOT, 'bundles');
 const CHILD_FILE = path.join(ROOT, 'child.cjs');
 
 const ENTRIES = {
-  'vercel-testimonials': path.join(REPO, 'api', 'portal', 'testimonials.ts'),
+  'vercel-testimonials': path.join(REPO, 'site', 'shared', 'portal-handlers', 'portal-testimonials.ts'),
   'vercel-contact': path.join(REPO, 'api', 'contact.ts'),
   'vercel-moderate': path.join(REPO, 'api', 'moderate', 'review.ts'),
   'cf-testimonials': path.join(REPO, 'site', 'functions', 'api', 'portal', 'testimonials.ts'),
@@ -749,13 +749,52 @@ async function main() {
     return '409, no mail';
   });
 
-  await t('M3x', 'Vercel: the stale re-notify still works (regression) and a CURRENT link still approves', async () => {
+  await t('M3x', 'the stale re-notify still works, a CURRENT link approves, and a GET decides NOTHING', async () => {
+    // RE-PINNED (wave 13): this check pinned the PRE-wave-8 contract, where a
+    // GET on the moderation link was the approval. Wave 8 changed that (audit
+    // M-1): a GET serves the CONFIRMATION PAGE and decides nothing — a
+    // prefetched link must never approve a quote. The check now pins the
+    // CURRENT contract and is STRONGER: it asserts that the GET really
+    // decides nothing before the POST does the deciding.
     const ts = Math.floor(Date.now() / 1000);
     const staleSig = signLink('rev_stale', 'approve', 1, ts);
     const env = { RESEND_API_KEY: 'test-key', RESEND_TO: 'owner@imk.test' };
+
+    // A GET on a CURRENT link: the confirmation page, and NOTHING decided.
+    const goodSig0 = signLink('rev_stale', 'approve', 2, ts);
+    const cGet = runChild('m3x-get', [
+      { op: 'seed', files: modFixtures('pending') },
+      { op: 'vercel', id: 'get', bundle: bundlePath('vercel-moderate'), method: 'GET', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=2&sig=${goodSig0}&ts=${ts}` },
+      { op: 'store', id: 's', file: 'site/data/moderation/reviews.jsonl' },
+      { op: 'fetches', id: 'f0' },
+    ], env);
+    assertEqual(cGet.byId.get.status, 200, 'the confirmation page status');
+    assert(
+      /text\/html/i.test(
+        Object.entries(cGet.byId.get.headers || {})
+          .map(([k, v]) => k + ': ' + v)
+          .join('\n'),
+      ),
+      `the confirmation page must be HTML (got ${JSON.stringify(cGet.byId.get.headers)})`,
+    );
+    assert(!cGet.byId.get.body || cGet.byId.get.body.state !== 'approved', 'a GET must not approve');
+    assertEqual(cGet.byId.s[0].state, 'pending', 'a GET must not change the store');
+    assertEqual(cGet.byId.f0.filter((x) => x.url.includes('api.resend.com')).length, 0, 'a GET must not mail');
+
+    // A GET on a STALE link is REFUSED (409) — the stale check runs before the
+    // confirmation page — and it still decides nothing.
+    const cGetStale = runChild('m3x-get-stale', [
+      { op: 'seed', files: modFixtures('pending') },
+      { op: 'vercel', id: 'get', bundle: bundlePath('vercel-moderate'), method: 'GET', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=1&sig=${staleSig}&ts=${ts}` },
+      { op: 'store', id: 's', file: 'site/data/moderation/reviews.jsonl' },
+    ], env);
+    assertEqual(cGetStale.byId.get.status, 409, 'a stale GET is refused');
+    assertEqual(cGetStale.byId.s[0].state, 'pending', 'a stale GET must not change the store');
+
+    // A POST on a STALE link: 409 and a fresh link in a fresh mail.
     const c = runChild('m3x', [
       { op: 'seed', files: modFixtures('pending') },
-      { op: 'vercel', id: 'stale', bundle: bundlePath('vercel-moderate'), method: 'GET', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=1&sig=${staleSig}&ts=${ts}` },
+      { op: 'vercel', id: 'stale', bundle: bundlePath('vercel-moderate'), method: 'POST', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=1&sig=${staleSig}&ts=${ts}` },
       { op: 'fetches', id: 'f1' },
     ], env);
     assertEqual(c.byId.stale.status, 409, 'stale status');
@@ -766,7 +805,7 @@ async function main() {
     const goodSig = signLink('rev_stale', 'approve', 2, ts);
     const c2 = runChild('m3x-2', [
       { op: 'seed', files: modFixtures('pending') },
-      { op: 'vercel', id: 'ok', bundle: bundlePath('vercel-moderate'), method: 'GET', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=2&sig=${goodSig}&ts=${ts}` },
+      { op: 'vercel', id: 'ok', bundle: bundlePath('vercel-moderate'), method: 'POST', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=2&sig=${goodSig}&ts=${ts}` },
       { op: 'store', id: 's', file: 'site/data/moderation/reviews.jsonl' },
     ], env);
     assertEqual(c2.byId.ok.status, 200, 'current-link status');
@@ -777,12 +816,12 @@ async function main() {
     const cfEnv = { SITE_BASE_URL: BASE, APP_ENV: 'development', FORM_WEBHOOK_SECRET: MOD_SECRET, RESEND_API_KEY: 'test-key', RESEND_TO: 'owner@imk.test' };
     const c3 = runChild('m3x-3', [
       { op: 'seed', files: modFixtures('pending') },
-      { op: 'cf', id: 'ok', bundle: bundlePath('cf-moderate'), method: 'GET', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=2&sig=${goodSig}&ts=${ts}` },
+      { op: 'cf', id: 'ok', bundle: bundlePath('cf-moderate'), method: 'POST', url: `/api/moderate/review?ref=rev_stale&decision=approve&revision=2&sig=${goodSig}&ts=${ts}` },
       { op: 'store', id: 's', file: 'site/data/moderation/reviews.jsonl' },
     ], {}, cfEnv);
     assertEqual(c3.byId.ok.status, 200, 'cf current-link status');
     assertEqual(c3.byId.s[0].state, 'approved', 'cf stored state');
-    return '409 re-mail + 200 approve on both trees';
+    return 'a GET decides nothing; a stale POST re-mails 409; a current POST approves on both trees';
   });
 
   // =========================================================================

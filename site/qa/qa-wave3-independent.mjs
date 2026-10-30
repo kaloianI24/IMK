@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
 import { build } from 'esbuild';
+import { handlerPath, serverPath, fwd } from './handler-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE = path.resolve(__dirname, '..');
@@ -174,15 +175,19 @@ function rmrf(target) {
 
 const API_DIR = path.join(REPO, 'api');
 const CF_DIR = path.join(SITE, 'functions');
-const API_FWD = API_DIR.replace(/\\/g, '/');
 const CF_FWD = CF_DIR.replace(/\\/g, '/');
+const SHARED_DIR = path.join(SITE, 'shared');
+// The handler modules under test. The bodies moved out of api/ in wave 13
+// (the function budget) and live in site/shared/portal-handlers/ now; the pin
+// follows the PRODUCT's route table so it cannot drift from the tree.
+const ROOTS = { apiDir: API_DIR, sharedDir: SHARED_DIR };
 
-const API_ENTRY = `export { default as auth } from '${API_FWD}/portal/auth.ts';
-export { default as invites } from '${API_FWD}/portal/invites.ts';
-export { default as projects } from '${API_FWD}/portal/projects.ts';
-export { default as testimonials } from '${API_FWD}/portal/testimonials.ts';
-export { default as moderate } from '${API_FWD}/moderate/review.ts';
-export { RateLimiter, createFileBackend, createMemoryBackend, createPortalRateLimiter, portalRateLimiter } from '${API_FWD}/lib/rate-limit.ts';
+const API_ENTRY = `export { default as auth } from '${fwd(handlerPath('portal-auth', ROOTS))}';
+export { default as invites } from '${fwd(handlerPath('portal-invites', ROOTS))}';
+export { default as projects } from '${fwd(handlerPath('portal-projects', ROOTS))}';
+export { default as testimonials } from '${fwd(handlerPath('portal-testimonials', ROOTS))}';
+export { default as moderate } from '${fwd(handlerPath('moderate', ROOTS))}';
+export { RateLimiter, createFileBackend, createMemoryBackend, createPortalRateLimiter, portalRateLimiter } from '${fwd(serverPath('rate-limit', ROOTS))}';
 `;
 
 const CF_ENTRY = `export { onRequestGet as cfProjectsGet, onRequestPost as cfProjectsPost, onRequestPatch as cfProjectsPatch } from '${CF_FWD}/api/portal/projects.ts';
@@ -1084,25 +1089,52 @@ async function main() {
   // asserted that the F-1 defect was PRESENT. The defect is fixed, so the
   // check now asserts the route table EXISTS. A regression test must assert
   // the required behaviour, not the absence of a file.
-  await t('D2', 'the route table exists: the sub-path and by-id routes have a function file in BOTH trees', async () => {
-    // Vercel serves a function at its FILE PATH, so /api/portal/auth/request-link
-    // and /api/portal/projects/<id> need their own file in BOTH trees.
+  await t('D2', 'the route table exists: the sub-path and by-id routes are SERVED in BOTH trees', async () => {
+    // WAVE 13 (the function budget): in the Vercel tree the by-id routes no
+    // longer have a file of their own -- they are route-table entries served
+    // by api/portal.ts, which dispatches to the handler module the table
+    // names. The Cloudflare tree is unchanged: one file per URL.
+    //
+    // The assertion changed SHAPE, not MEANING: the URL must be SERVED by
+    // code that exists in both trees, and "served" now means "its own file"
+    // OR "a route-table entry whose handler module exists". A URL that is
+    // served by neither is a 404 in production while the local dev server
+    // answers 200 -- the exact bug this check was written for.
     const required = [
-      ['portal', 'auth', 'request-link.ts'],
-      ['portal', 'auth', 'verify.ts'],
-      ['portal', 'auth', 'logout.ts'],
-      ['portal', 'projects', '[id].ts'],
-      ['portal', 'plan-items', '[id].ts'],
+      { segs: ['portal', 'auth', 'request-link.ts'], url: '/api/portal/auth/request-link' },
+      { segs: ['portal', 'auth', 'verify.ts'], url: '/api/portal/auth/verify' },
+      { segs: ['portal', 'auth', 'logout.ts'], url: '/api/portal/auth/logout' },
+      { segs: ['portal', 'projects', '[id].ts'], url: '/api/portal/projects/*', handler: 'portal-projects' },
+      { segs: ['portal', 'plan-items', '[id].ts'], url: '/api/portal/plan-items/*', handler: 'portal-plan-items' },
     ];
-    const trees = [
-      ['vercel', API_DIR],
-      ['cloudflare', path.join(CF_DIR, 'api')],
-    ];
+    const table = JSON.parse(
+      fs.readFileSync(path.join(SITE, 'shared', 'portal-routes.json'), 'utf8'),
+    );
     const missing = [];
-    for (const [name, dir] of trees) {
-      for (const segs of required) {
-        const file = path.join(dir, ...segs);
-        if (!fs.existsSync(file)) missing.push(`${name}: ${path.relative(REPO, file)}`);
+    for (const item of required) {
+      // --- Cloudflare: one file per URL ------------------------------------
+      const cf = path.join(CF_DIR, 'api', ...item.segs);
+      if (!fs.existsSync(cf)) missing.push(`cloudflare: ${path.relative(REPO, cf)}`);
+
+      // --- Vercel: its own file, or a route-table entry --------------------
+      const own = path.join(API_DIR, ...item.segs);
+      if (fs.existsSync(own)) continue;
+      // The by-id routes are family entries: the family entry point AND the
+      // handler module it names must both be there.
+      const family = table.families['/api/portal'];
+      const handlerName = family && family.routes[item.url];
+      if (!handlerName) {
+        missing.push(`vercel: ${path.relative(REPO, own)} (no route-table entry)`);
+        continue;
+      }
+      const handlerFile = path.join(REPO, table.handlers[handlerName] || '');
+      if (!table.handlers[handlerName] || !fs.existsSync(handlerFile)) {
+        missing.push(`vercel: the handler module behind ${item.url} is missing`);
+        continue;
+      }
+      const entryFile = path.join(REPO, family.entry);
+      if (!fs.existsSync(entryFile)) {
+        missing.push(`vercel: the family entry point is missing: ${path.relative(REPO, entryFile)}`);
       }
     }
     assertEqual(missing.length, 0, `the route table is incomplete -- missing: ${missing.join(', ')}`);

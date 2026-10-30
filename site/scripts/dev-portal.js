@@ -2,9 +2,9 @@
 //
 // Local dev server for the portal MVP.
 //
-// Serves the built static site (site/dist) AND the /api/portal/* API handlers
-// on a single origin, so the magic-link login flow can be tested end-to-end in
-// a browser against http://localhost:4321.
+// Serves the built static site (site/dist) AND the /api/* handlers on a
+// single origin, so the magic-link login flow can be tested end-to-end in a
+// browser against http://localhost:4321.
 //
 // Why: astro dev serves pages only (no /api/*), and wrangler pages dev does not
 // reliably run the Cloudflare Pages Functions under this Node/wrangler combo.
@@ -12,10 +12,21 @@
 // Usage:
 //   npm run dev:portal        (builds, then starts this server on port 4321)
 //
-// The Vercel handlers (api/portal/*.ts, standard node:http req/res) are bundled
-// together from api-index.ts with esbuild at startup and invoked directly, so
-// process.env (SITE_BASE_URL, ADMIN_EMAILS, PORTAL_MAGIC_LINK_SECRET) is
-// honoured from site/.env and all handlers share one in-memory sessions Map.
+// The Vercel handlers are bundled together from api-index.ts with esbuild at
+// startup and invoked directly, so process.env (SITE_BASE_URL, ADMIN_EMAILS,
+// PORTAL_MAGIC_LINK_SECRET) is honoured from site/.env.
+//
+// ROUTING (wave 13)
+//   The dev server used to match by PREFIX, which is exactly why three QA
+//   waves could not see the F-1 defect (a path with no function behind it
+//   answered 200 locally and 404 in production). It now serves the SAME
+//   route table the deployed target serves
+//   (site/shared/portal-routes.json): a family URL goes to its entry point
+//   (api/portal.ts, api/admin.ts), a standalone URL to its own handler.
+//
+//   The entry point is called with the ORIGINAL request URL, so the resolver
+//   inside it does the routing - the local server and production take the
+//   same code path.
 //
 // Magic links are printed to this server's stdout in dev mode (no Resend key).
 
@@ -59,7 +70,74 @@ loadEnv();
 // from the console — so the dev server opts in explicitly.
 if (!process.env.APP_ENV) process.env.APP_ENV = 'development';
 
-const PORT = Number(new URL(process.env.SITE_BASE_URL || 'http://localhost:4321').port) || 4321;
+// The port the dev server binds.
+//
+// DEV_PORT wins over everything: site/.env pins SITE_BASE_URL (and therefore
+// the port) to 4321, and that port is often taken by another instance — so a
+// second dev server could not start at all. DEV_PORT is not in .env, so the
+// environment wins over the file for it.
+const PORT = Number(process.env.DEV_PORT) || Number(new URL(process.env.SITE_BASE_URL || 'http://localhost:4321').port) || 4321;
+
+// --- The route table (ONE source of truth, shared with the deployed target) --
+const ROUTE_TABLE = JSON.parse(
+  readFileSync(join(SITE, 'shared', 'portal-routes.json'), 'utf8'),
+);
+
+// The bundle export behind a family entry point.
+const FAMILY_EXPORT = {
+  '/api/portal': 'portal',
+  '/api/admin': 'admin',
+};
+
+// The bundle export behind a standalone handler name.
+const HANDLER_EXPORT = {
+  contact: 'contact',
+  moderate: 'moderate',
+  'portal-auth': 'auth',
+};
+
+/**
+ * Does this path match a pattern of the table?
+ *
+ * An exact pattern matches exactly; a '*' pattern matches exactly ONE
+ * dynamic segment — the same shape as the platform's [id].ts route. There is
+ * no catch-all.
+ */
+function matchPattern(pathname, routes) {
+  if (Object.prototype.hasOwnProperty.call(routes, pathname)) return pathname;
+  for (const pattern of Object.keys(routes)) {
+    if (!pattern.endsWith('/*')) continue;
+    const prefix = pattern.slice(0, -2);
+    if (!pathname.startsWith(prefix + '/')) continue;
+    const rest = pathname.slice(prefix.length + 1);
+    if (!rest || rest.includes('/')) continue;
+    return pattern;
+  }
+  return null;
+}
+
+/**
+ * The bundle export that serves this path, or null.
+ *
+ * The standalone URLs come first: each of them keeps a function file of its
+ * own, exactly as on the deployed target.
+ *
+ * A path under a family prefix goes to that family's ENTRY POINT, and the
+ * entry point decides — the same way the deployed target does after the
+ * rewrite has sent the URL there. The entry point answers 404 for a path it
+ * does not know and a loud 500 for the bare prefix, so the dev server and
+ * production never disagree about which handler ran.
+ */
+function resolveHandler(pathname) {
+  const standalone = ROUTE_TABLE.standalone[pathname];
+  if (standalone) return HANDLER_EXPORT[standalone.handler] || null;
+  for (const [prefix, family] of Object.entries(ROUTE_TABLE.families)) {
+    if (pathname === prefix || pathname.startsWith(prefix + '/')) {
+      return FAMILY_EXPORT[prefix] || null;
+    }
+  }
+  return null;
+}
 
 // --- Bundle all handlers from ONE entry -> one shared sessions Map -----------
 const API_INDEX = resolve(SITE, 'scripts', 'api-index.ts');
@@ -80,36 +158,6 @@ let api;
   console.log('[dev-portal] bundled portal API handlers');
   api = require(OUT_FILE);
 })();
-
-// route -> handler name
-const ROUTES = [
-  // The moderation endpoint is routed too, so the one-click approve link
-  // works in local dev exactly as it does in production (audit m8).
-  ['/api/moderate/review', 'moderate'],
-  ['/api/portal/auth', 'auth'],
-  ['/api/portal/projects', 'projects'],
-  ['/api/portal/plan-items', 'planItems'],
-  ['/api/portal/updates', 'updates'],
-  ['/api/portal/comments', 'comments'],
-  ['/api/portal/invites', 'invites'],
-  ['/api/portal/testimonials', 'testimonials'],
-  // The server-truth role endpoint (Architect §4.2, wave-8A). The portal page
-  // asks it who the requester is; without the route in the local bundle the
-  // answer is a 404 and the UI falls back to the client view.
-  ['/api/portal/session', 'portalSession'],
-  // The owner inbox (spec/07 §7.3, T7.14). Two separate handlers, so two
-  // prefixes: the local server matches by prefix, and the deployed targets
-  // match by file path.
-  ['/api/admin/session', 'adminSession'],
-  ['/api/admin/reviews', 'adminReviews'],
-];
-
-function resolveHandler(pathname) {
-  for (const [prefix, name] of ROUTES) {
-    if (pathname === prefix || pathname.startsWith(prefix + '/')) return name;
-  }
-  return null;
-}
 
 // --- Static file serving -----------------------------------------------------
 const CT = {
@@ -148,7 +196,7 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
 
-  // --- /api/portal/* -> Vercel handlers -------------------------------------
+  // --- /api/* -> the Vercel handlers ----------------------------------------
   const name = resolveHandler(pathname);
   if (name) {
     const handler = api ? api[name] : null;
@@ -158,10 +206,12 @@ const server = createServer(async (req, res) => {
       return;
     }
     try {
+      // The ORIGINAL request URL is passed on: the entry points resolve the
+      // route themselves, exactly as they do after the platform's rewrite.
       await handler(req, res);
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error(`[dev-portal] /api/portal/${name} error:`, e);
+      console.error(`[dev-portal] ${pathname} error:`, e);
       if (!res.writableEnded) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'internal server error' }));

@@ -44,6 +44,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFile, execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
+import { handlerPath, serverPath, fwd } from './handler-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE = path.resolve(__dirname, '..');
@@ -170,15 +171,20 @@ function rmrf(target) {
 
 const API_DIR = path.join(REPO, 'api');
 const CF_DIR = path.join(SITE, 'functions');
-const API_FWD = API_DIR.replace(/\\/g, '/');
 const CF_FWD = CF_DIR.replace(/\\/g, '/');
+const SHARED_DIR = path.join(SITE, 'shared');
 
-const API_ENTRY = `export { default as auth } from '${API_FWD}/portal/auth.ts';
-export { default as invites } from '${API_FWD}/portal/invites.ts';
-export { default as projects } from '${API_FWD}/portal/projects.ts';
-export { default as planItems } from '${API_FWD}/portal/plan-items.ts';
-export { default as moderate } from '${API_FWD}/moderate/review.ts';
-export { portalRateLimiter, createFileBackend, createMemoryBackend, createPortalRateLimiter } from '${API_FWD}/lib/rate-limit.ts';
+// The handler modules under test. The bodies moved out of api/ in wave 13
+// (the function budget) and live in site/shared/portal-handlers/ now; the pin
+// follows the PRODUCT's route table so it cannot drift from the tree.
+const ROOTS = { apiDir: API_DIR, sharedDir: SHARED_DIR };
+
+const API_ENTRY = `export { default as auth } from '${fwd(handlerPath('portal-auth', ROOTS))}';
+export { default as invites } from '${fwd(handlerPath('portal-invites', ROOTS))}';
+export { default as projects } from '${fwd(handlerPath('portal-projects', ROOTS))}';
+export { default as planItems } from '${fwd(handlerPath('portal-plan-items', ROOTS))}';
+export { default as moderate } from '${fwd(handlerPath('moderate', ROOTS))}';
+export { portalRateLimiter, createFileBackend, createMemoryBackend, createPortalRateLimiter } from '${fwd(serverPath('rate-limit', ROOTS))}';
 `;
 
 const CF_ENTRY = `export { onRequestGet as cfModerateGet } from '${CF_FWD}/api/moderate/review.ts';
@@ -637,8 +643,23 @@ function handlerFor(treeDir, pattern) {
     const file = path.join(dir, `${last}.ts`);
     if (fs.existsSync(file)) return file;
     // A base prefix ('/api/portal'): the directory exists and holds routes.
+    //
+    // WAVE 13: in the Vercel tree api/portal/ holds no file of its own any
+    // more -- the sign-in URLs live in api/portal/auth/. So the rule looks
+    // ONE level down as well, which is exactly the set of files the tree
+    // held before the refactor. Without this the rule would silently stop
+    // covering '/api/portal' and the check would report a route that IS
+    // served as missing.
     if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) {
-      if (fs.readdirSync(dir).some((n) => n.endsWith('.ts'))) return dir;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      if (entries.some((e) => e.isFile() && e.name.endsWith('.ts'))) return dir;
+      if (
+        entries.some(
+          (e) => e.isDirectory() && fs.readdirSync(path.join(dir, e.name)).some((n) => n.endsWith('.ts')),
+        )
+      ) {
+        return dir;
+      }
     }
     return null;
   }
@@ -652,12 +673,67 @@ const TREES = [
   ['cloudflare', path.join(SITE, 'functions', 'api')],
 ];
 
+// THE ROUTE TABLE (wave 13, the function budget).
+//
+// In the Vercel tree a URL is no longer always served by a file of its own:
+// the portal family is ONE function (api/portal.ts) and the route table says
+// which handler serves which public URL. So "is this URL served" is now two
+// questions -- "is there a file for it" OR "does the table route it to code
+// that exists". A URL that satisfies neither is a 404 in production while the
+// local dev server answers 200: the exact bug this suite was written for.
+const ROUTE_TABLE = JSON.parse(
+  fs.readFileSync(path.join(SITE, 'shared', 'portal-routes.json'), 'utf8'),
+);
+
+/**
+ * Does the route table serve this public path, with real code behind it?
+ *
+ * A family pattern ('/api/portal/projects/*') matches exactly ONE dynamic
+ * segment -- the same shape as the platform's [id].ts route. There is no
+ * catch-all.
+ */
+function tableServes(pattern) {
+  const standalone = ROUTE_TABLE.standalone?.[pattern];
+  if (standalone) {
+    if (!fs.existsSync(path.join(REPO, standalone.entry))) return false;
+    const handlerRel = ROUTE_TABLE.handlers?.[standalone.handler];
+    if (!handlerRel) return true; // the entry file IS the handler
+    return fs.existsSync(path.join(REPO, handlerRel));
+  }
+  for (const family of Object.values(ROUTE_TABLE.families ?? {})) {
+    const routes = family.routes ?? {};
+    let matched = null;
+    if (Object.prototype.hasOwnProperty.call(routes, pattern)) {
+      matched = pattern;
+    } else {
+      for (const candidate of Object.keys(routes)) {
+        if (!candidate.endsWith('/*')) continue;
+        const base = candidate.slice(0, -2);
+        if (!pattern.startsWith(base + '/')) continue;
+        const rest = pattern.slice(base.length + 1);
+        if (!rest || rest.includes('/')) continue;
+        matched = candidate;
+        break;
+      }
+    }
+    if (!matched) continue;
+    if (!fs.existsSync(path.join(REPO, family.entry))) return false;
+    const handlerRel = ROUTE_TABLE.handlers?.[routes[matched]];
+    return !!handlerRel && fs.existsSync(path.join(REPO, handlerRel));
+  }
+  return false;
+}
+
 /** The routes a set of patterns is missing, per tree. */
 function missingRoutes(patterns) {
   const missing = [];
   for (const pattern of [...patterns.keys()].sort()) {
     for (const [tree, dir] of TREES) {
-      if (!handlerFor(dir, pattern)) {
+      // The Vercel tree may serve the URL through the route table; the
+      // Cloudflare tree always has a file of its own.
+      const served =
+        !!handlerFor(dir, pattern) || (tree === 'vercel' && tableServes(pattern));
+      if (!served) {
         missing.push(`${tree}: ${pattern} (named in ${[...patterns.get(pattern)].join(', ')})`);
       }
     }
@@ -752,29 +828,85 @@ async function main() {
         for (const s of sources) serverRoutes.get(p).add(s);
       }
     }
-    assert(serverRoutes.size >= 8, `only ${serverRoutes.size} server route(s) found -- the derivation is broken`);
+    // WAVE 13 (the function budget): the route table IS the server's route
+    // manifest now -- it names every public URL the Vercel tree serves and
+    // the handler behind it. It is part of "what the server names", so it
+    // belongs in the derivation. Without this the derivation would see only
+    // seven URLs and the check would be measuring almost nothing.
+    const TABLE_REL = 'site/shared/portal-routes.json';
+    for (const family of Object.values(ROUTE_TABLE.families ?? {})) {
+      for (const pattern of Object.keys(family.routes ?? {})) {
+        if (!serverRoutes.has(pattern)) serverRoutes.set(pattern, new Set());
+        serverRoutes.get(pattern).add(TABLE_REL);
+      }
+    }
+    for (const pattern of Object.keys(ROUTE_TABLE.standalone ?? {})) {
+      if (!serverRoutes.has(pattern)) serverRoutes.set(pattern, new Set());
+      serverRoutes.get(pattern).add(TABLE_REL);
+    }
+    assert(
+      serverRoutes.size >= 14,
+      `only ${serverRoutes.size} server route(s) found -- the derivation is broken, so this check would be vacuous: ${[...serverRoutes.keys()].join(', ')}`,
+    );
+    // The public URLs that must be in the inventory, or the check proves
+    // nothing.
+    for (const must of [
+      '/api/portal/auth/request-link',
+      '/api/portal/auth/verify',
+      '/api/portal/auth/logout',
+      '/api/portal/projects',
+      '/api/portal/projects/*',
+      '/api/portal/plan-items',
+      '/api/portal/plan-items/*',
+      '/api/portal/session',
+      '/api/portal/testimonials',
+      '/api/portal/comments',
+      '/api/portal/updates',
+      '/api/portal/invites',
+      '/api/admin/reviews',
+      '/api/admin/session',
+      '/api/contact',
+      '/api/moderate/review',
+    ]) {
+      assert(
+        serverRoutes.has(must),
+        `the server route inventory does not carry ${must} -- the derivation is broken: ${[...serverRoutes.keys()].join(', ')}`,
+      );
+    }
     const missing = missingRoutes(serverRoutes);
     assertEqual(missing.length, 0, `a server route has no function file: ${missing.join(' | ')}`);
     return `${serverRoutes.size} server routes, all served in both trees`;
   });
 
-  await t('A3', 'the five wave-4 route files exist in BOTH trees', async () => {
+  await t('A3', 'the five wave-4 route URLs are served in BOTH trees', async () => {
+    // WAVE 13 (the function budget): in the Vercel tree the two by-id routes
+    // no longer have a file of their own -- they are route-table entries
+    // served by api/portal.ts. The three sign-in URLs keep their own files
+    // (they carry a query string and are security-sensitive). The Cloudflare
+    // tree is unchanged: one file per URL.
+    //
+    // The assertion changed SHAPE, not MEANING: every one of the five URLs
+    // must be SERVED by code that exists, in both trees.
     const required = [
-      ['portal', 'auth', 'request-link.ts'],
-      ['portal', 'auth', 'verify.ts'],
-      ['portal', 'auth', 'logout.ts'],
-      ['portal', 'projects', '[id].ts'],
-      ['portal', 'plan-items', '[id].ts'],
+      { url: '/api/portal/auth/request-link', segs: ['portal', 'auth', 'request-link.ts'] },
+      { url: '/api/portal/auth/verify', segs: ['portal', 'auth', 'verify.ts'] },
+      { url: '/api/portal/auth/logout', segs: ['portal', 'auth', 'logout.ts'] },
+      { url: '/api/portal/projects/*', segs: ['portal', 'projects', '[id].ts'] },
+      { url: '/api/portal/plan-items/*', segs: ['portal', 'plan-items', '[id].ts'] },
     ];
     const missing = [];
-    for (const [tree, dir] of TREES) {
-      for (const segs of required) {
-        const file = path.join(dir, ...segs);
-        if (!fs.existsSync(file)) missing.push(`${tree}: ${path.relative(REPO, file)}`);
+    for (const item of required) {
+      // --- Cloudflare: one file per URL ------------------------------------
+      const cf = path.join(TREES[1][1], ...item.segs);
+      if (!fs.existsSync(cf)) missing.push(`cloudflare: ${path.relative(REPO, cf)}`);
+      // --- Vercel: its own file, or the route table ------------------------
+      const own = path.join(TREES[0][1], ...item.segs);
+      if (!fs.existsSync(own) && !tableServes(item.url)) {
+        missing.push(`vercel: ${path.relative(REPO, own)} (no file and no route-table entry)`);
       }
     }
     assertEqual(missing.length, 0, `the route table is incomplete: ${missing.join(', ')}`);
-    return '5 route files x 2 trees';
+    return '5 route URLs served in both trees';
   });
 
   await t('A4', 'no catch-all route file hides a missing path', async () => {
@@ -793,8 +925,20 @@ async function main() {
         if (/^\[[^\]]+\]\.ts$/.test(path.basename(file))) dynamics.push(path.relative(REPO, file));
       }
     }
-    assertEqual(dynamics.length, 4, `unexpected dynamic route files: ${dynamics.join(', ')}`);
-    return `no catch-all; ${dynamics.length} dynamic [id].ts files`;
+    // WAVE 13: the Vercel tree has NO dynamic route files any more -- the
+    // by-id URLs are route-table entries. The Cloudflare tree keeps its two.
+    assertEqual(
+      dynamics.length,
+      2,
+      `unexpected dynamic route files: ${dynamics.join(', ')} (expected the two Cloudflare [id].ts files)`,
+    );
+    for (const file of dynamics) {
+      assert(
+        file.startsWith('site' + path.sep + 'functions' + path.sep),
+        `a dynamic route file is left in the Vercel tree: ${file}`,
+      );
+    }
+    return `no catch-all; ${dynamics.length} dynamic [id].ts files (Cloudflare only)`;
   });
 
   // =====================================================================
@@ -804,13 +948,18 @@ async function main() {
   const ROUTE_SCRIPT = path.join(SITE, 'scripts', 'check-api-routes.mjs');
   const COPY_ROOT = path.join(SANDBOX, 'copy');
 
-  function copyTree() {
-    fs.mkdirSync(COPY_ROOT, { recursive: true });
-    fs.cpSync(API_DIR, path.join(COPY_ROOT, 'api'), { recursive: true });
-    fs.cpSync(path.join(SITE, 'src'), path.join(COPY_ROOT, 'site', 'src'), { recursive: true });
-    fs.cpSync(CF_DIR, path.join(COPY_ROOT, 'site', 'functions'), { recursive: true });
-    fs.mkdirSync(path.join(COPY_ROOT, 'site', 'scripts'), { recursive: true });
-    fs.copyFileSync(ROUTE_SCRIPT, path.join(COPY_ROOT, 'site', 'scripts', 'check-api-routes.mjs'));
+  function copyTree(root = COPY_ROOT) {
+    fs.mkdirSync(root, { recursive: true });
+    fs.cpSync(API_DIR, path.join(root, 'api'), { recursive: true });
+    fs.cpSync(path.join(SITE, 'src'), path.join(root, 'site', 'src'), { recursive: true });
+    fs.cpSync(CF_DIR, path.join(root, 'site', 'functions'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'site', 'scripts'), { recursive: true });
+    fs.copyFileSync(ROUTE_SCRIPT, path.join(root, 'site', 'scripts', 'check-api-routes.mjs'));
+    // WAVE 13: the route check reads the route table and the handler modules
+    // it names, and the rewrites in vercel.json. Without them the copy would
+    // fail for a reason that has nothing to do with the mutation under test.
+    fs.cpSync(SHARED_DIR, path.join(root, 'site', 'shared'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'vercel.json'), path.join(root, 'vercel.json'));
   }
 
   function runRouteScript(root) {
@@ -843,15 +992,88 @@ async function main() {
     fs.rmSync(victim);
     const res = runRouteScript(COPY_ROOT);
     assert(res.code !== 0, `the route check still passed with ${victim} deleted -- the check is vacuous`);
-    assert(
-      res.out.includes('/api/portal/auth/request-link') && res.out.includes('MISSING'),
-      `the failure did not name the missing route: ${res.out}`,
-    );
     // The real repository is untouched.
     const repoFile = path.join(API_DIR, 'portal', 'auth', 'request-link.ts');
     assert(fs.existsSync(repoFile), 'the repository lost a route file');
     assertEqual(fs.readFileSync(repoFile, 'utf8'), original, 'the repository file was modified');
-    return 'exit != 0, the missing route is named, the repo is unchanged';
+    return 'exit != 0, the repo is unchanged';
+  });
+
+  await t('B2b', 'the route check NAMES the missing route instead of crashing (wave 14, F2 FIXED)', async () => {
+    // WAVE 13 TRIPWIRE, NOW RE-PINNED (wave 14).
+    //
+    // The wave-13 version of this check asserted the CURRENT (broken)
+    // behaviour: site/scripts/check-api-routes.mjs:304 and :309 pushed a
+    // report row WITHOUT the `files` field and then `continue`, so the row
+    // the printer reads at :331 had no `files` at all --
+    //
+    //     TypeError: Cannot read properties of undefined (reading 'vercel')
+    //
+    // The check still FAILED CLOSED (exit 1), so no broken route could reach
+    // a deployment -- that part was always safe. What was lost was the
+    // DIAGNOSTIC: the owner got a Node stack trace instead of "the entry
+    // point api/portal/auth/request-link.ts is missing".
+    //
+    // It was a TRIPWIRE, and it FIRED: wave 14 (F2) fixed the script, so the
+    // old check went red. This is the re-pin to the FIXED behaviour. The
+    // check is now STRONGER than the tripwire was:
+    //
+    //   - the miss must be NAMED (the route pattern is in the output), AND
+    //   - the output must NOT be a stack trace, AND
+    //   - the gate must still fail closed (exit != 0).
+    //
+    // The non-vacuity proof is the MUTATION at the end of this check: the
+    // fix is put back in a COPY (the row is pushed without `files` again)
+    // and the same assertions must fail there. A check that cannot fail is
+    // worse than no check.
+    copyTree();
+    const victim = path.join(COPY_ROOT, 'api', 'portal', 'auth', 'request-link.ts');
+    fs.rmSync(victim);
+    const res = runRouteScript(COPY_ROOT);
+    assert(res.code !== 0, 'the route check must still fail closed when a route file is missing');
+    assert(
+      res.out.includes('/api/portal/auth/request-link'),
+      `the failure did not NAME the missing route: ${res.out}`,
+    );
+    assert(
+      !/TypeError|Cannot read properties of undefined/.test(res.out),
+      `the route check CRASHED instead of naming the miss: ${res.out}`,
+    );
+    // The repository is untouched.
+    const repoFile = path.join(API_DIR, 'portal', 'auth', 'request-link.ts');
+    assert(fs.existsSync(repoFile), 'the repository lost a route file');
+
+    // ---- the non-vacuity proof: put the defect back in a COPY --------------
+    const mutantRoot = path.join(SANDBOX, 'copy-mutant');
+    copyTree(mutantRoot);
+    const mutantScript = path.join(mutantRoot, 'site', 'scripts', 'check-api-routes.mjs');
+    const script = fs.readFileSync(mutantScript, 'utf8');
+    const ANCHOR = 'rows.push({ pattern, files, sources: [...patterns.get(pattern).sources], missingReason: reason });';
+    assert(
+      script.includes(ANCHOR),
+      'the F2 fix is not in the script any more -- re-pin this check to the ' +
+        'new shape (the anchor the mutation patches has drifted)',
+    );
+    fs.writeFileSync(
+      mutantScript,
+      script.replace(
+        ANCHOR,
+        'rows.push({ pattern, sources: [...patterns.get(pattern).sources], missingReason: reason });',
+      ),
+      'utf8',
+    );
+    fs.rmSync(path.join(mutantRoot, 'api', 'portal', 'auth', 'request-link.ts'));
+    const mutant = runRouteScript(mutantRoot);
+    assert(mutant.code !== 0, 'the mutated gate must still fail closed');
+    assert(
+      !mutant.out.includes('/api/portal/auth/request-link'),
+      `the mutated gate still named the missing route -- the re-pin does not bite: ${mutant.out}`,
+    );
+    assert(
+      /TypeError|Cannot read properties of undefined/.test(mutant.out),
+      `the mutated gate did not CRASH -- the defect this check pins is not the one the fix removed: ${mutant.out}`,
+    );
+    return 'exit != 0, the missing route is NAMED, no stack trace; the mutant crashes again';
   });
 
   await t('B3', 'the route check FAILS when a dynamic route file is missing (on a COPY)', async () => {
@@ -1030,16 +1252,24 @@ async function main() {
     return 'path -> done, query.id -> in-progress, foreign -> 403, unknown -> 404';
   });
 
-  await t('D5', 'the by-id routes are reachable on the deployed target (the route files really export a handler)', async () => {
-    // The route file is a re-export: it must expose a default handler that the
-    // platform can call. Executed through esbuild, not read.
-    const entry = `export { default as byId } from '${path
-      .join(API_DIR, 'portal', 'projects', '[id].ts')
-      .replace(/\\/g, '/')}';`;
+  await t('D5', 'the by-id routes are reachable on the deployed target (the code behind them really exports a handler)', async () => {
+    // WAVE 13: in the Vercel tree the by-id route has no file of its own --
+    // api/portal.ts dispatches to the handler module the route table names.
+    // What must export a handler is now that MODULE. The Cloudflare twin
+    // still has its own file and is checked the same way as before.
+    // Executed through esbuild, not read.
+    const entry = `export { default as byId } from '${fwd(
+      handlerPath('portal-projects', ROOTS),
+    )}';`;
     const outFile = path.join(SANDBOX, 'bundle', 'byid.cjs');
     await bundleTo(entry, outFile);
     const mod = require(outFile);
-    assertEqual(typeof mod.byId, 'function', 'the by-id route file does not export a handler');
+    assertEqual(typeof mod.byId, 'function', 'the by-id handler module does not export a handler');
+    // And the route table really routes /api/portal/projects/<id> to it.
+    assert(
+      tableServes('/api/portal/projects/*'),
+      'the route table does not serve the by-id projects route',
+    );
     const cfEntry = `export { onRequestPatch as cfById } from '${path
       .join(CF_DIR, 'api', 'portal', 'projects', '[id].ts')
       .replace(/\\/g, '/')}';`;
@@ -1047,7 +1277,7 @@ async function main() {
     await bundleTo(cfEntry, cfOut);
     const cfMod = require(cfOut);
     assertEqual(typeof cfMod.cfById, 'function', 'the CF by-id route file does not export a handler');
-    return 'both by-id route files export a callable handler';
+    return 'the by-id handler module and the CF by-id file both export a callable handler';
   });
 
   // =====================================================================
@@ -1220,12 +1450,17 @@ async function main() {
   });
 
   await t('G2', 'the copy-based vacuity proof left the repository byte-identical', async () => {
+    // WAVE 13: the two Vercel by-id route files are GONE -- they are
+    // route-table entries now. What replaced them is the route table plus
+    // the handler modules it names, so those are what must still be there.
+    // The Cloudflare tree keeps its own files.
     const files = [
       path.join(API_DIR, 'portal', 'auth', 'request-link.ts'),
       path.join(API_DIR, 'portal', 'auth', 'verify.ts'),
       path.join(API_DIR, 'portal', 'auth', 'logout.ts'),
-      path.join(API_DIR, 'portal', 'projects', '[id].ts'),
-      path.join(API_DIR, 'portal', 'plan-items', '[id].ts'),
+      path.join(SITE, 'shared', 'portal-routes.json'),
+      path.join(SITE, 'shared', 'portal-handlers', 'portal-projects.ts'),
+      path.join(SITE, 'shared', 'portal-handlers', 'portal-plan-items.ts'),
       path.join(CF_DIR, 'api', 'portal', 'auth', 'request-link.ts'),
       path.join(CF_DIR, 'api', 'portal', 'projects', '[id].ts'),
     ];

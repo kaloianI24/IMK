@@ -17,6 +17,16 @@
 //   approve/reject action is only real if /api/moderate/review accepts the
 //   link the inbox mints.
 //
+// WAVE 11 RE-PIN (2026-10-22)
+//   E14 was re-pinned: wave 10 (F-6) rewrote the Cloudflare twin of the
+//   inbox on purpose -- the JSONL read is GONE and that target answers
+//   501 {code:'unimplemented'} instead of a queue. The old check demanded a
+//   200 WITH A QUEUE from a target that cannot serve one, so it was pinning
+//   behaviour the product deliberately no longer has. E14 now pins the NEW
+//   contract (501 in both runtimes, the gate still first) and E16 proves the
+//   re-pin still bites: a JSONL read put back into the CF inbox turns E14
+//   RED.
+//
 // THE CONTRACT (spec/07 §7.3, A-9)
 //   1. a SEPARATE cookie: `imk_admin_session` (the client one is
 //      `imk_session`), so no admin capability can leak into the client path;
@@ -57,6 +67,7 @@ import * as crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
+import { handlerPath, fwd } from './handler-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SELF = fileURLToPath(import.meta.url);
@@ -592,12 +603,33 @@ async function startChild(name, bundlePath, opts = {}) {
 // ---------------------------------------------------------------------------
 // bundling (QA's own esbuild calls)
 // ---------------------------------------------------------------------------
+// The handler modules under test.
+//
+// The handler bodies moved out of api/ in wave 13 (the function budget): they
+// live in site/shared/portal-handlers/ now, and the pin follows the PRODUCT's
+// route table so it cannot drift from the tree.
+const ROOTS = { apiDir: API_DIR, sharedDir: SHARED_DIR };
 const BUNDLE_DEFS = {
-  adminSession: { dir: () => API_DIR, code: `export { default as handler } from './admin/session.ts';` },
-  adminReviews: { dir: () => API_DIR, code: `export { default as handler } from './admin/reviews.ts';` },
-  auth: { dir: () => API_DIR, code: `export { default as handler } from './portal/auth.ts';` },
-  projects: { dir: () => API_DIR, code: `export { default as handler } from './portal/projects.ts';` },
-  moderate: { dir: () => API_DIR, code: `export { default as handler } from './moderate/review.ts';` },
+  adminSession: {
+    dir: () => SHARED_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('admin-session', ROOTS))}';`,
+  },
+  adminReviews: {
+    dir: () => SHARED_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('admin-reviews', ROOTS))}';`,
+  },
+  auth: {
+    dir: () => SHARED_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('portal-auth', ROOTS))}';`,
+  },
+  projects: {
+    dir: () => SHARED_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('portal-projects', ROOTS))}';`,
+  },
+  moderate: {
+    dir: () => API_DIR,
+    code: `export { default as handler } from '${fwd(handlerPath('moderate', ROOTS))}';`,
+  },
   session: {
     dir: () => SHARED_DIR,
     code: `export { createSession, parseSession } from './server/portal-session.ts';`,
@@ -638,6 +670,12 @@ const PROJECTS_FILE = path.join(PORTAL_DIR, 'projects.jsonl');
 const REVIEWS_FILE = path.join(MODERATION_DIR, 'reviews.jsonl');
 
 const REVIEW_REF = 'inq_admin_1';
+// The identity of the seeded review record (wave 12, B-1). A revision NUMBER
+// is not an identity: the signed link must also name the exact record, or a
+// decision can land on a record the owner never saw. The seed carries one so
+// the identity path is really exercised -- a seed WITHOUT one would let the
+// suite pass while the identity code was never touched.
+const REVIEW_RECORD_ID = 'rec_qa_admin_0000000000000000000000000001';
 
 function seedFixtures() {
   fs.mkdirSync(PORTAL_DIR, { recursive: true });
@@ -694,6 +732,7 @@ function seedFixtures() {
       rating: 5,
       review: 'The admin inbox works.',
       revision: 1,
+      recordId: REVIEW_RECORD_ID,
       state: 'pending',
       clientId: 'cli_admin_qa',
       receivedAt: new Date().toISOString(),
@@ -747,12 +786,20 @@ async function signIn(authChild, email, ip = '203.0.113.9') {
   return { cookie, adminCookie, clientCookie, role: v.json && v.json.role };
 }
 
-/** QA's OWN HMAC over the moderation parameters - not the project's helper. */
-function qaSignModeration(ref, decision, revision, ts) {
-  return crypto
-    .createHmac('sha256', SECRET)
-    .update(`${ref}|${decision}|${revision}|${ts}`)
-    .digest('hex');
+/**
+ * QA's OWN HMAC over the moderation parameters - not the project's helper.
+ *
+ * The signed message is `ref|decision|revision|recordId|ts` when the link
+ * names a record (wave 12, B-1) and `ref|decision|revision|ts` when it does
+ * not (a link minted before wave 12). QA computes the shape from the LINK,
+ * so a product that changed the signed message would be caught here.
+ */
+function qaSignModeration(ref, decision, revision, ts, recordId) {
+  const message =
+    recordId === undefined || recordId === ''
+      ? `${ref}|${decision}|${revision}|${ts}`
+      : `${ref}|${decision}|${revision}|${recordId}|${ts}`;
+  return crypto.createHmac('sha256', SECRET).update(message).digest('hex');
 }
 
 // ---------------------------------------------------------------------------
@@ -963,26 +1010,36 @@ async function main() {
     const revision = approve.searchParams.get('revision');
     const ts = approve.searchParams.get('ts');
     const sig = approve.searchParams.get('sig');
+    // The identity of the record (wave 12, B-1). The seeded record carries
+    // one, so the minted link MUST name it -- otherwise the suite would be
+    // exercising the legacy revision-only shape and the identity code would
+    // never run.
+    const recordId = approve.searchParams.get('recordId') || '';
     assertEqual(ref, REVIEW_REF, 'the link points at another quote');
     assertEqual(decision, 'approve', 'the link is not an approve link');
     assert(
       approve.pathname === '/api/moderate/review',
       `the link must point at the moderation endpoint (got ${approve.pathname})`,
     );
+    assertEqual(
+      recordId,
+      REVIEW_RECORD_ID,
+      'the minted link must name the EXACT record the owner was shown',
+    );
     // QA's own HMAC over the parameters - if the inbox signed it with another
     // secret, or over another shape, this is where it shows.
-    const expected = qaSignModeration(ref, decision, revision, ts);
+    const expected = qaSignModeration(ref, decision, revision, ts, recordId);
     assertEqual(
       sig,
       expected,
-      'the link signature does not match QA\'s own HMAC over ref|decision|revision|ts',
+      'the link signature does not match QA\'s own HMAC over ref|decision|revision|recordId|ts',
     );
     // M-1 (wave-8A): the DECISION is the POST -- a GET only shows the
     // confirmation page, so a mail scanner that prefetches the owner's link
     // approves nothing. The signed parameters travel in the form body, the
     // way the confirmation page's own form sends them.
     const fields = new URLSearchParams();
-    for (const name of ['ref', 'decision', 'revision', 'ts', 'sig']) {
+    for (const name of ['ref', 'decision', 'revision', 'recordId', 'ts', 'sig']) {
       fields.set(name, approve.searchParams.get(name) || '');
     }
     const scanned = await moderate.request('GET', `${approve.pathname}${approve.search}`, {
@@ -1087,9 +1144,27 @@ async function main() {
     return 'the stale admin cookie was skipped, the client session won';
   });
 
-  await t('E14', 'the Cloudflare queue twin answers like the Vercel tree (edge runtime and with a filesystem)', async () => {
-    // A real Worker isolate has no filesystem: the store is unreachable and
-    // the endpoint must say so (501) instead of showing an empty queue.
+  await t('E14', 'the Cloudflare inbox serves NO queue on either runtime -- 501, and the gate still comes first', async () => {
+    // WAVE 10, F-6 (2026-10-22): the Cloudflare tree was rewritten ON PURPOSE.
+    // The JSONL read is GONE and the endpoint answers 501 {code:'unimplemented'}
+    // -- "a queue that cannot exist must never look like an empty one" (the
+    // owner would believe there is nothing to moderate).
+    //
+    // This check was re-pinned: it used to demand a 200 WITH A QUEUE from this
+    // target in the Node simulation of the edge tree (QA_ADMIN_EDGE_FS=1) --
+    // an answer no Worker could ever give. It is now pinned to the contract
+    // the product actually has.
+    //
+    // What must still hold:
+    //   - the GATE comes before the store: 401 for a non-owner, 500 for a
+    //     deployment without ADMIN_EMAILS or with an UNUSABLE
+    //     FORM_WEBHOOK_SECRET (H-1: a published placeholder is not a secret);
+    //   - the answer is 501 in BOTH runtimes -- the edge runtime (no
+    //     filesystem) AND the Node simulation of the edge tree, which is
+    //     exactly where the old implementation answered 200 with a queue;
+    //   - the Vercel tree still answers 200 with a REAL queue: the two
+    //     targets differ BY DESIGN, so the comparison with the Vercel tree
+    //     is the GATE, not the queue body.
     const edge = await startChild('e-cf-admin-reviews-edge', cfAdminReviewsBundle);
     try {
       const r = await edge.request('GET', '/api/admin/reviews', {
@@ -1103,11 +1178,84 @@ async function main() {
         `the CF twin with no filesystem should answer 501 {code:unimplemented} (got ${r.status}: ${r.text})`,
       );
       assertEqual(r.json.code, 'unimplemented', `the code should be unimplemented (got ${r.text})`);
+      assert(
+        !r.json.reviews && !r.json.counts,
+        `a queue that cannot exist must not look like an empty one (got ${r.text})`,
+      );
+
+      // THE GATE COMES FIRST: a non-owner is 401, not 501.
+      const denied = await edge.request('GET', '/api/admin/reviews', {
+        which: 'onRequestGet',
+        style: 'web',
+        cookie: client.clientCookie,
+      });
+      assertEqual(
+        denied.status,
+        401,
+        `the CF twin must refuse a client BEFORE it looks for the store (got ${denied.status}: ${denied.text})`,
+      );
+      assertEqual(
+        denied.json.code,
+        'unauthorized',
+        `the code should be unauthorized (got ${denied.text})`,
+      );
+
+      const anon = await edge.request('GET', '/api/admin/reviews', {
+        which: 'onRequestGet',
+        style: 'web',
+      });
+      assertEqual(
+        anon.status,
+        401,
+        `the CF twin must refuse a request with no cookie (got ${anon.status}: ${anon.text})`,
+      );
     } finally {
       await edge.stop();
     }
-    // With a filesystem (a Node simulation of the edge tree) it must answer
-    // exactly what the Vercel tree answers.
+
+    // An unset allow-list is a MISCONFIGURATION -> 500, not 501.
+    const unconfigured = await startChild('e-cf-admin-reviews-unset', cfAdminReviewsBundle, {
+      env: { ADMIN_EMAILS: '' },
+    });
+    try {
+      const r = await unconfigured.request('GET', '/api/admin/reviews', {
+        which: 'onRequestGet',
+        style: 'web',
+        cookie: owner.adminCookie,
+      });
+      assertEqual(
+        r.status,
+        500,
+        `a deployment without ADMIN_EMAILS should answer 500 {code:internal} (got ${r.status}: ${r.text})`,
+      );
+      assertEqual(r.json.code, 'internal', `the code should be internal (got ${r.text})`);
+    } finally {
+      await unconfigured.stop();
+    }
+
+    // An UNUSABLE secret -- the published placeholder -- is a
+    // MISCONFIGURATION too (H-1): 500, not 501.
+    const unusable = await startChild('e-cf-admin-reviews-placeholder', cfAdminReviewsBundle, {
+      env: { FORM_WEBHOOK_SECRET: 'your-32-byte-hex-hmac-secret-here' },
+    });
+    try {
+      const r = await unusable.request('GET', '/api/admin/reviews', {
+        which: 'onRequestGet',
+        style: 'web',
+        cookie: owner.adminCookie,
+      });
+      assertEqual(
+        r.status,
+        500,
+        `a published placeholder secret must answer 500 {code:internal} (got ${r.status}: ${r.text})`,
+      );
+      assertEqual(r.json.code, 'internal', `the code should be internal (got ${r.text})`);
+    } finally {
+      await unusable.stop();
+    }
+
+    // With a filesystem (a Node simulation of the edge tree) the answer is
+    // STILL 501: this target serves no queue, with or without a filesystem.
     const withFs = await startChild('e-cf-admin-reviews-fs', cfAdminReviewsBundle, {
       env: { QA_ADMIN_EDGE_FS: '1' },
     });
@@ -1117,29 +1265,17 @@ async function main() {
         style: 'web',
         cookie: owner.adminCookie,
       });
-      assertEqual(cf.status, 200, `the CF twin with a filesystem should be 200 (got ${cf.status}: ${cf.text})`);
-      // The queue is compared with the Vercel tree AT THIS MOMENT: an earlier
-      // check in this suite may have decided the quote, and both trees must
-      // still show exactly the same thing.
-      const vercel = await adminReviews.request('GET', '/api/admin/reviews', {
-        cookie: owner.adminCookie,
-      });
-      assertEqual(vercel.status, 200, `the Vercel tree should be 200 (got ${vercel.status}: ${vercel.text})`);
       assertEqual(
-        cf.json.counts.pendingReviews,
-        vercel.json.counts.pendingReviews,
-        `the CF twin and the Vercel tree disagree about the pending count (cf ${cf.text} / vercel ${vercel.text})`,
+        cf.status,
+        501,
+        `the CF twin with a filesystem must still answer 501 -- this target serves no queue (got ${cf.status}: ${cf.text})`,
       );
-      assertEqual(
-        (cf.json.reviews || []).length,
-        (vercel.json.reviews || []).length,
-        `the CF twin and the Vercel tree disagree about the queue length (cf ${cf.text} / vercel ${vercel.text})`,
+      assertEqual(cf.json.code, 'unimplemented', `the code should be unimplemented (got ${cf.text})`);
+      assert(
+        !cf.json.reviews && !cf.json.counts,
+        `a queue that cannot exist must not look like an empty one (got ${cf.text})`,
       );
-      assertEqual(
-        cf.json.counts.openNotes,
-        vercel.json.counts.openNotes,
-        `the CF twin and the Vercel tree disagree about the notes count`,
-      );
+
       const denied = await withFs.request('GET', '/api/admin/reviews', {
         which: 'onRequestGet',
         style: 'web',
@@ -1150,7 +1286,30 @@ async function main() {
         401,
         `the CF twin must refuse a client (got ${denied.status}: ${denied.text})`,
       );
-      return 'edge runtime 501 {code:unimplemented}; with a filesystem the same queue as the Vercel tree';
+
+      // THE COMPARISON WITH THE VERCEL TREE IS THE GATE, NOT THE QUEUE.
+      const vercel = await adminReviews.request('GET', '/api/admin/reviews', {
+        cookie: owner.adminCookie,
+      });
+      assertEqual(vercel.status, 200, `the Vercel tree should be 200 (got ${vercel.status}: ${vercel.text})`);
+      assert(
+        Array.isArray(vercel.json.reviews),
+        `the Vercel tree serves a REAL queue (got ${vercel.text})`,
+      );
+      assertEqual(
+        vercel.json.counts.openNotes,
+        null,
+        `the notes count must stay null on the Vercel tree (got ${vercel.text})`,
+      );
+      const vercelDenied = await adminReviews.request('GET', '/api/admin/reviews', {
+        cookie: client.clientCookie,
+      });
+      assertEqual(
+        vercelDenied.status,
+        401,
+        `the Vercel tree must refuse a client too (got ${vercelDenied.status}: ${vercelDenied.text})`,
+      );
+      return 'edge 501 and filesystem 501; the gate (401 / 500) comes first on both trees; the Vercel tree serves the queue';
     } finally {
       await withFs.stop();
     }
@@ -1233,7 +1392,110 @@ async function main() {
     return `mutated copy: E1=${statusOf('E1')} (the owner still gets in), E6=${statusOf('E6')} (the allow-list no longer decides)`;
   });
 
-  await t('E16', 'the repository is byte-identical after the probe', async () => {
+  await t('E16', 'MUTATION PROBE: with a JSONL read put back into the CF inbox, E14 goes RED', async () => {
+    // The re-pin of E14 is only worth something if it still BITES. The defect
+    // it pins is the one wave 10 removed on purpose (F-6): the Cloudflare
+    // inbox reading the moderation log itself and answering 200 with a
+    // queue -- an answer no Worker could ever give, and a queue that cannot
+    // exist on this target.
+    //
+    // The probe re-runs THIS file against a copy. Without the guard the
+    // nested run would probe itself, forever.
+    if (process.env.QA_ADMIN_PROBE_CHILD === '1') {
+      return 'skipped: this run IS the probe';
+    }
+    const copyRoot = path.join(WORK, 'copy-cf-inbox');
+    fs.mkdirSync(copyRoot, { recursive: true });
+    copyDir(API_DIR, path.join(copyRoot, 'api'));
+    copyDir(SHARED_DIR, path.join(copyRoot, 'site', 'shared'));
+    copyDir(CF_DIR, path.join(copyRoot, 'site', 'functions'));
+
+    // Put the defect back IN THE COPY: the Cloudflare inbox reads the
+    // moderation log again and answers 200 with a queue. The gate above it
+    // is untouched -- only the QUEUE is put back, so the mutation isolates
+    // exactly the behaviour E14 pins.
+    const cfInbox = path.join(copyRoot, 'site', 'functions', 'api', 'admin', 'reviews.ts');
+    const ANCHOR = `  return json(
+    { error: 'moderation store unavailable on this target', code: 'unimplemented' },
+    501,
+  );`;
+    const MUTATION = `  // QA MUTATION (wave 10, F-6): the JSONL read is back.
+  const edgeRequire = (globalThis as any).require;
+  const edgeFs: any = edgeRequire ? edgeRequire('node:fs') : null;
+  const reviewsFile = 'site/data/moderation/reviews.jsonl';
+  if (!edgeFs || !edgeFs.existsSync(reviewsFile)) {
+    return json(
+      { error: 'moderation store unavailable on this target', code: 'unimplemented' },
+      501,
+    );
+  }
+  const records: Array<Record<string, any>> = edgeFs
+    .readFileSync(reviewsFile, 'utf8')
+    .split(/\\r?\\n/)
+    .filter((line: string) => line.trim())
+    .map((line: string) => JSON.parse(line));
+  const pending = records.filter(
+    (r: any) => r && r.type === 'review' && r.state === 'pending',
+  );
+  return json(
+    {
+      ok: true,
+      counts: { pendingReviews: pending.length, decidedToday: 0, openNotes: null },
+      notesAvailable: false,
+      reviews: pending,
+      recent: [],
+    },
+    200,
+  );`;
+
+    const original = fs.readFileSync(cfInbox, 'utf8');
+    assert(
+      original.includes(ANCHOR),
+      'the mutation did not apply - the probe would be vacuous ' +
+        '(the CF inbox no longer has the 501 answer it is supposed to have)',
+    );
+    fs.writeFileSync(cfInbox, original.replace(ANCHOR, MUTATION), 'utf8');
+
+    const outFile = path.join(WORK, 'probe-e14-results.json');
+    let probe = null;
+    try {
+      execFileSync(
+        process.execPath,
+        [SELF, '--only', 'E9,E14', '--json', outFile],
+        {
+          env: {
+            ...process.env,
+            QA_ADMIN_PROBE_CHILD: '1',
+            QA_ADMIN_API_DIR: path.join(copyRoot, 'api'),
+            QA_ADMIN_SHARED_DIR: path.join(copyRoot, 'site', 'shared'),
+            QA_ADMIN_CF_DIR: path.join(copyRoot, 'site', 'functions'),
+          },
+          stdio: 'ignore',
+        },
+      );
+    } catch {
+      /* the probe is EXPECTED to fail - the results file is what matters */
+    }
+    assert(fs.existsSync(outFile), 'the probe produced no results file');
+    probe = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+    const statusOf = (id) => {
+      const row = (probe.results || []).find((r) => r.id === id);
+      return row ? row.status : 'MISSING';
+    };
+    assertEqual(
+      statusOf('E14'),
+      'FAIL',
+      'a CF inbox with the JSONL read back did not make E14 red - the re-pin is vacuous',
+    );
+    assertEqual(
+      statusOf('E9'),
+      'PASS',
+      'the Vercel tree control must still pass on the mutated copy',
+    );
+    return `mutated copy: E9=${statusOf('E9')} (the Vercel tree still serves the queue), E14=${statusOf('E14')} (the CF inbox with a JSONL read was caught)`;
+  });
+
+  await t('E17', 'the repository is byte-identical after the probe', async () => {
     const before = repoDigestBefore;
     const after = repoDigest();
     assert(before === after, 'the repository changed during the suite');

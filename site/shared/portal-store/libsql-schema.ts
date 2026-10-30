@@ -91,7 +91,7 @@ export const SCHEMA_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS portal_updates_project ON portal_updates(project_id)`,
 
   // The moderation revision log. `seq` is the append order (the file order),
-  // `revision` is the client's revision counter (api/portal/testimonials.ts).
+  // `revision` is the client's revision counter (site/shared/portal-handlers/portal-testimonials.ts).
   `CREATE TABLE IF NOT EXISTS moderation_reviews (
      seq        INTEGER PRIMARY KEY AUTOINCREMENT,
      ref        TEXT,

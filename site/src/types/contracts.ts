@@ -22,7 +22,7 @@ export const TIMELINE_LABELS: Record<Timeline, string> = {
 };
 
 export const MAX = {
-  name: 80, email: 254, company: 120, project: 500, bodyBytes: 8192, honeypotMs: 3000, staleMs: 4 * 60 * 60 * 1000,
+  name: 80, email: 254, company: 120, project: 500, bodyBytes: 4194304, honeypotMs: 3000, staleMs: 4 * 60 * 60 * 1000,
 } as const;
 
 // Client testimonial limits (spec RP-8.1).

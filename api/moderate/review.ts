@@ -1,13 +1,18 @@
 // api/moderate/review.ts — Vercel serverless function, /api/moderate/review
 //
 // HMAC-signed one-click approve/reject for pending reviews.
-// Called from the notification email links (api/lib/notifications.ts).
+// Called from the notification email links (site/shared/server/notifications.ts).
 //
 // Query params:
 //   ref   — review ref (e.g. inq_a1b2c3d4)
 //   decision — "approve" | "reject"
 //   revision — the revision of the quote this link was built for
-//   sig   — HMAC-SHA256(FORM_WEBHOOK_SECRET, ref|decision|revision|ts)
+//   recordId — the IDENTITY of the record this link was built for (wave 12,
+//     B-1). A revision NUMBER is not an identity: two concurrent submissions
+//     produce two records with the same (ref, revision), so the link must
+//     also name the exact record. Optional — a link minted before wave 12
+//     carries none and is scoped by the revision alone.
+//   sig   — HMAC-SHA256(FORM_WEBHOOK_SECRET, ref|decision|revision|recordId|ts)
 //   ts    — unix timestamp (seconds), links expire after 7 days
 //
 // THE METHOD IS THE POINT (audit M-1, wave-8A)
@@ -38,7 +43,7 @@ import {
   notifyReviewDecided,
   notifyReviewSubmitted,
   verifyModerationSignature,
-} from '../lib/notifications.js';
+} from '../../site/shared/server/notifications.js';
 import {
   getPortalStore,
   guardStore,
@@ -122,6 +127,74 @@ async function clientEmailFor(
   return client && client.email ? String(client.email) : undefined;
 }
 
+/**
+ * The STALE-REVISION answer (wave 10, F-2).
+ *
+ * The quote changed after the link was mailed. Approving it would publish text
+ * the owner never saw, so the decision is refused — and the owner gets a FRESH
+ * link for the current revision, so the moderation can still be finished.
+ *
+ * The same answer is used for both ways a revision can be stale:
+ *   - the record was already a newer revision when the request arrived;
+ *   - the record MOVED between the check and the write (the store refused to
+ *     flip a revision it could not verify).
+ */
+async function answerStaleRevision(
+  res: ServerResponse,
+  store: {
+    get: (
+      coll: 'clients',
+      key: { field: string; value: string },
+    ) => Promise<Record<string, any> | null>;
+  },
+  ref: string,
+  record: Record<string, any>,
+  currentRevision: number,
+  linkRevision: number,
+): Promise<void> {
+  console.log(
+    JSON.stringify({
+      ts: Date.now(),
+      ref,
+      outcome: 'review_revision_stale',
+      linkRevision,
+      currentRevision,
+      state: record.state,
+    }),
+  );
+
+  if (record.state === 'pending' && String(record.review || '').trim()) {
+    try {
+      await notifyReviewSubmitted({
+        ref: record.ref,
+        name: record.name || 'Anonymous client',
+        email: await clientEmailFor(store, String(record.clientId || '')),
+        company: record.company || '',
+        rating: record.rating || '—',
+        review: record.review || '',
+        revision: currentRevision,
+        // The fresh link names the CURRENT record (wave 12, B-1): the owner
+        // must approve the exact text that is current.
+        recordId: String(record.recordId || ''),
+        updated: true,
+      });
+    } catch {
+      console.log(JSON.stringify({ ts: Date.now(), ref, outcome: 'notify_fail' }));
+    }
+  }
+
+  json(
+    res,
+    {
+      error: 'this review was changed after the link was sent',
+      code: 'stale-revision',
+      ref,
+      revision: currentRevision,
+    },
+    409,
+  );
+}
+
 function readBodyText(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -197,7 +270,7 @@ async function handler(
     json(res, parsed.body, parsed.status);
     return;
   }
-  const { ref, decision, revision, ts, sig } = parsed.params;
+  const { ref, decision, revision, ts, sig, recordId } = parsed.params;
 
   // --- signature verification ---
   //
@@ -219,7 +292,7 @@ async function handler(
     return;
   }
 
-  if (!verifyModerationSignature(ref, decision, revision, ts, sig)) {
+  if (!verifyModerationSignature(ref, decision, revision, ts, sig, recordId)) {
     json(res, { error: 'invalid signature', code: 'signature' }, 400);
     return;
   }
@@ -259,49 +332,28 @@ async function handler(
   }
 
   const currentRevision = Number(record.revision || 0);
+  const currentRecordId = String(record.recordId || '');
 
-  if (currentRevision !== revision) {
+  // THE TWO SCOPES (wave 10 F-2, wave 12 B-1).
+  //
+  //   revision — WHICH VERSION of the quote the link is about. A client who
+  //              edited the quote after the mail went out moved it on.
+  //   identity — WHICH RECORD the link is about. A revision NUMBER is not an
+  //              identity: two concurrent submissions compute the same
+  //              revision from the same read, so two records can share
+  //              (ref, revision) — and then the number alone cannot say
+  //              which of them the owner was shown (audit MAJOR-1).
+  //
+  // Either one moving on means the link is about text that is not current:
+  // approving it would publish a quote the owner never read. The decision is
+  // refused and the owner gets a fresh link for the current record.
+  const identityStale = recordId !== undefined && recordId !== '' && recordId !== currentRecordId;
+
+  if (currentRevision !== revision || identityStale) {
     // The client changed the quote after this link was mailed. Approving it
     // would publish text the owner never saw — so refuse, and send a fresh
     // link for the current revision so the quote can still be moderated.
-    console.log(
-      JSON.stringify({
-        ts: Date.now(),
-        ref,
-        outcome: 'review_revision_stale',
-        linkRevision: revision,
-        currentRevision,
-        state: record.state,
-      }),
-    );
-
-    if (record.state === 'pending' && String(record.review || '').trim()) {
-      try {
-        await notifyReviewSubmitted({
-          ref: record.ref,
-          name: record.name || 'Anonymous client',
-          email: await clientEmailFor(store, String(record.clientId || '')),
-          company: record.company || '',
-          rating: record.rating || '—',
-          review: record.review || '',
-          revision: currentRevision,
-          updated: true,
-        });
-      } catch {
-        console.log(JSON.stringify({ ts: Date.now(), ref, outcome: 'notify_fail' }));
-      }
-    }
-
-    json(
-      res,
-      {
-        error: 'this review was changed after the link was sent',
-        code: 'stale-revision',
-        ref,
-        revision: currentRevision,
-      },
-      409,
-    );
+    await answerStaleRevision(res, store, ref, record, currentRevision, revision);
     return;
   }
 
@@ -319,6 +371,7 @@ async function handler(
         revision,
         ts,
         sig,
+        ...(recordId ? { recordId } : {}),
         ...(record.state !== 'pending'
           ? { alreadyDecided: String(record.state) }
           : {}),
@@ -341,8 +394,73 @@ async function handler(
   // flips from 'pending' to the decision, and the statement only matches a
   // record that is still pending. A decision that cannot be stored is never
   // answered with "approved" (audit wave-6, F-3).
-  const decided = await store.decideReview(ref, decidedState, now, 'one-click-link');
+  //
+  // THE REVISION SCOPE (wave 10, F-2): the store flips ONLY the revision that
+  // was verified above. If the client appended a newer revision between that
+  // read and this write, the statement matches nothing and the answer is the
+  // stale-revision one — never an approval of text the owner never saw.
+  //
+  // THE IDENTITY SCOPE (wave 12, B-1): the store flips ONLY the record the
+  // link names. The revision number alone cannot identify a record — two
+  // concurrent submissions produce two records with the same (ref, revision)
+  // — so the identity is what makes the scope unambiguous.
+  const decided = await store.decideReview(
+    ref,
+    decidedState,
+    now,
+    'one-click-link',
+    revision,
+    recordId,
+  );
   if (!decided) {
+    // Nothing was flipped. Four reasons are possible, and they are told
+    // apart by reading the record again:
+    //   - the record MOVED (a newer revision was appended): 409 stale
+    //   - the record is not the one the link names (a collision): 409 stale
+    //   - somebody else decided it in the meantime: 200, idempotent
+    //   - the store could not be written: 500 storage
+    let current: Record<string, any> | null = null;
+    try {
+      current = await store.latest('reviews', { ref, type: 'review' });
+    } catch (err) {
+      console.log(JSON.stringify(storageFailureLog(err as any)));
+      json(res, { error: 'storage unavailable', code: 'storage' }, 500);
+      return;
+    }
+
+    const currentIdentity = current ? String(current.recordId || '') : '';
+    const movedIdentity =
+      recordId !== undefined && recordId !== '' && recordId !== currentIdentity;
+
+    if (current && (Number(current.revision || 0) !== revision || movedIdentity)) {
+      console.log(
+        JSON.stringify({
+          ts: Date.now(),
+          ref,
+          outcome: 'review_revision_moved_at_write',
+          linkRevision: revision,
+          currentRevision: Number(current.revision || 0),
+          state: current.state,
+        }),
+      );
+      await answerStaleRevision(
+        res,
+        store,
+        ref,
+        current,
+        Number(current.revision || 0),
+        revision,
+      );
+      return;
+    }
+
+    if (current && current.state !== 'pending') {
+      // Somebody else decided it in the meantime: the answer is the idempotent
+      // one, never a false claim about this decision.
+      json(res, { ok: true, ref, state: current.state, decidedAt: current.decidedAt }, 200);
+      return;
+    }
+
     console.log(JSON.stringify({ ts: Date.now(), ref, outcome: 'storage_write_failed' }));
     json(res, { error: 'storage unavailable', code: 'storage' }, 500);
     return;

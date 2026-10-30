@@ -39,11 +39,29 @@ export interface ModerationParams {
   ref: string;
   decision: 'approve' | 'reject';
   revision: number;
+  /**
+   * THE IDENTITY OF THE RECORD THIS LINK IS ABOUT (wave 12, B-1).
+   *
+   * A revision NUMBER is not an identity: two concurrent submissions compute
+   * the same revision from the same read, so two records can share
+   * (ref, revision) — and a link carrying only the number then approves the
+   * wrong one (audit MAJOR-1). The identity names the exact record the owner
+   * was shown.
+   *
+   * It is OPTIONAL: a link minted before wave 12 carries no identity and is
+   * scoped by the revision number alone, so a link that is already in an
+   * inbox keeps working.
+   */
+  recordId?: string;
   /** unix timestamp, seconds */
   ts: number;
-  /** hex HMAC-SHA256 of `ref|decision|revision|ts` */
+  /** hex HMAC-SHA256 of `ref|decision|revision|recordId|ts` (or the legacy
+   *  `ref|decision|revision|ts` when the link carries no identity) */
   sig: string;
 }
+
+/** What a record identity looks like: an opaque, bounded, URL-safe token. */
+const RECORD_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type ModerationParamResult =
   | { ok: true; params: ModerationParams }
@@ -70,6 +88,7 @@ export function parseModerationParams(
   const revisionParam = get('revision');
   const sig = get('sig');
   const tsParam = get('ts');
+  const recordIdParam = get('recordId');
 
   if (!ref || !decision || !revisionParam || !sig || !tsParam) {
     return {
@@ -98,6 +117,19 @@ export function parseModerationParams(
     };
   }
 
+  // THE RECORD IDENTITY (wave 12, B-1). It is OPTIONAL — a link minted
+  // before wave 12 carries none — but when it IS there it must be a
+  // well-formed identity: it is part of the signed message, and a malformed
+  // one would only ever be a typo or an attempt at something.
+  const recordId = recordIdParam === null || recordIdParam === '' ? undefined : recordIdParam;
+  if (recordId !== undefined && !RECORD_ID_PATTERN.test(recordId)) {
+    return {
+      ok: false,
+      status: 400,
+      body: { error: 'invalid record id', code: 'validation' },
+    };
+  }
+
   const ts = Number(tsParam);
   if (!Number.isFinite(ts) || ts <= 0) {
     return {
@@ -113,7 +145,7 @@ export function parseModerationParams(
 
   return {
     ok: true,
-    params: { ref, decision, revision, ts, sig },
+    params: { ref, decision, revision, ts, sig, ...(recordId ? { recordId } : {}) },
   };
 }
 
@@ -151,8 +183,9 @@ export function escapeHtml(value: string): string {
  * would still have to press a button.
  *
  * The signed parameters travel in the form body. The signature covers
- * `ref|decision|revision|ts` and nothing else, so the same values verify
- * exactly as they did in the query string.
+ * `ref|decision|revision|recordId|ts` (and `ref|decision|revision|ts` for a
+ * link minted before wave 12, which carries no identity) and nothing else, so
+ * the same values verify exactly as they did in the query string.
  *
  * `alreadyDecided` is set when the quote has already been decided: the
  * page says so and shows no button.
@@ -165,6 +198,13 @@ export function renderConfirmationPage(options: {
   ts: number;
   /** the hex signature — travels in the form body */
   sig: string;
+  /**
+   * The identity of the record this link is about (wave 12, B-1). It travels
+   * in the form body like the other signed parameters: without it the POST
+   * would be scoped by the revision number alone, which two concurrent
+   * submissions can share.
+   */
+  recordId?: string;
   alreadyDecided?: string;
 }): string {
   const { ref, decision, revision } = options;
@@ -184,6 +224,7 @@ export function renderConfirmationPage(options: {
          <input type="hidden" name="ref" value="${escapeHtml(ref)}" />
          <input type="hidden" name="decision" value="${escapeHtml(decision)}" />
          <input type="hidden" name="revision" value="${escapeHtml(String(revision))}" />
+         ${options.recordId ? `<input type="hidden" name="recordId" value="${escapeHtml(options.recordId)}" />` : ''}
          <input type="hidden" name="ts" value="${escapeHtml(String(options.ts ?? ''))}" />
          <input type="hidden" name="sig" value="${escapeHtml(options.sig ?? '')}" />
          <button type="submit" class="btn ${decision === 'approve' ? 'btn-primary' : 'btn-secondary'}">${verb} this quote</button>

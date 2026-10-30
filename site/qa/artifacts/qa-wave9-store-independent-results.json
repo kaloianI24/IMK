@@ -1,0 +1,189 @@
+{
+  "results": [
+    {
+      "id": "A1-projects",
+      "group": "A -- no JSONL fallback",
+      "name": "GET /api/portal/projects answers from the DATABASE",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A2-plan-items",
+      "group": "A -- no JSONL fallback",
+      "name": "GET /api/portal/plan-items answers from the DATABASE",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A3-updates",
+      "group": "A -- no JSONL fallback",
+      "name": "GET /api/portal/updates answers from the DATABASE",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A4-comments",
+      "group": "A -- no JSONL fallback",
+      "name": "GET /api/portal/comments answers from the DATABASE",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A5-testimonials",
+      "group": "A -- no JSONL fallback",
+      "name": "GET /api/portal/testimonials answers from the DATABASE (the client's own quote)",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A6-auth",
+      "group": "A -- no JSONL fallback",
+      "name": "POST /api/portal/auth/request-link finds the invite in the DATABASE (the FILE invite is for another address, so a file fallback would send NO mail)",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A7-invites",
+      "group": "A -- no JSONL fallback",
+      "name": "POST /api/portal/invites writes the invite to the DATABASE",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A8-moderate",
+      "group": "A -- no JSONL fallback",
+      "name": "POST /api/moderate/review decides in the DATABASE",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "A9-admin-inbox",
+      "group": "A -- no JSONL fallback",
+      "name": "GET /api/admin/reviews (the owner's inbox) answers from the DATABASE",
+      "status": "PASS",
+      "detail": "answered from the DATABASE, 7 JSONL files byte-identical"
+    },
+    {
+      "id": "B1-publisher-database",
+      "group": "B -- the publisher",
+      "name": "the publisher publishes the quote from the DATABASE, not from the JSONL file",
+      "status": "PASS",
+      "detail": "1 published file, the database quote (exit 0)"
+    },
+    {
+      "id": "B2-publisher-unreachable",
+      "group": "B -- the publisher",
+      "name": "the publisher EXITS 1 when the store is unreachable and never publishes an empty page",
+      "status": "PASS",
+      "detail": "exit 1, the published quote survived"
+    },
+    {
+      "id": "B3-publisher-misconfigured",
+      "group": "B -- the publisher",
+      "name": "the publisher EXITS 1 when the store is MISCONFIGURED and publishes nothing",
+      "status": "PASS",
+      "detail": "exit 1, nothing published"
+    },
+    {
+      "id": "B4-publisher-file-control",
+      "group": "B -- the publisher",
+      "name": "the publisher reads the FILE store in file mode (the control for B1)",
+      "status": "PASS",
+      "detail": "1 published file, the file quote (exit 0)"
+    },
+    {
+      "id": "C1-counter-shared",
+      "group": "C -- the rate counter",
+      "name": "the SQL counter is SHARED across two separate processes",
+      "status": "PASS",
+      "detail": "process A counted 1, process B counted 2"
+    },
+    {
+      "id": "C2-counter-per-process",
+      "group": "C -- the rate counter",
+      "name": "in file mode the counter is per PROCESS (as documented)",
+      "status": "PASS",
+      "detail": "1 and 1"
+    },
+    {
+      "id": "C3-counter-in-database",
+      "group": "C -- the rate counter",
+      "name": "the counter row lives in the DATABASE, not in a file",
+      "status": "PASS",
+      "detail": "18 statement(s) against rate_counters, 0 files"
+    },
+    {
+      "id": "D1-portal-db-down",
+      "group": "D -- loud store errors",
+      "name": "a portal route with an UNREACHABLE database answers 500 {code:storage}, never an empty list",
+      "status": "PASS",
+      "detail": "500 {code:storage}, no empty list"
+    },
+    {
+      "id": "D2-portal-corrupt-file",
+      "group": "D -- loud store errors",
+      "name": "a portal route with a CORRUPT store answers 500 {code:storage}, never an empty list",
+      "status": "PASS",
+      "detail": "500 {code:storage}, no empty list"
+    },
+    {
+      "id": "D3-moderation-store-missing",
+      "group": "D -- loud store errors",
+      "name": "the moderation endpoint with NO store answers 501 {code:unimplemented} -- it never approves",
+      "status": "PASS",
+      "detail": "501 {code:unimplemented}, nothing approved"
+    },
+    {
+      "id": "D4-inbox-store-missing",
+      "group": "D -- loud store errors",
+      "name": "the owner's inbox with NO store answers 501 {code:unimplemented} -- never an empty queue",
+      "status": "PASS",
+      "detail": "501 {code:unimplemented}, no empty queue"
+    },
+    {
+      "id": "D5-inbox-db-down",
+      "group": "D -- loud store errors",
+      "name": "the owner's inbox with an UNREACHABLE database answers 501 {code:unimplemented}",
+      "status": "PASS",
+      "detail": "501 {code:unimplemented}, no empty queue"
+    },
+    {
+      "id": "MP-A",
+      "group": "M -- mutation probes",
+      "name": "the projects handler falls back to the FILE store -> A1-projects goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control A1-projects=PASS, mutant A1-projects=FAIL"
+    },
+    {
+      "id": "MP-B",
+      "group": "M -- mutation probes",
+      "name": "the publisher treats an unreachable database as an EMPTY store -> B2-publisher-unreachable goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control B2-publisher-unreachable=PASS, mutant B2-publisher-unreachable=FAIL"
+    },
+    {
+      "id": "MP-C",
+      "group": "M -- mutation probes",
+      "name": "the libsql mode uses the per-process in-memory counter -> C1-counter-shared goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control C1-counter-shared=PASS, mutant C1-counter-shared=FAIL"
+    },
+    {
+      "id": "MP-D",
+      "group": "M -- mutation probes",
+      "name": "the store guard swallows the failure instead of answering 500 {code:storage} -> D1-portal-db-down goes RED (control stays GREEN)",
+      "status": "PASS",
+      "detail": "control D1-portal-db-down=PASS, mutant D1-portal-db-down=FAIL"
+    },
+    {
+      "id": "tree-untouched",
+      "group": "Z -- housekeeping",
+      "name": "the shipped tree is byte-identical after the run",
+      "status": "PASS",
+      "detail": "api/, site/shared/, site/scripts/ and site/functions/ are byte-for-byte unchanged"
+    }
+  ],
+  "passed": 26,
+  "failed": 0,
+  "at": "2026-10-22T14:19:36.699Z"
+}

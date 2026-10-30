@@ -1,0 +1,272 @@
+IMK QA -- FULL RE-RUN, 2026-10-20
+started: 2026-10-22 07:07:34 +03:00
+repo:    C:\Users\Kalch\Documents\IXI
+node:    v20.19.5
+git HEAD: a882606
+
+========================================================================
+SUITE: qa-testimonials.mjs (API, real handlers)
+node qa\qa-testimonials.mjs --keep --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-testimonials-results.json
+========================================================================
+[qa] sandbox : C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-22T04-07-34-746Z
+[qa] endpoint: http://127.0.0.1:4399 (never 4321)
+node.exe : [qa] harness crashed: Error: Build failed with 5 errors:
+    + CategoryInfo          : NotSpecified: ([qa] harness cr... with 5 errors::String) [], RemoteException
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+exit code: 2
+
+========================================================================
+SUITE: qa-testimonials-build.mjs (real astro build)
+node qa\qa-testimonials-build.mjs --sandbox 
+========================================================================
+exit code: 2
+
+========================================================================
+SUITE: qa-backend-hardening.mjs (Backend suite, re-run)
+node qa\qa-backend-hardening.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-backend-hardening-2026-10-22T04-07-34-992Z
+[qa] harness crashed: Error: Build failed with 4 errors:
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+exit code: 1
+
+========================================================================
+SUITE: qa-wave2-independent.mjs (QA independent wave-2)
+node qa\qa-wave2-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave2-independent-results.json
+========================================================================
+[qa] SUITE ERROR Error: Build failed with 4 errors:
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+[qa] 0 passed, 1 failed, 1 checks
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave2-2026-10-22T04-07-35-122Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave2-independent-results.json
+[qa] sandbox removed
+exit code: 1
+
+========================================================================
+SUITE: qa-mutation-probe.mjs (mutation probe)
+node qa\qa-mutation-probe.mjs 
+========================================================================
+node.exe : [qa] PROBE ERROR Error: the patch anchor was not found in 
+    + CategoryInfo          : NotSpecified: ([qa] PROBE ERRO...!== revision) {:String) [], RemoteException
+[qa] 0/0 mutation probes behaved as expected
+exit code: 1
+
+========================================================================
+SUITE: qa-rate-limit.mjs (Backend: the rate limiter backends)
+node qa\qa-rate-limit.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-rate-limit-2026-10-22T04-07-35-366Z
+[qa] harness error Error: Build failed with 1 error:
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+exit code: 1
+
+========================================================================
+SUITE: qa-cf-parity.mjs (Backend: the Cloudflare tree, executed)
+node qa\qa-cf-parity.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-cf-parity-2026-10-22T04-07-35-482Z
+[qa] harness error Error: Build failed with 1 error:
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+exit code: 1
+
+========================================================================
+SUITE: qa-wave3-independent.mjs (QA independent wave-3)
+node qa\qa-wave3-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave3-independent-results.json
+========================================================================
+node.exe : [qa] suite crashed: Error: Build failed with 5 errors:
+    + CategoryInfo          : NotSpecified: ([qa] suite cras... with 5 errors::String) [], RemoteException
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+[qa] 0 passed, 1 failed, 1 checks
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave3-independent-results.json
+exit code: 1
+
+========================================================================
+SUITE: npm run check:routes (the route manifest check)
+npm run check:routes
+========================================================================
+[check-api-routes] route -> function file
+[check-api-routes]
+[check-api-routes] /api/admin/reviews                           api/admin.ts -> site/shared/portal-handlers/admin-reviews.ts site/functions/api/admin/reviews.ts
+[check-api-routes] /api/admin/session                           api/admin.ts -> site/shared/portal-handlers/admin-session.ts site/functions/api/admin/session.ts
+[check-api-routes] /api/contact                                 api/contact.ts                                 site/functions/api/contact.ts
+[check-api-routes] /api/moderate/review                         api/moderate/review.ts                         site/functions/api/moderate/review.ts
+[check-api-routes] /api/portal/auth/logout                      api/portal/auth/logout.ts                      site/functions/api/portal/auth/logout.ts
+[check-api-routes] /api/portal/auth/request-link                api/portal/auth/request-link.ts                site/functions/api/portal/auth/request-link.ts
+[check-api-routes] /api/portal/auth/verify                      api/portal/auth/verify.ts                      site/functions/api/portal/auth/verify.ts
+[check-api-routes] /api/portal/comments                         api/portal.ts -> site/shared/portal-handlers/portal-comments.ts site/functions/api/portal/comments.ts
+[check-api-routes] /api/portal/invites                          api/portal.ts -> site/shared/portal-handlers/portal-invites.ts site/functions/api/portal/invites.ts
+[check-api-routes] /api/portal/plan-items                       api/portal.ts -> site/shared/portal-handlers/portal-plan-items.ts site/functions/api/portal/plan-items.ts
+[check-api-routes] /api/portal/plan-items/*                     api/portal.ts -> site/shared/portal-handlers/portal-plan-items.ts site/functions/api/portal/plan-items/[id].ts
+[check-api-routes] /api/portal/projects                         api/portal.ts -> site/shared/portal-handlers/portal-projects.ts site/functions/api/portal/projects.ts
+[check-api-routes] /api/portal/projects/*                       api/portal.ts -> site/shared/portal-handlers/portal-projects.ts site/functions/api/portal/projects/[id].ts
+[check-api-routes] /api/portal/session                          api/portal.ts -> site/shared/portal-handlers/portal-session.ts site/functions/api/portal/session.ts
+[check-api-routes] /api/portal/testimonials                     api/portal.ts -> site/shared/portal-handlers/portal-testimonials.ts site/functions/api/portal/testimonials.ts
+[check-api-routes] /api/portal/updates                          api/portal.ts -> site/shared/portal-handlers/portal-updates.ts site/functions/api/portal/updates.ts
+[check-api-routes]
+[check-api-routes] 16 route(s), 0 missing function file(s)
+[check-api-routes] api/ holds 7 .ts file(s): api/admin.ts, api/contact.ts, api/moderate/review.ts, api/portal.ts, api/portal/auth/logout.ts, api/portal/auth/request-link.ts, api/portal/auth/verify.ts
+[check-api-routes] 11 rewrite(s) agree with the route table (2 families)
+[check-api-routes] OK: every called path has a function file (or a route-table entry point) in both trees.
+exit code: 0
+
+========================================================================
+SUITE: qa-wave4-independent.mjs (QA independent wave-4)
+node qa\qa-wave4-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave4-independent-results.json
+========================================================================
+node.exe : [qa] suite error Error: Build failed with 5 errors:
+    + CategoryInfo          : NotSpecified: ([qa] suite erro... with 5 errors::String) [], RemoteException
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+[qa] 0 passed, 1 failed, 1 checks
+[qa] results written: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave4-independent-results.json
+exit code: 1
+
+========================================================================
+SUITE: qa-wave5-independent.mjs (QA independent wave-5)
+node qa\qa-wave5-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave5-independent-results.json
+========================================================================
+[qa] A -- the session survives a per-file bundle boundary (F-2)
+node.exe : [qa] the suite itself failed: Error: Build failed with 1 error:
+    + CategoryInfo          : NotSpecified: ([qa] the suite ...d with 1 error::String) [], RemoteException
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+exit code: 2
+
+========================================================================
+SUITE: qa-admin-independent.mjs (QA independent admin inbox)
+node qa\qa-admin-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-admin-independent-results.json
+========================================================================
+[qa] E -- the /admin owner inbox gate (wave 6, T7.14)
+node.exe : [qa] the suite itself failed: Error: Build failed with 1 error:
+    + CategoryInfo          : NotSpecified: ([qa] the suite ...d with 1 error::String) [], RemoteException
+    at failureErrorWithLog (C:\Users\Kalch\Documents\IXI\site\node_modules\esbuild\lib\main.js:1748:15)
+[qa] 0 checks: 0 PASS, 0 FAIL
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-admin-2026-10-22T04-07-36-527Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-admin-independent-results.json
+exit code: 1
+
+========================================================================
+SUITE: qa-wave9-store-queue.mjs (QA independent wave-9 queue)
+node qa\qa-wave9-store-queue.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave9-store-queue-results.json
+========================================================================
+node.exe : [qa] SUITE ERROR Error: ENOENT: no such file or directory, open 
+    + CategoryInfo          : NotSpecified: ([qa] SUITE ERRO...i\lib\jsonl.ts':String) [], RemoteException
+[qa] 0 checks: 0 PASS, 1 FAIL
+exit code: 1
+
+========================================================================
+SUITE: qa-wave9-store-independent.mjs (QA independent wave-9 store)
+node qa\qa-wave9-store-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave9-store-independent-results.json
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T04-07-36-877Z-22252
+[qa] tree:    api=C:\Users\Kalch\Documents\IXI\api
+[qa] checks:  25
+  FAIL  A1-projects  GET /api/portal/projects answers from the DATABASE
+           Build failed with 1 error:
+  FAIL  A2-plan-items  GET /api/portal/plan-items answers from the DATABASE
+           Build failed with 1 error:
+  FAIL  A3-updates  GET /api/portal/updates answers from the DATABASE
+           Build failed with 1 error:
+  FAIL  A4-comments  GET /api/portal/comments answers from the DATABASE
+           Build failed with 1 error:
+  FAIL  A5-testimonials  GET /api/portal/testimonials answers from the DATABASE (the client's own quote)
+           Build failed with 1 error:
+  FAIL  A6-auth  POST /api/portal/auth/request-link finds the invite in the DATABASE (the FILE invite is for another address, so a file fallback would send NO mail)
+           Build failed with 1 error:
+  FAIL  A7-invites  POST /api/portal/invites writes the invite to the DATABASE
+           Build failed with 1 error:
+  PASS  A8-moderate  POST /api/moderate/review decides in the DATABASE -- 7 JSONL files byte-identical; the answer came from the database
+  FAIL  A9-admin-inbox  GET /api/admin/reviews (the owner's inbox) answers from the DATABASE
+           Build failed with 1 error:
+  PASS  B1-publisher-database  the publisher publishes the quote from the DATABASE, not from the JSONL file -- 1 published file, the database quote (exit 0)
+  PASS  B2-publisher-unreachable  the publisher EXITS 1 when the store is unreachable and never publishes an empty page -- exit 1, the already published quote survived
+  PASS  B3-publisher-misconfigured  the publisher EXITS 1 when the store is MISCONFIGURED and publishes nothing -- exit 1, nothing published
+  PASS  B4-publisher-file-control  the publisher reads the FILE store in file mode (the control for B1) -- 1 published file, the file quote (exit 0) -- the B1 differential is meaningful
+  FAIL  C1-counter-shared  the SQL counter is SHARED across two separate processes
+           Build failed with 1 error:
+  FAIL  C2-counter-per-process  in file mode the counter is per PROCESS (as documented)
+           Build failed with 1 error:
+  FAIL  C3-counter-in-database  the counter row lives in the DATABASE, not in a file
+           Build failed with 1 error:
+  FAIL  D1-portal-db-down  a portal route with an UNREACHABLE database answers 500 {code:storage}, never an empty list
+           Build failed with 1 error:
+  FAIL  D2-portal-corrupt-file  a portal route with a CORRUPT store answers 500 {code:storage}, never an empty list
+           Build failed with 1 error:
+  PASS  D3-moderation-store-missing  the moderation endpoint with NO store answers 501 {code:unimplemented} -- it never approves -- 501 {code:unimplemented}, nothing approved
+  FAIL  D4-inbox-store-missing  the owner's inbox with NO store answers 501 {code:unimplemented} -- never an empty queue
+           Build failed with 1 error:
+  FAIL  D5-inbox-db-down  the owner's inbox with an UNREACHABLE database answers 501 {code:unimplemented}
+           Build failed with 1 error:
+  FAIL  MP-A  the projects handler falls back to the FILE store -> A1-projects goes RED (control stays GREEN)
+           the control run against the unmodified copy did not pass (A1-projects). Its output was:
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T04-07-38-370Z-15864
+[qa] tree:    api=C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T04-07-36-877Z-22252\work\probe\MP-A-control\api
+[qa] checks:  1
+  FAIL  A1-projects  GET /api/portal/projects answers from the DATABASE
+           Build failed with 1 error:
+  PASS  tree-untouched  the shipped tree is byte-identical after the run
+[qa] 2 checks: 1 PASS, 1 FAIL
+ -- expected "PASS", got "FAIL"
+  PASS  MP-B  the publisher treats an unreachable database as an EMPTY store -> B2-publisher-unreachable goes RED (control stays GREEN) -- control B2-publisher-unreachable=PASS, mutant B2-publisher-unreachable=FAIL
+  FAIL  MP-C  the libsql mode uses the per-process in-memory counter -> C1-counter-shared goes RED (control stays GREEN)
+           the control run against the unmodified copy did not pass (C1-counter-shared). Its output was:
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T04-07-39-207Z-12192
+[qa] tree:    api=C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T04-07-36-877Z-22252\work\probe\MP-C-control\api
+[qa] checks:  1
+  FAIL  C1-counter-shared  the SQL counter is SHARED across two separate processes
+           Build failed with 1 error:
+  PASS  tree-untouched  the shipped tree is byte-identical after the run
+[qa] 2 checks: 1 PASS, 1 FAIL
+ -- expected "PASS", got "FAIL"
+  FAIL  MP-D  the store guard swallows the failure instead of answering 500 {code:storage} -> D1-portal-db-down goes RED (control stays GREEN)
+           the control run against the unmodified copy did not pass (D1-portal-db-down). Its output was:
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T04-07-39-451Z-5340
+[qa] tree:    api=C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T04-07-36-877Z-22252\work\probe\MP-D-control\api
+[qa] checks:  1
+  FAIL  D1-portal-db-down  a portal route with an UNREACHABLE database answers 500 {code:storage}, never an empty list
+           Build failed with 1 error:
+  PASS  tree-untouched  the shipped tree is byte-identical after the run
+[qa] 2 checks: 1 PASS, 1 FAIL
+ -- expected "PASS", got "FAIL"
+  PASS  tree-untouched  the shipped tree is byte-identical after the run
+[qa] 26 checks: 8 PASS, 18 FAIL
+exit code: 1
+
+========================================================================
+SUITE: qa-anchor-nonvacuity.mjs (anchor non-vacuity prover)
+node qa\qa-anchor-nonvacuity.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-anchor-nonvacuity-results.json
+========================================================================
+[qa] PROOF FAIL  P2-control  the publisher copy (unmodified) still passes N1/N2/N3
+[qa] PROOF FAIL  P2-mutant  the publisher SKIPS a malformed line -> N1/N2/N3 go RED (non-vacuity proof)
+         N1=MISSING N2=MISSING N3=MISSING   (suite exit 1)   all failing checks: SUITE
+[qa] PROOF PASS  P2-liveness  if the publisher text drifts, the P2 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  D2-control  the tree copy (unmodified) still passes B1/B1b/B2/B3/B4
+         B1=PASS B1b=PASS B2=PASS B3=PASS B4=PASS   (suite exit 0)
+[qa] PROOF PASS  D2-mutant  the store failure is unguarded again -> B4 goes RED while the control B1 stays GREEN (non-vacuity proof)
+         B1=PASS B1b=PASS B2=PASS B3=FAIL B4=FAIL   (suite exit 1)   B4 said: the handler threw instead of answering: StorageError: cannot write C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave5-2026-10-22T04-07-40-613Z\site\data\modera
+[qa] PROOF PASS  D2-liveness  if guardStore disappears, the D2 check FAILS loudly (no silent pass)
+         D2=FAIL   the D2 check said: the patch anchor was not found in C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave5-2026-10-22T04-07-41-089Z\work\copy-f3\site\shared\server\portal-store-access.ts: export async function guardStore<
+node.exe : [qa] PROOF ERROR Error: the suite produced no report (ENOENT: no such file or directory, open 
+    + CategoryInfo          : NotSpecified: ([qa] PROOF ERRO...Its output was::String) [], RemoteException
+[qa] 0 checks: 0 PASS, 1 FAIL
+[qa] SUITE ERROR Error: ENOENT: no such file or directory, open 
+[qa] 4/6 anchor proofs behaved as expected
+exit code: 1
+
+========================================================================
+SUMMARY
+========================================================================
+qa-testimonials.mjs           exit 2
+qa-testimonials-build.mjs     exit 2
+qa-backend-hardening.mjs      exit 1
+qa-wave2-independent.mjs      exit 1
+qa-mutation-probe.mjs         exit 1
+qa-rate-limit.mjs             exit 1
+qa-cf-parity.mjs              exit 1
+qa-wave3-independent.mjs      exit 1
+check:routes (npm run)        exit 0
+qa-wave4-independent.mjs      exit 1
+qa-wave5-independent.mjs      exit 2
+qa-admin-independent.mjs      exit 1
+qa-wave9-store-queue.mjs      exit 1
+qa-wave9-store-independent.mjs exit 1
+qa-anchor-nonvacuity.mjs      exit 1
+finished: 2026-10-22 07:07:41 +03:00

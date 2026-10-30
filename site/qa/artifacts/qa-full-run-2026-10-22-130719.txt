@@ -1,0 +1,655 @@
+IMK QA -- FULL RE-RUN, 2026-10-20
+started: 2026-10-22 13:07:19 +03:00
+repo:    C:\Users\Kalch\Documents\IXI
+node:    v20.19.5
+git HEAD: a882606
+
+========================================================================
+SUITE: qa-testimonials.mjs (API, real handlers)
+node qa\qa-testimonials.mjs --keep --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-testimonials-results.json
+========================================================================
+[qa] sandbox : C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-22T10-07-19-663Z
+[qa] endpoint: http://127.0.0.1:4399 (never 4321)
+[qa] server up on http://127.0.0.1:4399
+[qa] fixtures ready (sandbox only)
+  PASS  A1  POST /api/contact type=review (JSON) -> 410 review-moved
+  PASS  A2  POST /api/contact type=review (form) -> 410
+  PASS  A3  a refused review writes NOTHING (no record, no e-mail)
+  PASS  A4  control: a normal contact inquiry still works (200)
+  PASS  B1  GET without a session -> 401
+  PASS  B2  POST without a session -> 401
+  PASS  B3  GET another client's project -> 404 (no id probing)
+  PASS  B4  POST to another client's project -> 404
+  PASS  B5  POST for an unfinished project -> 409
+  PASS  B6  POST submit without consent.p1 -> 400 consent-required, nothing stored
+  PASS  B7  POST with a wrong Origin -> 403
+  PASS  B8  POST with no Origin at all -> 403
+  PASS  B9  POST as the owner (admin session) -> 403
+  PASS  B10  6th submission within the hour -> 429 rate-limit
+  PASS  B11  PATCH /api/portal/testimonials -> 405
+  PASS  B12  POST with an unknown action -> 400 validation
+  PASS  B13  POST with an out-of-range rating -> 400 fields
+  PASS  B14  POST with an empty quote -> 400 fields
+  PASS  B15  POST with a quote over 1000 chars -> 400 fields
+  PASS  B16  POST with a displayName over 80 chars -> 400 fields
+  PASS  B17  GET without projectId -> 400
+  PASS  B18  GET an unknown project -> 404
+  PASS  C1  submit -> 200, server-derived identity, client-safe view
+  PASS  C2  the owner IS notified with a signed one-click link
+  PASS  C3  spoofed body fields are ignored (verifiedClient / source / name / company / role)
+  PASS  C4  snooze -> 200, state snoozed, project marked snoozed
+  PASS  C5  owner re-requests -> GET shows no stale answer (the card returns)
+  PASS  C6  decline -> 200, state declined
+  PASS  C7  decline is final -> a second decline is 409 declined
+  PASS  C8  the client view never carries the e-mail or internal ids
+  PASS  C9  an approved quote is publishable: the owner approves it
+  PASS  D1  POST /api/portal/invites as a client -> 403
+  PASS  D2  POST /api/portal/invites without a session -> 403
+  PASS  D3  POST /api/portal/invites with a wrong Origin -> 403
+  PASS  D4  POST /api/portal/invites with an invalid e-mail -> 400
+  PASS  D5  the first sign-in creates the client record from the INVITE (not the e-mail local part)
+  PASS  D6  upsert: an omitted name is kept, a new company reaches the client record
+  PASS  D7  an over-cap company -> 400, nothing written
+  PASS  D8  an empty string clears the field on both records
+  PASS  D9  an over-cap name -> 400
+  PASS  D10  a second invite for the same e-mail does not duplicate the record
+  PASS  D11  GET /api/portal/invites -> 404 (owner-only POST endpoint)
+  PASS  E1  missing parameters -> 400
+  PASS  E2  an invalid decision -> 400
+  PASS  E3  an expired link -> 400 expired
+  PASS  E4  a timestamp far in the future -> 400 expired
+  PASS  E5  no FORM_WEBHOOK_SECRET -> 500 misconfigured (fails closed)
+  PASS  E6  a forged signature -> 400 signature
+  PASS  E7  a valid signature for an unknown ref -> 404
+  PASS  E8  a valid signature approves the record
+  PASS  E9  the one-click link is idempotent (no second decision, no new line)
+  PASS  E10  a reject decision is honoured
+  PASS  E11  M-1: a plain GET on the signed link shows the confirmation page and decides NOTHING
+  PASS  E12  M-1: the confirmation page's own form POST is what decides the quote
+  PASS  E13  M-1: a GET on an already-decided quote says so and still decides nothing
+  PASS  F1  a client who withdraws after approval produces a revoked record
+  PASS  F2  the revoked record is the newest line for the ref (later lines win)
+  PASS  F3  an anonymous quote (p2=false) is approved and stays anonymous in the store
+  PASS  G1  M1 FIXED ΓÇö no identity is stored when the client withheld naming consent (p2=false)
+  PASS  G2  M2 FIXED ΓÇö the stored record no longer carries session.email
+  PASS  G3  M3 FIXED ΓÇö one malformed line answers 500 storage instead of silently emptying the collection
+  PASS  G4  M4 FIXED ΓÇö no sign-in token is written to the log in production
+  PASS  G5  M5 FIXED ΓÇö the approve link may only approve the revision the owner was shown
+  PASS  G6  M6 FIXED ΓÇö the Cloudflare twin has a notification path
+  PASS  G7  m6 FIXED ΓÇö a malformed submission does not burn a rate-limit slot
+  PASS  G8  M3b FIXED - a malformed line in invited.jsonl answers 500 storage instead of locking a client out
+  PASS  G9  M3c FIXED - a malformed line in reviews.jsonl answers 500 storage instead of 404
+  PASS  G10  m6 FIXED ΓÇö snooze and decline are rate-limited
+  PASS  H1  P-7: an unknown e-mail gets the SAME generic answer and no sign-in token
+  PASS  H2  a magic-link token is single-use (a second verify is 400)
+  PASS  H3  the session cookie is HttpOnly + SameSite=Strict
+  PASS  H4  m4: with an http base URL the cookie carries no Secure flag
+  PASS  H5  every body-bearing response declares the correct Content-Length
+  PASS  I1  H-1: in production a secret SHORTER than 32 characters is refused (500 internal)
+  PASS  I2  H-1: in production the PUBLISHED PLACEHOLDER secret is refused as well
+  PASS  I3  H-1: CONTROL - a secret of 32+ characters IS usable in production
+  PASS  I4  H-1: in production a short SIGNING secret means no session can be minted
+  PASS  J1  no session -> 401 {code:unauthorized}
+  PASS  J2  the owner -> 200 {role:admin}
+  PASS  J3  a client -> 200 {role:client, clientId}
+  PASS  J4  another method -> 405 {code:method}
+  PASS  J5  an unset ADMIN_EMAILS -> 500 {code:internal} (a misconfiguration, not "nobody is the owner")
+  PASS  J6  the allow-list is live: an owner whose address was removed is answered "client"
+  PASS  J7  H-2: an unusable session secret is a MISCONFIGURATION (500), not a silent 401
+[qa] 102 passed, 0 failed, 102 checks
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-22T10-07-19-663Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-testimonials-results.json
+exit code: 0
+
+========================================================================
+SUITE: qa-testimonials-build.mjs (real astro build)
+node qa\qa-testimonials-build.mjs --sandbox C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-22T10-07-19-663Z
+========================================================================
+[qa] api sandbox  : C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-2026-10-22T10-07-19-663Z
+[qa] build sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-22T10-07-20-389Z
+  PASS  BUILD-1  the pre-withdrawal store builds the site (exit 0) ΓÇö 4323 ms
+  PASS  BUILD-2  the approved, named quote is rendered with the client name and the verified badge ΓÇö Alice L
+  PASS  BUILD-3  a quote with consent.p2=false is rendered WITHOUT a name and WITHOUT a badge ΓÇö anonymous quote rendered, 7 badge(s) == 7 named quote(s)
+  PASS  BUILD-4  the set of rendered quotes is exactly the publishable set ΓÇö 8 published, 9 withheld
+  PASS  BUILD-5  the empty-state copy is absent while quotes exist ΓÇö ok
+  PASS  BUILD-6  the build emits no "collection does not exist or is empty" warning ΓÇö 0 warnings
+  PASS  BUILD-7  CONTROL: the not-yet-withdrawn quote IS published before the withdrawal ΓÇö control ok
+  PASS  BUILD-8  the published frontmatter honours p1/p2 (name and verified flag) ΓÇö frontmatter honours the consent flags
+  PASS  BUILD-9  the store with the withdrawal builds the site (exit 0) ΓÇö 4310 ms | cache before: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-22T10-07-20-389Z\site\node_modules\.astro\data-store.json ΓÇö 25381 bytes, mtime 2026-10-22T10:07:23.293Z ; C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-22T10-07-20-389Z\site\.astro\data-store.json ΓÇö absent | after: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-22T10-07-20-389Z\site\node_modules\.astro\data-store.json ΓÇö 24762 bytes, mtime 2026-10-22T10:07:27.532Z ; C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-22T10-07-20-389Z\site\.astro\data-store.json ΓÇö absent
+  PASS  BUILD-10  the withdrawn quote is GONE from the fresh build (RP-6.4 / RP-6.5) ΓÇö revoked ref rev_19dddb1f799e is absent
+  PASS  BUILD-11  the set of rendered quotes after the withdrawal is exactly the publishable set ΓÇö 7 card(s)
+  PASS  BUILD-12  the published markdown files match the publishable refs ΓÇö 7 file(s)
+  PASS  BUILD-13  the build output contains no warning about the empty collection ΓÇö 0 warnings
+  PASS  BUILD-14  a site with no moderation store at all still builds (exit 0, quiet, empty state) ΓÇö 4216 ms
+[qa] 14 passed, 0 failed, 14 build checks
+[qa] build sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-22T10-07-20-389Z
+[qa] results: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-testimonials-build-2026-10-22T10-07-20-389Z\qa-build-results.json
+[qa] build sandbox removed
+exit code: 0
+
+========================================================================
+SUITE: qa-backend-hardening.mjs (Backend suite, re-run)
+node qa\qa-backend-hardening.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-backend-hardening-2026-10-22T10-07-33-544Z
+[qa] H ΓÇö data protection (audit M1/M2)
+  PASS  H1  p2=true: the store keeps the identity, so publishing still works ΓÇö name=Nora Named company=Named Ltd
+  PASS  H2  p2=false: the store keeps NO identity and NO e-mail ΓÇö name/company/role empty, no e-mail key
+  PASS  H3  p2=false: the client still sees their own name in their portal ΓÇö the client view falls back to the client record
+[qa] I ΓÇö moderation links (audit m1)
+  PASS  I1  the approve link points at SITE_BASE_URL, not the placeholder host ΓÇö http://127.0.0.1:4411/api/moderate/review?ref=rev_5b49265cc55d&aΓÇª
+[qa] J ΓÇö production configuration (audit M4)
+  PASS  J1  no RESEND_API_KEY in production answers 500 ΓÇö the same for every address ΓÇö both answered 500 internal, no token on stdout
+[qa] K ΓÇö corrupt store (audit M3)
+  PASS  K1  a corrupt store answers 500 {code:storage} on every portal read and write ΓÇö 3 endpoints answered 500 storage
+[qa] L ΓÇö fix wave 2 (audit M5/M6 + m2ΓÇôm7)
+  PASS  L1  M5: the approve link may only approve the revision it names ΓÇö stale link (revision 2) -> 409; current link -> revision 3 only
+  PASS  L1b  M-1: a plain GET on the signed link shows the confirmation page and approves NOTHING ΓÇö a GET served the page and approved nothing; the POST approved the quote
+  PASS  L2  M6: the Cloudflare twin notifies, and its module is edge-safe ΓÇö the CF tree has an edge-safe notification path
+  PASS  L3  m3: a project title is stored RAW (escaped once, at render time) ΓÇö stored: Tom & Jerry Ltd
+  PASS  L4  m4: a production instance without SITE_BASE_URL answers 500, not 403 origin ΓÇö 500 internal (misconfigured), not 403 origin
+  PASS  L5  m5: a stale admin cookie does not shadow a valid client cookie; logout clears both ΓÇö stale admin cookie skipped; both cookies cleared on logout
+  PASS  L6  m6: a malformed submission burns no slot; snooze and decline are limited ΓÇö 6 malformed posts consumed no slot; snooze limited after 10 accepted
+  PASS  L7  m7: the newest record for a project is client-scoped ΓÇö the new client sees no quote and gets a fresh ref
+  PASS  L8  m2: the publish script refuses a malformed store ΓÇö exit 1: [publish-testimonials] C:\Users\Kalch\AppData\Local\Temp\qa-backend-hardening-2026-10-22T10-07-33-54
+  PASS  L9  m2: a corrupt store is never rewritten ΓÇö the corrupt line survived; no lossy rewrite
+[qa] M ΓÇö the rate limiter (QA D7 follow-up: the counters moved behind a backend)
+  PASS  M1  the submit limit is 5 per client per hour; the 6th is 429 ΓÇö statuses=200,200,200,200,200,429
+  PASS  M2  the limit is per client: another client is unaffected ΓÇö the second client still has their full budget
+  PASS  M3  the sign-in link request is limited per IP: the 6th is 429 ΓÇö statuses=200,200,200,200,200,429
+[qa] N - the deploy route table (QA wave-3 F-1)
+  PASS  N1  the route manifest check passes: every called path has a function file in both trees ΓÇö 16 routes, both trees, api/ holds 7 files
+  PASS  N2  the route files exist in both trees and export a handler ΓÇö 5 route URLs served in both trees, 3 handlers bundled
+[qa] 21 passed, 0 failed, 21 checks
+exit code: 0
+
+========================================================================
+SUITE: qa-wave2-independent.mjs (QA independent wave-2)
+node qa\qa-wave2-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave2-independent-results.json
+========================================================================
+[qa] M -- A stale one-click link must NOT approve (audit M5)
+  PASS  M1  the owner's link for revision 1 cannot approve revision 2 -- 409 stale-revision
+  PASS  M2  the stale link approved NOTHING -- the quote is still pending -- no approved line, newest = revision 2, pending
+  PASS  M3  a stale link does not overwrite the quote text either -- text unchanged
+  PASS  M4  after the 409 the owner gets a fresh link for the CURRENT revision -- fresh link names revision 2
+  PASS  M4b  M-1: a GET on the fresh link shows the confirmation page and approves NOTHING -- the page was served, the quote stayed pending
+  PASS  M5  the fresh (current-revision) link approves exactly revision 2 -- revision 2 approved, revision 1 never approved
+  PASS  M6  tampering with the revision in a genuine link breaks the signature -- 400 signature
+  PASS  M7  a link with the revision removed is refused (not approved) -- 400 validation
+[qa] N -- the publish script refuses a malformed store (audit m2)
+  PASS  N1  a malformed line makes the publish script exit 1 -- exit 1
+  PASS  N2  the failure names the file and the line -- [publish-testimonials] C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave2-2026-10-22T10-07-34-183Z\publish\site\data\mo
+  PASS  N3  nothing is published -- no partial set of testimonials -- 0 published files
+  PASS  N4  the corrupt store is NOT rewritten (no lossy rewrite) -- corrupt line preserved
+  PASS  N5  CONTROL: with the malformed line removed the publish succeeds -- exit 0, 1 file published
+[qa] O -- a malformed submission burns no rate-limit slot (audit m6)
+  PASS  O1  four valid submissions are accepted -- 4 accepted
+  PASS  O2  an invalid submission (no consent p1) is refused with 400 -- 400 consent-required
+  PASS  O3  the invalid submission consumed NO slot -- a 5th valid one still passes -- 200 -- the slot was not consumed by the invalid request
+  PASS  O4  the 6th valid submission is rate-limited -- 429 rate-limit
+  PASS  O5  snooze has its OWN bucket -- the exhausted submit bucket does not block it -- 200
+  PASS  O6  the rate limit is PER CLIENT -- another client is unaffected -- 200 -- buckets are independent
+[qa] P -- production without SITE_BASE_URL answers 500, not 403 (audit m4)
+  PASS  P1  a production instance without SITE_BASE_URL answers 500, not 403 origin -- 500 internal
+  PASS  P2  no session cookie is issued while the instance is misconfigured -- no Set-Cookie
+  PASS  P3  CONTROL: with SITE_BASE_URL restored the same call works again -- 200
+  PASS  P4  the moderation link follows SITE_BASE_URL, not the placeholder host -- http://127.0.0.1:4421/api/moderate/review?ref=rev_e0274b04ee
+[qa] Q -- wave-2 cross-checks (m3, m5, m7)
+  PASS  Q1  m3: a project title is stored RAW (escaped once, at render time) -- stored: Tom & Jerry "Ltd" <Acme>
+  PASS  Q2  m7: a second client does not inherit the first client's quote -- 404 -- no cross-client quote
+  PASS  Q3  m5: a stale admin cookie does not shadow a valid client cookie -- client session resolved despite the stale admin cookie
+  PASS  Q4  m5: logout clears BOTH cookies -- imk_admin_session, imk_session
+[qa] R -- housekeeping
+  PASS  R1  the repo's site/data/ was never touched by this run -- repo site/data/ untouched
+  PASS  R2  every fixture landed in the sandbox -- sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave2-2026-10-22T10-07-34-183Z
+[qa] 29 passed, 0 failed, 29 checks
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave2-2026-10-22T10-07-34-183Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave2-independent-results.json
+[qa] sandbox removed
+exit code: 0
+
+========================================================================
+SUITE: qa-mutation-probe.mjs (mutation probe)
+node qa\qa-mutation-probe.mjs 
+========================================================================
+[qa] PROBE PASS P1  M5 - the stale-revision guard is removed (ALL THREE layers: the handler guard, the store revision scope and the store identity scope)
+         expected: M1, M2 must FAIL
+         actual:   M1=FAIL M2=FAIL   (24 passed / 5 failed)
+         all failing checks: M1, M2, M4, M4b, M5
+[qa] PROBE PASS P2  m2 - the publish script skips a malformed line instead of failing
+         expected: N1, N2, N3 must FAIL
+         actual:   N1=FAIL N2=FAIL N3=FAIL   (26 passed / 3 failed)
+         all failing checks: N1, N2, N3
+[qa] PROBE PASS P3  m6 - the rate-limit slot is consumed before validation
+         expected: O3 must FAIL
+         actual:   O3=FAIL   (26 passed / 3 failed)
+         all failing checks: O1, O3, O6
+[qa] PROBE PASS P4  the rate limiter never blocks
+         expected: O4 must FAIL
+         actual:   O4=FAIL   (28 passed / 1 failed)
+         all failing checks: O4
+[qa] PROBE PASS P5  M-1 - the confirmation page is gone and a GET decides again
+         expected: M4b must FAIL
+         actual:   M4b=FAIL   (27 passed / 2 failed)
+         all failing checks: M4b, M5
+[qa] 5/5 mutation probes behaved as expected
+exit code: 0
+
+========================================================================
+SUITE: qa-rate-limit.mjs (Backend: the rate limiter backends)
+node qa\qa-rate-limit.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-rate-limit-2026-10-22T10-07-37-593Z
+[qa] R ΓÇö the limiter contract
+  PASS  R1  the in-memory backend counts hits and blocks past the limit ΓÇö ok:1 ok:2 ok:3 blocked:4
+  PASS  R2  the file backend is durable: a restart does not hand out free slots ΓÇö count=3, blocked after restart
+  PASS  R3  the file backend writes no client id and no IP address to disk ΓÇö keys are sha256 digests
+  PASS  R4  two limiters over the same file share one counter ΓÇö count=3
+  PASS  R5  a broken backend degrades to the in-memory fallback and never throws ΓÇö limit still enforced, degraded=true
+  PASS  R6  the edge KV backend is durable across a cold start and stores no raw key ΓÇö count=3, kv keys hashed
+  PASS  R7  the edge portal limiter uses KV when the binding exists, memory when it does not ΓÇö KV path and memory path both enforce the limit
+  PASS  R8  the node portal limiter is file-backed when a path is given, memory otherwise ΓÇö file backend chosen and durable
+[qa] 8 passed, 0 failed, 8 checks
+[qa] sandbox removed
+exit code: 0
+
+========================================================================
+SUITE: qa-cf-parity.mjs (Backend: the Cloudflare tree, executed)
+node qa\qa-cf-parity.mjs 
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\qa-cf-parity-2026-10-22T10-07-37-763Z
+[qa] C ΓÇö the Cloudflare tree, executed
+  PASS  C1  the Cloudflare portal endpoints answer 501 on the edge ΓÇö every portal read/write path answers 501 {code:unimplemented}
+  PASS  C2  the 501 is the missing store, not a broken handler ΓÇö runs, reaches the auth check (401) once a store exists
+  PASS  C3  the Cloudflare sign-in limiter is KV-backed and survives a cold start ΓÇö statuses=501,501,501,501,501,429, kv keys=1
+  PASS  C4  the Cloudflare moderation endpoint accepts a Vercel-signed link and rejects a forged one ΓÇö vercel link accepted by the POST, prefetched GET decides nothing, forged link rejected
+  PASS  C6  the Cloudflare session endpoint answers the same codes as the Vercel tree ΓÇö owner 200, client 200, no cookie 401, wrong method 405, unset allow-list 500, short secret 500
+  PASS  C5  a corrupt Cloudflare moderation store answers 500 storage, never "review not found" ΓÇö unreachable store -> 501, corrupt store -> 500 storage
+[qa] D ΓÇö the moderation link contract, across both targets
+  PASS  D1  a Cloudflare-signed link verifies with the Vercel verifier ΓÇö sig=bcaa7d0edf69ΓÇª
+  PASS  D2  a Vercel-signed link verifies with the Cloudflare verifier ΓÇö sig=1bdb33bf8251ΓÇª
+  PASS  D3  both trees build the same link shape, from SITE_BASE_URL ΓÇö params=decision,ref,revision,sig,ts
+  PASS  D4  the Cloudflare notification mail carries the revision and a link that verifies ΓÇö revision carried and link verifies
+  PASS  D5  a link signed for revision 1 does not verify for revision 2 ΓÇö revision and decision are both covered by the signature
+[qa] 11 passed, 0 failed, 11 checks
+[qa] sandbox removed
+exit code: 0
+
+========================================================================
+SUITE: qa-wave3-independent.mjs (QA independent wave-3)
+node qa\qa-wave3-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave3-independent-results.json
+========================================================================
+[qa] A -- the pluggable limiter through the REAL handlers (durable file backend)
+  PASS  A1  the durable counter file is really the backend in play -- counter file: rate-counters.json (227 bytes)
+  PASS  A2  an invalid submission burns NO slot in the NEW code path -- no submit bucket yet (2 bucket(s) in the file)
+  PASS  A3  five valid submissions are allowed and the sixth is refused -- statuses=200,200,200,200,200,429
+  PASS  A4  the counter file counts the valid requests and not the refused one -- submit bucket count=6 of 7 requests (1 refused by validation)
+  PASS  A5  no client id, email or IP address reaches the counter file -- all bucket keys are sha256 digests (3 keys)
+  PASS  A6  the edge KV backend stores no raw key either -- kv keys: portal:c22db0284eb367261a5817173dc93d13d025906eea0d5268877045392e124049, portal:c22db0284eb367261a5817173dc93d13d025906eea0d5268877045392e124049, portal:e43051e75103a7fdd6114f31f505d1c8d1e6151b250d102bd85a9510c43368ec, portal:e43051e75103a7fdd6114f31f505d1c8d1e6151b250d102bd85a9510c43368ec
+  PASS  A7  a backend that throws degrades instead of failing the request -- degraded=true, the request still proceeded
+  PASS  A8  a durable backend that cannot write degrades at the HANDLER level -- status=200 (no 500, the request was served)
+[qa] B -- the Cloudflare tree, executed in a Web-standard runtime
+  PASS  B1  every Cloudflare portal endpoint refuses to answer 200 -- GET /api/portal/projects -> 501 unimplemented | GET /api/portal/projects/proj_1 -> 501 unimplemented | POST /api/portal/projects -> 403 forbidden | PATCH /api/portal/projects/proj_1 -> 403 forbidden | GET /api/portal/testimonials?projectId=proj_1 -> 501 unimplemented | POST /api/portal/testimonials -> 501 unimplemented | GET /api/portal/comments?projectId=proj_1 -> 501 unimplemented | POST /api/portal/comments -> 501 unimplemented | GET /api/portal/plan-items?projectId=proj_1 -> 501 unimplemented | POST /api/portal/plan-items -> 403 forbidden | PATCH /api/portal/plan-items/pi_1 -> 403 forbidden | GET /api/portal/updates?projectId=proj_1 -> 501 unimplemented | POST /api/portal/updates -> 501 unimplemented | POST /api/portal/invites -> 403 forbidden | POST /api/portal/auth/request-link -> 400 validation | GET /api/portal/auth/verify?token=abc -> 500 internal
+  PASS  B2  the Cloudflare moderation endpoint accepts a Vercel-signed link -- the Vercel-signed link was accepted and the record was approved
+  PASS  B2b  M-1: a GET on the Cloudflare moderation link decides NOTHING -- the GET left the quote pending; the POST approved it
+  PASS  B3  the Cloudflare moderation endpoint rejects a forged link -- status=400 code=signature (the POST is refused too)
+  PASS  B4  a link for a superseded revision approves nothing on Cloudflare -- status=409 code=stale-revision
+  PASS  B5  a malformed moderation store must NOT read as "review not found" on Cloudflare -- status=500 code=storage
+  PASS  B6  the Vercel tree answers 500 storage for the SAME malformed store -- status=500 code=storage
+[qa] C -- the durable counter file under the production topology
+  PASS  C1  CONTROL: one process writing the counter file loses nothing -- 25/25 buckets kept by one writer
+  PASS  C2  two serverless functions writing the SAME counter file do not lose counts -- 4 concurrent write rounds, no lost bucket
+[qa] D -- the route table of the launch target (static analysis)
+  PASS  D1  the bare auth path has no route (404) while the sub-path answers -- bare path -> 404 (not-found), sub-path -> 200
+  PASS  D2  the route table exists: the sub-path and by-id routes are SERVED in BOTH trees -- 5 route files in each tree, no catch-all, the deploy root is declared
+  PASS  D3  the front-end calls the auth sub-paths that the route table lacks -- front-end calls: /api/portal/auth/request-link, /api/portal/auth/verify
+[qa] E -- housekeeping
+  PASS  E1  the repository site/data was never touched by this run -- repo site/data/ untouched
+[qa] 21 passed, 0 failed, 21 checks
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave3-independent-results.json
+exit code: 0
+
+========================================================================
+SUITE: npm run check:routes (the route manifest check)
+npm run check:routes
+========================================================================
+[check-api-routes] route -> function file
+[check-api-routes]
+[check-api-routes] /api/admin/reviews                           api/admin.ts -> site/shared/portal-handlers/admin-reviews.ts site/functions/api/admin/reviews.ts
+[check-api-routes] /api/admin/session                           api/admin.ts -> site/shared/portal-handlers/admin-session.ts site/functions/api/admin/session.ts
+[check-api-routes] /api/contact                                 api/contact.ts                                 site/functions/api/contact.ts
+[check-api-routes] /api/moderate/review                         api/moderate/review.ts                         site/functions/api/moderate/review.ts
+[check-api-routes] /api/portal/auth/logout                      api/portal/auth/logout.ts                      site/functions/api/portal/auth/logout.ts
+[check-api-routes] /api/portal/auth/request-link                api/portal/auth/request-link.ts                site/functions/api/portal/auth/request-link.ts
+[check-api-routes] /api/portal/auth/verify                      api/portal/auth/verify.ts                      site/functions/api/portal/auth/verify.ts
+[check-api-routes] /api/portal/comments                         api/portal.ts -> site/shared/portal-handlers/portal-comments.ts site/functions/api/portal/comments.ts
+[check-api-routes] /api/portal/invites                          api/portal.ts -> site/shared/portal-handlers/portal-invites.ts site/functions/api/portal/invites.ts
+[check-api-routes] /api/portal/plan-items                       api/portal.ts -> site/shared/portal-handlers/portal-plan-items.ts site/functions/api/portal/plan-items.ts
+[check-api-routes] /api/portal/plan-items/*                     api/portal.ts -> site/shared/portal-handlers/portal-plan-items.ts site/functions/api/portal/plan-items/[id].ts
+[check-api-routes] /api/portal/projects                         api/portal.ts -> site/shared/portal-handlers/portal-projects.ts site/functions/api/portal/projects.ts
+[check-api-routes] /api/portal/projects/*                       api/portal.ts -> site/shared/portal-handlers/portal-projects.ts site/functions/api/portal/projects/[id].ts
+[check-api-routes] /api/portal/session                          api/portal.ts -> site/shared/portal-handlers/portal-session.ts site/functions/api/portal/session.ts
+[check-api-routes] /api/portal/testimonials                     api/portal.ts -> site/shared/portal-handlers/portal-testimonials.ts site/functions/api/portal/testimonials.ts
+[check-api-routes] /api/portal/updates                          api/portal.ts -> site/shared/portal-handlers/portal-updates.ts site/functions/api/portal/updates.ts
+[check-api-routes]
+[check-api-routes] 16 route(s), 0 missing function file(s)
+[check-api-routes] api/ holds 7 .ts file(s): api/admin.ts, api/contact.ts, api/moderate/review.ts, api/portal.ts, api/portal/auth/logout.ts, api/portal/auth/request-link.ts, api/portal/auth/verify.ts
+[check-api-routes] 11 rewrite(s) agree with the route table (2 families)
+[check-api-routes] every route of the table is served by its entry point's HANDLERS map
+[check-api-routes] OK: every called path has a function file (or a route-table entry point) in both trees.
+exit code: 0
+
+========================================================================
+SUITE: qa-wave4-independent.mjs (QA independent wave-4)
+node qa\qa-wave4-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave4-independent-results.json
+========================================================================
+[qa] A -- the route table, derived by QA from the sources
+  PASS  A1  every /api URL the front-end calls has a function file in BOTH trees -- 18 client routes, all served in both trees
+  PASS  A2  every /api path the server names has a function file in BOTH trees -- 19 server routes, all served in both trees
+  PASS  A3  the five wave-4 route URLs are served in BOTH trees -- 5 route URLs served in both trees
+  PASS  A4  no catch-all route file hides a missing path -- no catch-all; 2 dynamic [id].ts files (Cloudflare only)
+[qa] B -- the route manifest check is not vacuous
+  PASS  B1  CONTROL: the route check passes on the current tree -- exit 0 on the untouched copy
+  PASS  B2  the route check FAILS when a static route file is missing (on a COPY) -- exit != 0, the repo is unchanged
+  PASS  B2b  the route check NAMES the missing route instead of crashing (wave 14, F2 FIXED) -- exit != 0, the missing route is NAMED, no stack trace; the mutant crashes again
+  PASS  B3  the route check FAILS when a dynamic route file is missing (on a COPY) -- exit != 0, the dynamic route is named
+[qa] C -- the CI static invariant check (F-2)
+  PASS  C1  every `test -f <path>` in the workflow resolves against its job working-directory -- 3 path assertions, all exist (2 outside site/): build:../api/contact.ts, build:functions/api/contact.ts, build:../vercel.json
+  PASS  C2  the new CI steps call npm scripts that exist -- check:routes and typecheck:api exist and are wired into CI
+  PASS  C3  the api/ tree is outside the CI working-directory and the paths say so -- working-directory: site, ../api/contact.ts and functions/api/contact.ts both exist
+[qa] D -- the by-id handlers (F-1)
+  PASS  D1  the owner edits a project with the id in the PATH -- status -> in-progress
+  PASS  D2  the owner edits a project with the id in req.query.id -- status -> completed
+  PASS  D3  a foreign project id is still refused -- GET foreign -> 403, PATCH foreign -> 403, unknown id -> 404
+  PASS  D4  a plan item is edited with the id in the PATH and in req.query.id -- path -> done, query.id -> in-progress, foreign -> 403, unknown -> 404
+  PASS  D5  the by-id routes are reachable on the deployed target (the code behind them really exports a handler) -- the by-id handler module and the CF by-id file both export a callable handler
+[qa] E -- the wave-3 regressions, kept (D-1 and D-2)
+  PASS  E1  a corrupt moderation store on Cloudflare answers 500 storage, not 404 -- 500 {code:storage}
+  PASS  E2  the same corrupt store answers 500 storage on the Vercel tree -- 500 {code:storage}
+  PASS  E3  a busy lock must not escape as a raw platform error (the limiter would degrade for good) -- busy lock -> undefined: rate-limit: could not take the counter lock
+  PASS  E4  N writers into the same counter file lose no counts -- 8 rounds x 4 writers x 40 keys, nothing lost
+[qa] F -- the Cloudflare moderation endpoint on a runtime without a filesystem
+  PASS  F1  no filesystem -> 501 unimplemented (not 404, not 200) -- 501 {code:unimplemented}
+  PASS  F2  a forged link is refused before the store is touched -- 400 {code:signature}
+[qa] G -- housekeeping
+  PASS  G1  the repository site/data was never touched by this run -- repo site/data/ untouched
+  PASS  G2  the copy-based vacuity proof left the repository byte-identical -- 8 route files present
+[qa] 24 passed, 0 failed, 24 checks
+[qa] results written: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave4-independent-results.json
+exit code: 0
+
+========================================================================
+SUITE: qa-wave5-independent.mjs (QA independent wave-5)
+node qa\qa-wave5-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave5-independent-results.json
+========================================================================
+[qa] A -- the session survives a per-file bundle boundary (F-2)
+  PASS  A1  CONTROL: inside ONE bundle/process the session is accepted -- one bundle: request-link 200, verify 200, projects 200
+  PASS  A2  a session minted by one bundle is accepted by ANOTHER bundle (Vercel) -- role=admin, cross-bundle projects -> 200
+  PASS  A3  the same cookie is accepted by a THIRD, freshly started process -- a client session minted in one process is accepted in another
+  PASS  A4  a client session carries its clientId and the projects are filtered by it -- 1 of 2 projects visible; the foreign one is filtered out
+  PASS  A5  a FORGED cookie is refused by every bundle -- 401 {code:unauthorized} for both cookie names
+  PASS  A6  in production without a signing secret NO session can be minted -- createSession -> null, request-link -> 500 {code:internal}, no cookie
+  PASS  A7  a token signed with another secret is refused; the right secret still works -- v1.<payload>.<sig>; another secret -> null, the right secret -> the session
+  PASS  A8  the shared session module is edge-safe and BOTH trees re-export it -- no node: imports; both trees re-export site/shared/server/portal-session.ts
+[qa] B -- writeReviews fails closed (F-3)
+  PASS  B1  CONTROL: a valid moderation link approves and the store is updated -- approved and written to reviews.jsonl
+  PASS  B1b  M-1: a GET on the signed link shows the confirmation page and decides NOTHING -- the GET served the page and approved nothing; the POST approved the quote
+  PASS  B2  a MISSING store answers 501, never 404 "review not found" -- 501 {code:'unimplemented'}
+  PASS  B3  a CORRUPT store answers 500 {code:storage} with no stack trace -- 500 {code:'storage'}, the store is untouched
+  PASS  B4  an UNWRITABLE store answers 500 {code:storage} and approves NOTHING -- 500 {code:storage}, no throw, the record is still pending
+  PASS  B5  the Cloudflare twin with NO filesystem answers 501 (the real edge runtime) -- 501 {code:unimplemented} with no filesystem
+  PASS  B6  the Cloudflare twin answers the SAME codes as the Vercel tree (tree parity) -- missing -> 501, corrupt -> 500 (the same codes as the Vercel tree)
+[qa] C -- the durable counter survives a lock race (F-4)
+  PASS  C1  CONTROL: one process, N keys -> N buckets with the exact counts -- 10 buckets, all count 1
+  PASS  C2  4 concurrent writer processes x 10 keys x 4 rounds -> nothing is lost -- 4 writers x 10 keys x 4 rounds -> every bucket holds exactly 16
+  PASS  C3  a lock file that EXISTS (EEXIST) is waited out, not treated as broken -- the writer waited for the lock and the durable counter was used
+  PASS  C4  a DELETE-PENDING lock (EPERM) is waited out and the counter is NOT abandoned -- busy code EPERM (delete-pending) waited out; the durable counter still holds both hits
+  PASS  C5  a genuinely broken backend degrades instead of failing the request -- degraded:true, one log line with a code: {"ts":1792663673747,"outcome":"rate_limit_degraded","backend":"durable","code":"EEXIST","reason":"the durable counter is
+  PASS  C6  the durable counter holds no client id and no IP -- 2 buckets, every key a 64-hex SHA-256
+  PASS  C7  the edge twin degrades the same way (a throwing KV) -- degraded:true, one log line: {"ts":1792663673813,"outcome":"rate_limit_degraded","backend":"kv","code":"ECONNREFUSED","reason":"the durable counter i
+[qa] D -- mutation probes -- the checks are not vacuous
+  PASS  D1  F-2 reverted (a Map session) -> the cross-bundle check goes RED -- mutated copy: A1=PASS (one bundle still works), A2=FAIL (cross-bundle is broken again)
+  PASS  D2  F-3 reverted (an unguarded store failure) -> the unwritable-store check goes RED -- mutated copy: B4=FAIL (the handler throws out of the store failure again)
+  PASS  D3  F-4 reverted (only EEXIST is busy) -> the delete-pending check goes RED -- mutated copy: C3=PASS (a merely busy lock is still fine), C4=FAIL (EPERM latches the backend again)
+  PASS  D4  the repository is byte-identical after the probes -- the api/, site/shared/ and site/functions/ trees are byte-for-byte unchanged
+[qa] 26 checks: 26 PASS, 0 FAIL
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave5-2026-10-22T10-07-50-208Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave5-independent-results.json
+exit code: 0
+
+========================================================================
+SUITE: qa-admin-independent.mjs (QA independent admin inbox)
+node qa\qa-admin-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-admin-independent-results.json
+========================================================================
+[qa] E -- the /admin owner inbox gate (wave 6, T7.14)
+  PASS  E1  CONTROL: the owner signs in through the real flow and is the owner -- owner owner@imk.test -> 200 {"ok":true,"role":"admin","email":"owner@imk.test"}
+  PASS  E2  no cookie at all -> 401 {code:unauthorized} -- 401 {"error":"unauthorized","code":"unauthorized"}
+  PASS  E3  a CLIENT session cannot satisfy the admin gate -> 401 -- 401 {"error":"unauthorized","code":"unauthorized"}
+  PASS  E4  a forged admin cookie -> 401 -- 401 {"error":"unauthorized","code":"unauthorized"}
+  PASS  E5  a CLIENT-role token presented under the ADMIN cookie name -> 401 -- the ROLE is checked, not the cookie name -> 401
+  PASS  E6  an admin-role token for an email that is NOT on the allow-list -> 401 -- 401 {"error":"unauthorized","code":"unauthorized"}
+  PASS  E7  the allow-list is read on EVERY request: the same token stops working at once -- the token is still valid, the allow-list is not -> 401
+  PASS  E8  an unset ADMIN_EMAILS is a MISCONFIGURATION -> 500, not "everybody is the owner" -- 500 {"error":"misconfigured","code":"internal"}
+  PASS  E9  GET /api/admin/reviews: a non-owner is 401, the owner sees the queue -- pending=1, openNotes=null
+  PASS  E10  the approve link the inbox mints is HMAC-valid and /api/moderate/review accepts it -- sig verified independently; the GET approved nothing, the POST made the quote approved
+  PASS  E11  the Cloudflare twin answers the SAME gate codes as the Vercel tree -- owner 200, client 401, no cookie 401 - same as the Vercel tree
+  PASS  E12  a client session cannot use the owner-only client route -> 403 {code:forbidden} -- 403 {"error":"forbidden","code":"forbidden"}
+  PASS  E13  a STALE admin cookie does not shadow a valid client cookie -- the stale admin cookie was skipped, the client session won
+  PASS  E14  the Cloudflare inbox serves NO queue on either runtime -- 501, and the gate still comes first -- edge 501 and filesystem 501; the gate (401 / 500) comes first on both trees; the Vercel tree serves the queue
+  PASS  E15  MUTATION PROBE: with the allow-list check removed, E6 goes RED -- mutated copy: E1=PASS (the owner still gets in), E6=FAIL (the allow-list no longer decides)
+  PASS  E16  MUTATION PROBE: with a JSONL read put back into the CF inbox, E14 goes RED -- mutated copy: E9=PASS (the Vercel tree still serves the queue), E14=FAIL (the CF inbox with a JSONL read was caught)
+  PASS  E17  the repository is byte-identical after the probe -- api/, site/shared/ and site/functions/ are byte-for-byte unchanged
+[qa] 17 checks: 17 PASS, 0 FAIL
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-admin-2026-10-22T10-07-57-987Z
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-admin-independent-results.json
+exit code: 0
+
+========================================================================
+SUITE: qa-wave9-store-queue.mjs (QA independent wave-9 queue)
+node qa\qa-wave9-store-queue.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave9-store-queue-results.json
+========================================================================
+  PASS  W9-1  the owner inbox and the moderation link are ONE queue (13/13 sub-assertions)
+[qa] 1 checks: 1 PASS, 0 FAIL
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-queue-2026-10-22T10-08-00-405Z
+exit code: 0
+
+========================================================================
+SUITE: qa-wave9-store-independent.mjs (QA independent wave-9 store)
+node qa\qa-wave9-store-independent.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave9-store-independent-results.json
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave9-independent-2026-10-22T10-08-01-043Z-25768
+[qa] tree:    api=C:\Users\Kalch\Documents\IXI\api
+[qa] shared:  C:\Users\Kalch\Documents\IXI\site\shared
+[qa] A -- no JSONL fallback
+  PASS  A1-projects  GET /api/portal/projects answers from the DATABASE ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A2-plan-items  GET /api/portal/plan-items answers from the DATABASE ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A3-updates  GET /api/portal/updates answers from the DATABASE ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A4-comments  GET /api/portal/comments answers from the DATABASE ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A5-testimonials  GET /api/portal/testimonials answers from the DATABASE (the client's own quote) ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A6-auth  POST /api/portal/auth/request-link finds the invite in the DATABASE (the FILE invite is for another address, so a file fallback would send NO mail) ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A7-invites  POST /api/portal/invites writes the invite to the DATABASE ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A8-moderate  POST /api/moderate/review decides in the DATABASE ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+  PASS  A9-admin-inbox  GET /api/admin/reviews (the owner's inbox) answers from the DATABASE ΓÇö answered from the DATABASE, 7 JSONL files byte-identical
+[qa] B -- the publisher
+  PASS  B1-publisher-database  the publisher publishes the quote from the DATABASE, not from the JSONL file ΓÇö 1 published file, the database quote (exit 0)
+  PASS  B2-publisher-unreachable  the publisher EXITS 1 when the store is unreachable and never publishes an empty page ΓÇö exit 1, the published quote survived
+  PASS  B3-publisher-misconfigured  the publisher EXITS 1 when the store is MISCONFIGURED and publishes nothing ΓÇö exit 1, nothing published
+  PASS  B4-publisher-file-control  the publisher reads the FILE store in file mode (the control for B1) ΓÇö 1 published file, the file quote (exit 0)
+[qa] C -- the rate counter
+  PASS  C1-counter-shared  the SQL counter is SHARED across two separate processes ΓÇö process A counted 1, process B counted 2
+  PASS  C2-counter-per-process  in file mode the counter is per PROCESS (as documented) ΓÇö 1 and 1
+  PASS  C3-counter-in-database  the counter row lives in the DATABASE, not in a file ΓÇö 18 statement(s) against rate_counters, 0 files
+[qa] D -- loud store errors
+  PASS  D1-portal-db-down  a portal route with an UNREACHABLE database answers 500 {code:storage}, never an empty list ΓÇö 500 {code:storage}, no empty list
+  PASS  D2-portal-corrupt-file  a portal route with a CORRUPT store answers 500 {code:storage}, never an empty list ΓÇö 500 {code:storage}, no empty list
+  PASS  D3-moderation-store-missing  the moderation endpoint with NO store answers 501 {code:unimplemented} -- it never approves ΓÇö 501 {code:unimplemented}, nothing approved
+  PASS  D4-inbox-store-missing  the owner's inbox with NO store answers 501 {code:unimplemented} -- never an empty queue ΓÇö 501 {code:unimplemented}, no empty queue
+  PASS  D5-inbox-db-down  the owner's inbox with an UNREACHABLE database answers 501 {code:unimplemented} ΓÇö 501 {code:unimplemented}, no empty queue
+[qa] M -- mutation probes
+  PASS  MP-A  the projects handler falls back to the FILE store -> A1-projects goes RED (control stays GREEN) ΓÇö control A1-projects=PASS, mutant A1-projects=FAIL
+  PASS  MP-B  the publisher treats an unreachable database as an EMPTY store -> B2-publisher-unreachable goes RED (control stays GREEN) ΓÇö control B2-publisher-unreachable=PASS, mutant B2-publisher-unreachable=FAIL
+  PASS  MP-C  the libsql mode uses the per-process in-memory counter -> C1-counter-shared goes RED (control stays GREEN) ΓÇö control C1-counter-shared=PASS, mutant C1-counter-shared=FAIL
+  PASS  MP-D  the store guard swallows the failure instead of answering 500 {code:storage} -> D1-portal-db-down goes RED (control stays GREEN) ΓÇö control D1-portal-db-down=PASS, mutant D1-portal-db-down=FAIL
+  PASS  tree-untouched  the shipped tree is byte-identical after the run ΓÇö api/, site/shared/, site/scripts/ and site/functions/ are byte-for-byte unchanged
+[qa] 26 checks: 26 PASS, 0 FAIL
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave9-store-independent-results.json
+exit code: 0
+
+========================================================================
+SUITE: qa-anchor-nonvacuity.mjs (anchor non-vacuity prover)
+node qa\qa-anchor-nonvacuity.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-anchor-nonvacuity-results.json
+========================================================================
+[qa] PROOF PASS  P2-control  the publisher copy (unmodified) still passes N1/N2/N3
+         N1=PASS N2=PASS N3=PASS   (suite exit 0)
+[qa] PROOF PASS  P2-mutant  the publisher SKIPS a malformed line -> N1/N2/N3 go RED (non-vacuity proof)
+         N1=FAIL N2=FAIL N3=FAIL   (suite exit 1)   all failing checks: N1, N2, N3
+[qa] PROOF PASS  P2-liveness  if the publisher text drifts, the P2 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  D2-control  the tree copy (unmodified) still passes B1/B1b/B2/B3/B4
+         B1=PASS B1b=PASS B2=PASS B3=PASS B4=PASS   (suite exit 0)
+[qa] PROOF PASS  D2-mutant  the store failure is unguarded again -> B4 goes RED while the control B1 stays GREEN (non-vacuity proof)
+         B1=PASS B1b=PASS B2=PASS B3=FAIL B4=FAIL   (suite exit 1)   B4 said: the handler threw instead of answering: StorageError: cannot write C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave5-2026-10-22T10-08-09-660Z\site\data\modera
+[qa] PROOF PASS  D2-liveness  if guardStore disappears, the D2 check FAILS loudly (no silent pass)
+         D2=FAIL   the D2 check said: the patch anchor was not found in C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave5-2026-10-22T10-08-10-172Z\work\copy-f3\site\shared\server\portal-store-access.ts: export async function guardStore<
+[qa] PROOF PASS  W9-1-control  the wave-9 queue check passes against an unmodified copy of the tree
+         W9-1=PASS   (suite exit 0)
+[qa] PROOF PASS  W9-1-mutant  the inbox reads a DIFFERENT collection -> the wave-9 queue check goes RED (non-vacuity proof)
+         W9-1=FAIL   (suite exit 1)   failing sub-assertions: W9-1.a2, W9-1.a3, W9-1.a4, W9-1.a5, W9-1.b1, W9-1.b2, W9-1.b3, W9-1.b4, W9-1.b5
+[qa] PROOF PASS  P1-control  the tree copy (unmodified) still passes M1/M2
+         M1=PASS M2=PASS   (suite exit 0)
+[qa] PROOF PASS  P1-mutant  ALL THREE layers of the stale-revision guard are removed -> M1/M2 go RED (non-vacuity proof)
+         M1=FAIL M2=FAIL   (suite exit 1)   all failing checks: M1, M2, M4, M4b, M5
+[qa] PROOF PASS  P1-half-handler  only the HANDLER layer is removed -> M1/M2 stay GREEN (the STORE still refuses: the second layer is load-bearing)
+         M1=PASS M2=PASS   (suite exit 0)
+[qa] PROOF PASS  P1-half-store  only the STORE layer is removed -> M1/M2 stay GREEN (the HANDLER still refuses: the first layer is load-bearing)
+         M1=PASS M2=PASS   (suite exit 0)
+[qa] PROOF PASS  P1-half-identity  only the STORE IDENTITY scope is removed -> M1/M2 stay GREEN (the HANDLER and the revision scope still refuse: the third layer is load-bearing)
+         M1=PASS M2=PASS   (suite exit 0)
+[qa] PROOF PASS  P1-liveness-handler  if the handler guard text drifts, the P1 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  P1-liveness-store  if the store scope text drifts, the P1 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  P1-liveness-identity  if the identity scope text drifts, the P1 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  E14-control  the tree (unmodified) still passes E9 and E14
+         E9=PASS E14=PASS   (suite exit 0)
+[qa] PROOF PASS  E14-mutant  the CF inbox reads the moderation log again -> E14 goes RED while the Vercel tree (E9) stays GREEN (non-vacuity proof)
+         E9=PASS E14=FAIL   (suite exit 1)   E14 said: the CF twin with a filesystem must still answer 501 -- this target serves no queue (got 200: {"ok":true,"counts":{"pendingReviews":1,"decidedToday":0,"openNotes
+[qa] PROOF PASS  E14-liveness  if the CF inbox text drifts, the E16 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  R11-control  the tree copy (unmodified) still passes R11 (the empty carrier is a clean 404)
+         R11=PASS   (suite exit 0)   R11 said: 
+[qa] PROOF PASS  R11-mutant-entry  the ENTRY POINT falls through to the header again -> R11 goes RED (non-vacuity proof)
+         R11=FAIL   (suite exit 1)   R11 said: an EMPTY carrier answered 401, not 404: {"error":"authentication required","code":"unauthorized"} -- expected 404, got 401
+[qa] PROOF PASS  R11-mutant-resolver  the RESOLVER treats an empty carrier as ABSENT again -> R11 goes RED (non-vacuity proof)
+         R11=FAIL   (suite exit 1)   R11 said: an EMPTY carrier answered 500, not 404: {"error":"route resolution failed","code":"route-resolution"} -- expected 404, got 500
+[qa] PROOF PASS  R11-liveness-entry  if the entry point text drifts, the R11 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  R11-liveness-resolver  if the resolver text drifts, the R11 probe FAILS LOUDLY (no silent pass)
+[qa] PROOF PASS  tree-untouched  the shipped tree is byte-identical after the proofs
+[qa] 25/25 anchor proofs behaved as expected
+exit code: 0
+
+========================================================================
+SUITE: qa-wave13-routing.mjs (wave-13 routing layer, executed)
+node qa\qa-wave13-routing.mjs --json C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave13-routing-results.json
+========================================================================
+[qa] sandbox: C:\Users\Kalch\AppData\Local\Temp\opencode\qa-wave13-routing-2026-10-22T10-08-20-608Z-18072
+[qa] tree:    api=C:\Users\Kalch\Documents\IXI\api
+[qa] R -- the route table, executed
+  PASS  R1  every PORTAL URL is served by the right handler ΓÇö 9 portal URLs served
+  PASS  R2  every ADMIN URL is served by the right handler ΓÇö 2 admin URLs served
+  PASS  R3  the CARRIER (query parameter) form serves the same route ΓÇö 9 portal URLs served through the carrier
+  PASS  R4  the CARRIER (header) form serves the same route ΓÇö the x-imk-route header served /api/portal/projects
+  PASS  R5  an unknown path is a 404 ΓÇö 404 {code:not-found}
+{"ts":1792663700736,"outcome":"route_resolution_failed","entry":"/api/portal"}
+{"ts":1792663700736,"outcome":"route_resolution_failed","entry":"/api/admin"}
+  PASS  R6  the entry point reached with NO route is a LOUD 500, never a silent 404 ΓÇö 500 {code:route-resolution} on both entry points
+  PASS  R7  the original QUERY survives the carrier, and the carrier parameter is removed ΓÇö the query survives, the carrier parameter is removed
+  PASS  R8  a forged carrier cannot cross the families ΓÇö neither entry point serves the other family
+  PASS  R9  DEPLOYED SHAPE: the CARRIER decides the route (the path does NOT identify it) ΓÇö the same path, two carriers, two handlers -- the carrier decides
+  PASS  R9b  LOCAL SHAPE (a platform that did not rewrite): the PATH still wins over the carrier ΓÇö the path is served by its own handler
+  PASS  R10  DEPLOYED SHAPE: a forged carrier is CONTAINED (no cross-family, no standalone, the handler still authorises itself) ΓÇö no cross-family reach, no standalone reach, the handler gate still applies
+  PASS  R11  DEPLOYED SHAPE: an EMPTY query carrier is an INVALID carrier (404), never a fall-through to the header ΓÇö an empty carrier is a clean 404 from the router; the header channel is unchanged
+  PASS  MP-R1  the entry point answers a SILENT 404 when it is reached with no route -> R6 goes RED (control stays GREEN) ΓÇö control R6=PASS, mutant R6=FAIL
+  PASS  MP-R2  the original query string is LOST when the route is carried -> R7 goes RED (control stays GREEN) ΓÇö control R7=PASS, mutant R7=FAIL
+  PASS  MP-R3  the FAMILY SEPARATION is gone: the portal entry point also serves the owner routes -> R8 goes RED (control stays GREEN) ΓÇö control R8=PASS, mutant R8=FAIL
+  PASS  MP-R4  the FAMILY CONTAINMENT is gone (the table AND the code check): a forged carrier crosses the family -> R10 goes RED (control stays GREEN) ΓÇö control R10=PASS, mutant R10=FAIL
+  PASS  MP-R5  the HANDLER AUTHORISES ITSELF is gone: a carrier-selected route answers without a session -> R10 goes RED (control stays GREEN) ΓÇö control R10=PASS, mutant R10=FAIL
+  PASS  MP-R6  the EMPTY carrier falls through to the client-controlled header again (wave 15, B-1 reverted) -> R11 goes RED (control stays GREEN) ΓÇö control R11=PASS, mutant R11=FAIL
+  PASS  MP-R7  the RESOLVER treats an empty carrier as ABSENT again (wave 15, B-1 reverted) -> R11 goes RED (control stays GREEN) ΓÇö control R11=PASS, mutant R11=FAIL
+[qa] 19 checks: 19 PASS, 0 FAIL
+[qa] results: C:\Users\Kalch\Documents\IXI\site\qa\artifacts\qa-wave13-routing-results.json
+exit code: 0
+
+========================================================================
+SUITE: backend-wave14-carrier-containment-harness.mjs (wave-14 carrier containment)
+node ..\backend-wave14-carrier-containment-harness.mjs 
+========================================================================
+  PASS  A1  the two family tables are DISJOINT
+  PASS  A2  the standalone URLs are in NO family table
+  PASS  A3  the entry-prefix containment holds for the real prefixes
+  PASS  A4  the router comment claims NO unproven hardening
+  PASS  B1  a carrier cannot name the OTHER family's route
+  PASS  B2  a carrier cannot name a STANDALONE url
+  PASS  B3  CONTROL: a carrier INSIDE the family still resolves
+  PASS  B4  CONTROL: the PATH wins over a forged carrier
+  PASS  C1  a forged carrier across the families answers 404, never a handler
+  PASS  C2  a forged carrier cannot reach the standalone urls
+  PASS  C3  a portal-family forgery still needs a session
+  PASS  C4  a portal-family forgery with a valid CLIENT session reads only that client
+  PASS  C5  a forged carrier CANNOT widen a client's scope
+  PASS  C6  an admin-family forgery still needs the OWNER session
+  PASS  C7  an admin-family forgery WITH the owner session reaches the inbox
+  PASS  C8  the carrier parameter is STRIPPED from the url the handler sees
+  PASS  D1  the CODE-level containment survives a BROKEN table
+  PASS  D2  removing the entry-prefix check lets the broken table ESCAPE
+  PASS  D3  stopping the carrier-strip makes the handler SEE the carrier
+  PASS  D4  removing the handler's own scope rule makes the forgery LEAK
+  PASS  D5  removing the deploy gate's HANDLERS check lets an UNSERVABLE route pass
+  PASS  E1  the gate passes on the real tree
+  PASS  E2  a missing entry point is NAMED, not crashed on
+  PASS  E3  a table route the entry point cannot serve is NAMED
+[wave14] 24 passed, 0 failed, 24 checks
+exit code: 0
+
+========================================================================
+SUITE: backend-wave15-empty-carrier-harness.mjs (wave-15 empty carrier)
+node ..\backend-wave15-empty-carrier-harness.mjs 
+========================================================================
+  PASS  A1  both entry points test the query carrier for PRESENCE, not truthiness
+  PASS  A2  the resolver refuses an EMPTY carrier explicitly and keeps the loud 500
+  PASS  B1  an EMPTY carrier is not-found, never route-resolution
+  PASS  B2  CONTROL: an ABSENT carrier on a bare entry point is still route-resolution
+  PASS  B3  CONTROL: a legitimate carrier still resolves
+  PASS  B4  CONTROL: the PATH still wins over a forged carrier
+  PASS  C1  an EMPTY query carrier is refused, and the header channel is NOT consulted
+  PASS  C2  the same on the ADMIN entry point
+  PASS  C3  an EMPTY query carrier alone is a 404, not the loud 500
+  PASS  C4  CONTROL: an ABSENT query carrier still resolves through the header
+  PASS  C5  CONTROL: the header channel on the ADMIN side is unchanged too
+  PASS  C6  CONTROL: a PRESENT query carrier wins over the header
+  PASS  C7  CONTROL: the ordinary carrier path still serves the client's own data
+  PASS  D1  restoring the fall-through in the PORTAL entry point makes C1 go RED
+  PASS  D2  restoring the fall-through in the ADMIN entry point makes C2 go RED
+  PASS  D3  the resolver treating an empty carrier as ABSENT makes C3 go RED
+  PASS  D4  CONTROL PROOF: the header channel is really read (C4 is not vacuous)
+[wave15] 17 passed, 0 failed, 17 checks
+exit code: 0
+
+========================================================================
+SUMMARY
+========================================================================
+qa-testimonials.mjs           exit 0
+qa-testimonials-build.mjs     exit 0
+qa-backend-hardening.mjs      exit 0
+qa-wave2-independent.mjs      exit 0
+qa-mutation-probe.mjs         exit 0
+qa-rate-limit.mjs             exit 0
+qa-cf-parity.mjs              exit 0
+qa-wave3-independent.mjs      exit 0
+check:routes (npm run)        exit 0
+qa-wave4-independent.mjs      exit 0
+qa-wave5-independent.mjs      exit 0
+qa-admin-independent.mjs      exit 0
+qa-wave9-store-queue.mjs      exit 0
+qa-wave9-store-independent.mjs exit 0
+qa-anchor-nonvacuity.mjs      exit 0
+qa-wave13-routing.mjs        exit 0
+backend-wave14-carrier-containment-harness.mjs exit 0
+backend-wave15-empty-carrier-harness.mjs exit 0
+finished: 2026-10-22 13:08:26 +03:00

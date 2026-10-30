@@ -46,7 +46,7 @@ import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = fs.existsSync(path.join(HERE, 'api', 'portal', 'auth.ts')) ? HERE : path.resolve(HERE, '..');
+const REPO = fs.existsSync(path.join(HERE, 'api', 'portal.ts')) ? HERE : path.resolve(HERE, '..');
 const SITE = path.join(REPO, 'site');
 const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
@@ -222,8 +222,8 @@ function writeStores() {
 // ---------------------------------------------------------------------------
 
 const BUNDLE_ENTRIES = {
-  'vercel-session': path.join(REPO, 'api', 'portal', 'session.ts'),
-  'vercel-projects': path.join(REPO, 'api', 'portal', 'projects.ts'),
+  'vercel-session': path.join(REPO, 'site', 'shared', 'portal-handlers', 'portal-session.ts'),
+  'vercel-projects': path.join(REPO, 'site', 'shared', 'portal-handlers', 'portal-projects.ts'),
   'vercel-moderate': path.join(REPO, 'api', 'moderate', 'review.ts'),
   'vercel-request-link': path.join(REPO, 'api', 'portal', 'auth', 'request-link.ts'),
   'cf-session': path.join(REPO, 'site', 'functions', 'api', 'portal', 'session.ts'),
@@ -1003,7 +1003,7 @@ async function main() {
     const bundle = await bundleFrom(
       root,
       'mut-m3-projects',
-      path.join('api', 'portal', 'projects.ts'),
+      path.join('site', 'shared', 'portal-handlers', 'portal-projects.ts'),
     );
     await probe('M3b', 'the mutation probe', bundle, () => checkM3(bundle));
     return 'the mutated copy accepts the long-lived token — the probe works';
@@ -1042,7 +1042,7 @@ async function main() {
 
   await t('M4c', 'the probe can fail: with the role claim alone the owner still wins', async () => {
     const root = await buildMutated('m4', {
-      'api/portal/projects.ts': [
+      'site/shared/portal-handlers/portal-projects.ts': [
         [
           "    const owner = resolveOwnerSession(req, process.env);\n    if (!owner) {",
           "    const owner = session.role === 'admin' ? session : null;\n    if (!owner) {",
@@ -1052,7 +1052,7 @@ async function main() {
     const bundle = await bundleFrom(
       root,
       'mut-m4-projects',
-      path.join('api', 'portal', 'projects.ts'),
+      path.join('site', 'shared', 'portal-handlers', 'portal-projects.ts'),
     );
     await probe('M4c', 'the mutation probe', bundle, () => checkM4(bundle));
     return 'the mutated copy accepts the removed address — the probe works';
@@ -1098,7 +1098,7 @@ async function main() {
     const bundle = await bundleFrom(
       root,
       'mut-m5-projects',
-      path.join('api', 'portal', 'projects.ts'),
+      path.join('site', 'shared', 'portal-handlers', 'portal-projects.ts'),
     );
     await probe('M5c', 'the mutation probe', bundle, () => checkM5(bundle));
     return 'the mutated copy widens the read scope to 2 of 2 — the probe works';
@@ -1256,7 +1256,7 @@ async function main() {
 
   await t('R1j', 'the probe can fail: with the route gone the URL answers 404', async () => {
     const root = await buildMutated('route', {
-      'api/portal/session.ts': [
+      'site/shared/portal-handlers/portal-session.ts': [
         [
           'export default function (\n  req: IncomingMessage,\n  res: ServerResponse,\n): Promise<void> {\n  return handler(req, res);\n}',
           'export default function (\n  req: IncomingMessage,\n  res: ServerResponse,\n): Promise<void> {\n  json(res, { error: \'not found\', code: \'not-found\' }, 404);\n}',
@@ -1266,7 +1266,7 @@ async function main() {
     const bundle = await bundleFrom(
       root,
       'mut-route-session',
-      path.join('api', 'portal', 'session.ts'),
+      path.join('site', 'shared', 'portal-handlers', 'portal-session.ts'),
     );
     await probe('R1j', 'the mutation probe', bundle, () => checkRoute(bundle));
     return 'the mutated copy answers 404 — the probe works';

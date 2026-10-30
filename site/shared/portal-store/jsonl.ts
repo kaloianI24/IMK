@@ -10,7 +10,7 @@
 // EMPTY. The API then answered "project not found", "0 projects", "sign-in not
 // allowed" or "review not found" — a silent outage that looks like a normal
 // answer. The correct pattern already existed twice in this repo
-// (api/portal/invites.ts `readJsonlForWrite`, portal-store/file-adapter.ts)
+// (portal-handlers/portal-invites.ts `readJsonlForWrite`, portal-store/file-adapter.ts)
 // and in the store module's own rule: "a handler that cannot reach the store
 // must answer 503, never 'here is an empty list'" (portal-store/errors.ts).
 //

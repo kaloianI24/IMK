@@ -1,0 +1,2 @@
+# Wave 18e: /book -> /contact redirect (Cloudflare/Netlify syntax)
+/book  /contact  301

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-21T22:19:52.879Z",
-  "sandbox": "C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-testimonials-2026-10-21T22-19-52-416Z",
+  "generatedAt": "2026-10-22T14:18:50.566Z",
+  "sandbox": "C:\\Users\\Kalch\\AppData\\Local\\Temp\\opencode\\qa-testimonials-2026-10-22T14-18-50-042Z",
   "origin": "http://127.0.0.1:4399",
   "summary": {
     "passed": 102,
@@ -20,49 +20,49 @@
       "group": "A — public review door (spec/08 §4.4, §5 \"Public review door\")",
       "name": "POST /api/contact type=review (form) -> 410",
       "status": "PASS",
-      "ms": 2
+      "ms": 1
     },
     {
       "id": "A3",
       "group": "A — public review door (spec/08 §4.4, §5 \"Public review door\")",
       "name": "a refused review writes NOTHING (no record, no e-mail)",
       "status": "PASS",
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "A4",
       "group": "A — public review door (spec/08 §4.4, §5 \"Public review door\")",
       "name": "control: a normal contact inquiry still works (200)",
       "status": "PASS",
-      "ms": 1
+      "ms": 3
     },
     {
       "id": "B1",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "GET without a session -> 401",
       "status": "PASS",
-      "ms": 2
+      "ms": 1
     },
     {
       "id": "B2",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST without a session -> 401",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "B3",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "GET another client's project -> 404 (no id probing)",
       "status": "PASS",
-      "ms": 2
+      "ms": 1
     },
     {
       "id": "B4",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST to another client's project -> 404",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "B5",
@@ -83,49 +83,49 @@
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST with a wrong Origin -> 403",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "B8",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST with no Origin at all -> 403",
       "status": "PASS",
-      "ms": 2
+      "ms": 1
     },
     {
       "id": "B9",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST as the owner (admin session) -> 403",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "B10",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "6th submission within the hour -> 429 rate-limit",
       "status": "PASS",
-      "ms": 17
+      "ms": 19
     },
     {
       "id": "B11",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "PATCH /api/portal/testimonials -> 405",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "B12",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST with an unknown action -> 400 validation",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "B13",
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST with an out-of-range rating -> 400 fields",
       "status": "PASS",
-      "ms": 3
+      "ms": 2
     },
     {
       "id": "B14",
@@ -139,7 +139,7 @@
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "POST with a quote over 1000 chars -> 400 fields",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "B16",
@@ -160,14 +160,14 @@
       "group": "B — portal endpoint contract (spec/08 §4.4 status codes)",
       "name": "GET an unknown project -> 404",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "C1",
       "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
       "name": "submit -> 200, server-derived identity, client-safe view",
       "status": "PASS",
-      "ms": 4
+      "ms": 3
     },
     {
       "id": "C2",
@@ -181,28 +181,28 @@
       "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
       "name": "spoofed body fields are ignored (verifiedClient / source / name / company / role)",
       "status": "PASS",
-      "ms": 3
+      "ms": 4
     },
     {
       "id": "C4",
       "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
       "name": "snooze -> 200, state snoozed, project marked snoozed",
       "status": "PASS",
-      "ms": 4
+      "ms": 3
     },
     {
       "id": "C5",
       "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
       "name": "owner re-requests -> GET shows no stale answer (the card returns)",
       "status": "PASS",
-      "ms": 4
+      "ms": 5
     },
     {
       "id": "C6",
       "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
       "name": "decline -> 200, state declined",
       "status": "PASS",
-      "ms": 3
+      "ms": 4
     },
     {
       "id": "C7",
@@ -216,7 +216,7 @@
       "group": "C — consent flow, provenance and withdrawal (spec/08 §4.4, RP-3/RP-5/RP-6)",
       "name": "the client view never carries the e-mail or internal ids",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "C9",
@@ -251,21 +251,21 @@
       "group": "D — invite flow and client profile (spec/08 §4.5)",
       "name": "POST /api/portal/invites with an invalid e-mail -> 400",
       "status": "PASS",
-      "ms": 0
+      "ms": 2
     },
     {
       "id": "D5",
       "group": "D — invite flow and client profile (spec/08 §4.5)",
       "name": "the first sign-in creates the client record from the INVITE (not the e-mail local part)",
       "status": "PASS",
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "D6",
       "group": "D — invite flow and client profile (spec/08 §4.5)",
       "name": "upsert: an omitted name is kept, a new company reaches the client record",
       "status": "PASS",
-      "ms": 3
+      "ms": 4
     },
     {
       "id": "D7",
@@ -279,7 +279,7 @@
       "group": "D — invite flow and client profile (spec/08 §4.5)",
       "name": "an empty string clears the field on both records",
       "status": "PASS",
-      "ms": 3
+      "ms": 4
     },
     {
       "id": "D9",
@@ -293,14 +293,14 @@
       "group": "D — invite flow and client profile (spec/08 §4.5)",
       "name": "a second invite for the same e-mail does not duplicate the record",
       "status": "PASS",
-      "ms": 4
+      "ms": 3
     },
     {
       "id": "D11",
       "group": "D — invite flow and client profile (spec/08 §4.5)",
       "name": "GET /api/portal/invites -> 404 (owner-only POST endpoint)",
       "status": "PASS",
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "E1",
@@ -349,28 +349,28 @@
       "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
       "name": "a valid signature for an unknown ref -> 404",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "E8",
       "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
       "name": "a valid signature approves the record",
       "status": "PASS",
-      "ms": 3
+      "ms": 2
     },
     {
       "id": "E9",
       "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
       "name": "the one-click link is idempotent (no second decision, no new line)",
       "status": "PASS",
-      "ms": 2
+      "ms": 3
     },
     {
       "id": "E10",
       "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
       "name": "a reject decision is honoured",
       "status": "PASS",
-      "ms": 6
+      "ms": 7
     },
     {
       "id": "E11-detail",
@@ -384,7 +384,7 @@
       "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
       "name": "M-1: a plain GET on the signed link shows the confirmation page and decides NOTHING",
       "status": "PASS",
-      "ms": 8
+      "ms": 10
     },
     {
       "id": "E12-detail",
@@ -398,14 +398,14 @@
       "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
       "name": "M-1: the confirmation page's own form POST is what decides the quote",
       "status": "PASS",
-      "ms": 12
+      "ms": 10
     },
     {
       "id": "E13",
       "group": "E — moderation links fail closed (spec/08 §4.4, §5)",
       "name": "M-1: a GET on an already-decided quote says so and still decides nothing",
       "status": "PASS",
-      "ms": 10
+      "ms": 12
     },
     {
       "id": "F1",
@@ -426,7 +426,7 @@
       "group": "F — withdrawal / revocation (spec/08 §4.4, RP-6.4 / RP-6.5)",
       "name": "an anonymous quote (p2=false) is approved and stays anonymous in the store",
       "status": "PASS",
-      "ms": 6
+      "ms": 7
     },
     {
       "id": "G1-detail",
@@ -468,7 +468,7 @@
       "group": "G — independent re-verification of the code-review MAJOR findings",
       "name": "M3 FIXED — one malformed line answers 500 storage instead of silently emptying the collection",
       "status": "PASS",
-      "ms": 5
+      "ms": 7
     },
     {
       "id": "G4-detail",
@@ -496,7 +496,7 @@
       "group": "G — independent re-verification of the code-review MAJOR findings",
       "name": "M5 FIXED — the approve link may only approve the revision the owner was shown",
       "status": "PASS",
-      "ms": 13
+      "ms": 14
     },
     {
       "id": "G6",
@@ -517,7 +517,7 @@
       "group": "G — independent re-verification of the code-review MAJOR findings",
       "name": "m6 FIXED — a malformed submission does not burn a rate-limit slot",
       "status": "PASS",
-      "ms": 16
+      "ms": 18
     },
     {
       "id": "G8-detail",
@@ -545,7 +545,7 @@
       "group": "G — independent re-verification of the code-review MAJOR findings",
       "name": "M3c FIXED - a malformed line in reviews.jsonl answers 500 storage instead of 404",
       "status": "PASS",
-      "ms": 3
+      "ms": 2
     },
     {
       "id": "G10-detail",
@@ -559,7 +559,7 @@
       "group": "G — independent re-verification of the code-review MAJOR findings",
       "name": "m6 FIXED — snooze and decline are rate-limited",
       "status": "PASS",
-      "ms": 34
+      "ms": 39
     },
     {
       "id": "H1",
@@ -573,7 +573,7 @@
       "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
       "name": "a magic-link token is single-use (a second verify is 400)",
       "status": "PASS",
-      "ms": 4
+      "ms": 5
     },
     {
       "id": "H3-detail",
@@ -587,7 +587,7 @@
       "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
       "name": "the session cookie is HttpOnly + SameSite=Strict",
       "status": "PASS",
-      "ms": 3
+      "ms": 4
     },
     {
       "id": "H4-detail",
@@ -608,7 +608,7 @@
       "group": "H — auth invariants (spec/08 P-7, §2.2, §2.6)",
       "name": "every body-bearing response declares the correct Content-Length",
       "status": "PASS",
-      "ms": 2
+      "ms": 3
     },
     {
       "id": "I1-detail",
@@ -636,7 +636,7 @@
       "group": "I — the secret rule (H-1, wave-8A): a PRESENT but UNUSABLE secret is refused",
       "name": "H-1: in production the PUBLISHED PLACEHOLDER secret is refused as well",
       "status": "PASS",
-      "ms": 1
+      "ms": 2
     },
     {
       "id": "I3-detail",
@@ -650,7 +650,7 @@
       "group": "I — the secret rule (H-1, wave-8A): a PRESENT but UNUSABLE secret is refused",
       "name": "H-1: CONTROL - a secret of 32+ characters IS usable in production",
       "status": "PASS",
-      "ms": 8
+      "ms": 12
     },
     {
       "id": "I4-detail",
@@ -671,7 +671,7 @@
       "group": "J — GET /api/portal/session (the server truth about the requester)",
       "name": "no session -> 401 {code:unauthorized}",
       "status": "PASS",
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "J2",
@@ -685,14 +685,14 @@
       "group": "J — GET /api/portal/session (the server truth about the requester)",
       "name": "a client -> 200 {role:client, clientId}",
       "status": "PASS",
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "J4",
       "group": "J — GET /api/portal/session (the server truth about the requester)",
       "name": "another method -> 405 {code:method}",
       "status": "PASS",
-      "ms": 0
+      "ms": 1
     },
     {
       "id": "J5",
@@ -720,132 +720,132 @@
       "group": "J — GET /api/portal/session (the server truth about the requester)",
       "name": "H-2: an unusable session secret is a MISCONFIGURATION (500), not a silent 401",
       "status": "PASS",
-      "ms": 0
+      "ms": 1
     }
   ],
   "fixtures": {
     "projects": [
       {
-        "id": "prj_ac59e6293a5c",
+        "id": "prj_fe954835b8bf",
         "title": "Acme Website",
         "status": "completed",
-        "clientId": "cli_604df176",
+        "clientId": "cli_85984b9b",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_97febaaeb564",
+        "id": "prj_874192f05c70",
         "title": "Bob Website",
         "status": "completed",
-        "clientId": "cli_e8b65821",
+        "clientId": "cli_e60148b0",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_679681ca3a1c",
+        "id": "prj_c2544126e6b3",
         "title": "Carol Website",
         "status": "completed",
-        "clientId": "cli_bf1e45c6",
+        "clientId": "cli_350dcea5",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_9b485579373c",
+        "id": "prj_9d94210ab193",
         "title": "Dave Website",
         "status": "completed",
-        "clientId": "cli_31e9ccc2",
+        "clientId": "cli_ee63bd81",
         "testimonialStatus": "declined"
       },
       {
-        "id": "prj_c416dbdbaa30",
+        "id": "prj_292f29e7027a",
         "title": "Erin Website",
         "status": "in-progress",
-        "clientId": "cli_8bd1ba84"
+        "clientId": "cli_bf72b44c"
       },
       {
-        "id": "prj_b14aa2378761",
+        "id": "prj_580e3a65da66",
         "title": "Frank Website",
         "status": "completed",
-        "clientId": "cli_afaff6fd",
+        "clientId": "cli_698e9d8a",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_69bd62d2f792",
+        "id": "prj_25f320f06265",
         "title": "Grace Website",
         "status": "completed",
-        "clientId": "cli_7f9b7e46",
+        "clientId": "cli_df6ba865",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_fdbfe6f1425e",
+        "id": "prj_3206a40734b5",
         "title": "Heidi Website",
         "status": "completed",
-        "clientId": "cli_3920f70b",
+        "clientId": "cli_8108bf16",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_c778c11b8122",
+        "id": "prj_4a4b40c2b826",
         "title": "Ivan Website",
         "status": "completed",
-        "clientId": "cli_bf4a5d3f",
+        "clientId": "cli_6563a685",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_0fa566f35381",
+        "id": "prj_4bb908ef5227",
         "title": "Acme Second Website",
         "status": "completed",
-        "clientId": "cli_604df176",
+        "clientId": "cli_85984b9b",
         "testimonialStatus": "declined"
       },
       {
-        "id": "prj_40321d8d9c92",
+        "id": "prj_e02019955025",
         "title": "Erin Third Website",
         "status": "completed",
-        "clientId": "cli_8bd1ba84",
+        "clientId": "cli_bf72b44c",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_3588d4aa456a",
+        "id": "prj_ef6b14b513f5",
         "title": "Alice Fourth Website",
         "status": "completed",
-        "clientId": "cli_604df176",
+        "clientId": "cli_85984b9b",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_11f3d466242a",
+        "id": "prj_857c56cf749c",
         "title": "Bob Fifth Website",
         "status": "completed",
-        "clientId": "cli_e8b65821",
+        "clientId": "cli_e60148b0",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_6d43911ba3f8",
+        "id": "prj_a92cf28473ab",
         "title": "Erin Second Website",
         "status": "completed",
-        "clientId": "cli_8bd1ba84",
+        "clientId": "cli_bf72b44c",
         "testimonialStatus": "requested"
       },
       {
-        "id": "prj_9f927dd9ec6b",
+        "id": "prj_c22152024b81",
         "title": "Grace Append Website",
         "status": "completed",
-        "clientId": "cli_7f9b7e46",
+        "clientId": "cli_df6ba865",
         "testimonialStatus": "snoozed"
       },
       {
-        "id": "prj_de80ee1f8a42",
+        "id": "prj_9d0abab80272",
         "title": "Frank Secret Website",
         "status": "completed",
-        "clientId": "cli_afaff6fd",
+        "clientId": "cli_698e9d8a",
         "testimonialStatus": "requested"
       }
     ],
     "reviews": [
       {
-        "ref": "rev_fcde36c410b9",
+        "ref": "rev_d4afcb81fa1c",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_69bd62d2f792",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_25f320f06265",
         "name": "",
         "company": "",
         "role": "",
@@ -858,17 +858,18 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.634Z",
-        "updatedAt": "2026-10-21T22:19:52.634Z"
+        "receivedAt": "2026-10-22T14:18:50.288Z",
+        "updatedAt": "2026-10-22T14:18:50.288Z",
+        "recordId": "rec_bf0549f532864d1ba7d9b2ce58010f68"
       },
       {
-        "ref": "rev_fcde36c410b9",
+        "ref": "rev_d4afcb81fa1c",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_69bd62d2f792",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_25f320f06265",
         "name": "",
         "company": "",
         "role": "",
@@ -881,17 +882,18 @@
           "displayName": ""
         },
         "revision": 2,
-        "receivedAt": "2026-10-21T22:19:52.634Z",
-        "updatedAt": "2026-10-21T22:19:52.638Z"
+        "receivedAt": "2026-10-22T14:18:50.288Z",
+        "updatedAt": "2026-10-22T14:18:50.292Z",
+        "recordId": "rec_47e1ff4d353245088b6157b273cb45a5"
       },
       {
-        "ref": "rev_fcde36c410b9",
+        "ref": "rev_d4afcb81fa1c",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_69bd62d2f792",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_25f320f06265",
         "name": "",
         "company": "",
         "role": "",
@@ -904,17 +906,18 @@
           "displayName": ""
         },
         "revision": 3,
-        "receivedAt": "2026-10-21T22:19:52.634Z",
-        "updatedAt": "2026-10-21T22:19:52.641Z"
+        "receivedAt": "2026-10-22T14:18:50.288Z",
+        "updatedAt": "2026-10-22T14:18:50.295Z",
+        "recordId": "rec_06c3f5dd15a4458c9f866366be44064c"
       },
       {
-        "ref": "rev_fcde36c410b9",
+        "ref": "rev_d4afcb81fa1c",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_69bd62d2f792",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_25f320f06265",
         "name": "",
         "company": "",
         "role": "",
@@ -927,17 +930,18 @@
           "displayName": ""
         },
         "revision": 4,
-        "receivedAt": "2026-10-21T22:19:52.634Z",
-        "updatedAt": "2026-10-21T22:19:52.644Z"
+        "receivedAt": "2026-10-22T14:18:50.288Z",
+        "updatedAt": "2026-10-22T14:18:50.299Z",
+        "recordId": "rec_12c7a9cba71044d18961095234c003ad"
       },
       {
-        "ref": "rev_fcde36c410b9",
+        "ref": "rev_d4afcb81fa1c",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_69bd62d2f792",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_25f320f06265",
         "name": "",
         "company": "",
         "role": "",
@@ -950,17 +954,18 @@
           "displayName": ""
         },
         "revision": 5,
-        "receivedAt": "2026-10-21T22:19:52.634Z",
-        "updatedAt": "2026-10-21T22:19:52.647Z"
+        "receivedAt": "2026-10-22T14:18:50.288Z",
+        "updatedAt": "2026-10-22T14:18:50.302Z",
+        "recordId": "rec_e78c45ffc8444ee39c8f0d619308a27b"
       },
       {
-        "ref": "rev_fc5067d5db01",
+        "ref": "rev_9f13f1fbcb56",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_604df176",
-        "projectId": "prj_ac59e6293a5c",
+        "clientId": "cli_85984b9b",
+        "projectId": "prj_fe954835b8bf",
         "name": "Alice Longname",
         "company": "Acme Ltd",
         "role": "CTO",
@@ -973,19 +978,20 @@
           "displayName": "Alice L"
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.664Z",
-        "updatedAt": "2026-10-21T22:19:52.664Z",
-        "decidedAt": "2026-10-21T22:19:52.686Z",
+        "receivedAt": "2026-10-22T14:18:50.322Z",
+        "updatedAt": "2026-10-22T14:18:50.322Z",
+        "recordId": "rec_add6c548fa2943a69b5883765ad1ed17",
+        "decidedAt": "2026-10-22T14:18:50.346Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_24d1fb79fc29",
+        "ref": "rev_954abd72ac05",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_afaff6fd",
-        "projectId": "prj_b14aa2378761",
+        "clientId": "cli_698e9d8a",
+        "projectId": "prj_580e3a65da66",
         "name": "Frank Spoof",
         "company": "",
         "role": "",
@@ -998,17 +1004,18 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.667Z",
-        "updatedAt": "2026-10-21T22:19:52.667Z"
+        "receivedAt": "2026-10-22T14:18:50.326Z",
+        "updatedAt": "2026-10-22T14:18:50.326Z",
+        "recordId": "rec_45e33a2c77114faa807a8528a5ad0eb7"
       },
       {
-        "ref": "rev_e228fb360848",
+        "ref": "rev_c70fb63863d9",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_604df176",
-        "projectId": "prj_0fa566f35381",
+        "clientId": "cli_85984b9b",
+        "projectId": "prj_4bb908ef5227",
         "name": "",
         "company": "",
         "role": "",
@@ -1021,17 +1028,18 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.670Z",
-        "updatedAt": "2026-10-21T22:19:52.670Z"
+        "receivedAt": "2026-10-22T14:18:50.329Z",
+        "updatedAt": "2026-10-22T14:18:50.329Z",
+        "recordId": "rec_d06e539fdb944178a3cb99cccc1e8355"
       },
       {
-        "ref": "rev_e228fb360848",
+        "ref": "rev_c70fb63863d9",
         "type": "review",
         "state": "declined",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_604df176",
-        "projectId": "prj_0fa566f35381",
+        "clientId": "cli_85984b9b",
+        "projectId": "prj_4bb908ef5227",
         "name": "",
         "company": "",
         "role": "",
@@ -1044,17 +1052,18 @@
           "displayName": ""
         },
         "revision": 2,
-        "receivedAt": "2026-10-21T22:19:52.670Z",
-        "updatedAt": "2026-10-21T22:19:52.678Z"
+        "receivedAt": "2026-10-22T14:18:50.329Z",
+        "updatedAt": "2026-10-22T14:18:50.338Z",
+        "recordId": "rec_2fa064228d664dfa996863bf278c867e"
       },
       {
-        "ref": "rev_b784a0e02d78",
+        "ref": "rev_2b7a4f0bcc02",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_bf4a5d3f",
-        "projectId": "prj_c778c11b8122",
+        "clientId": "cli_6563a685",
+        "projectId": "prj_4a4b40c2b826",
         "name": "Ivan Moderation",
         "company": "",
         "role": "",
@@ -1067,19 +1076,20 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.705Z",
-        "updatedAt": "2026-10-21T22:19:52.705Z",
-        "decidedAt": "2026-10-21T22:19:52.715Z",
+        "receivedAt": "2026-10-22T14:18:50.369Z",
+        "updatedAt": "2026-10-22T14:18:50.369Z",
+        "recordId": "rec_f2a975c5713240259987ce3c7c3fd0b7",
+        "decidedAt": "2026-10-22T14:18:50.380Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_7b8c9c9f3f60",
+        "ref": "rev_08559973a547",
         "type": "review",
         "state": "rejected",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_e8b65821",
-        "projectId": "prj_97febaaeb564",
+        "clientId": "cli_e60148b0",
+        "projectId": "prj_874192f05c70",
         "name": "Bob Other",
         "company": "",
         "role": "",
@@ -1092,19 +1102,20 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.720Z",
-        "updatedAt": "2026-10-21T22:19:52.720Z",
-        "decidedAt": "2026-10-21T22:19:52.724Z",
+        "receivedAt": "2026-10-22T14:18:50.385Z",
+        "updatedAt": "2026-10-22T14:18:50.385Z",
+        "recordId": "rec_37c75eaeff3f4eabb1837d67f24b7e91",
+        "decidedAt": "2026-10-22T14:18:50.389Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_5bfc578c806a",
+        "ref": "rev_f1e36c541fd3",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_8bd1ba84",
-        "projectId": "prj_40321d8d9c92",
+        "clientId": "cli_bf72b44c",
+        "projectId": "prj_e02019955025",
         "name": "Erin Unfinished",
         "company": "",
         "role": "",
@@ -1117,17 +1128,18 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.728Z",
-        "updatedAt": "2026-10-21T22:19:52.728Z"
+        "receivedAt": "2026-10-22T14:18:50.396Z",
+        "updatedAt": "2026-10-22T14:18:50.396Z",
+        "recordId": "rec_30366881e0cf4a67858619893e8774cd"
       },
       {
-        "ref": "rev_742494715f7a",
+        "ref": "rev_5fe4a92142cd",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_604df176",
-        "projectId": "prj_3588d4aa456a",
+        "clientId": "cli_85984b9b",
+        "projectId": "prj_ef6b14b513f5",
         "name": "Alice Longname",
         "company": "",
         "role": "COO",
@@ -1140,19 +1152,20 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.737Z",
-        "updatedAt": "2026-10-21T22:19:52.737Z",
-        "decidedAt": "2026-10-21T22:19:52.744Z",
+        "receivedAt": "2026-10-22T14:18:50.405Z",
+        "updatedAt": "2026-10-22T14:18:50.405Z",
+        "recordId": "rec_5b76a010aee24717bbfa741dac43d9b8",
+        "decidedAt": "2026-10-22T14:18:50.410Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_4e3a86a627ee",
+        "ref": "rev_12a1893b3a95",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_e8b65821",
-        "projectId": "prj_11f3d466242a",
+        "clientId": "cli_e60148b0",
+        "projectId": "prj_857c56cf749c",
         "name": "Bob Other",
         "company": "",
         "role": "",
@@ -1165,19 +1178,20 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.749Z",
-        "updatedAt": "2026-10-21T22:19:52.749Z",
-        "decidedAt": "2026-10-21T22:19:52.752Z",
+        "receivedAt": "2026-10-22T14:18:50.416Z",
+        "updatedAt": "2026-10-22T14:18:50.416Z",
+        "recordId": "rec_3807fcc60e21475d917820d148e4aaa8",
+        "decidedAt": "2026-10-22T14:18:50.420Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_b6777b7d15ed",
+        "ref": "rev_872d9caed809",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_31e9ccc2",
-        "projectId": "prj_9b485579373c",
+        "clientId": "cli_ee63bd81",
+        "projectId": "prj_9d94210ab193",
         "name": "Dave Withdrawn",
         "company": "Dave Ltd",
         "role": "COO",
@@ -1190,19 +1204,20 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.756Z",
-        "updatedAt": "2026-10-21T22:19:52.756Z",
-        "decidedAt": "2026-10-21T22:19:52.759Z",
+        "receivedAt": "2026-10-22T14:18:50.425Z",
+        "updatedAt": "2026-10-22T14:18:50.425Z",
+        "recordId": "rec_8256ff510b074397a700bcc8cb4a9ce0",
+        "decidedAt": "2026-10-22T14:18:50.428Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_b6777b7d15ed",
+        "ref": "rev_872d9caed809",
         "type": "review",
         "state": "declined",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_31e9ccc2",
-        "projectId": "prj_9b485579373c",
+        "clientId": "cli_ee63bd81",
+        "projectId": "prj_9d94210ab193",
         "name": "",
         "company": "",
         "role": "",
@@ -1215,19 +1230,20 @@
           "displayName": ""
         },
         "revision": 2,
-        "receivedAt": "2026-10-21T22:19:52.756Z",
-        "updatedAt": "2026-10-21T22:19:52.762Z",
+        "receivedAt": "2026-10-22T14:18:50.425Z",
+        "updatedAt": "2026-10-22T14:18:50.430Z",
         "revoked": true,
-        "withdrawnAt": "2026-10-21T22:19:52.762Z"
+        "withdrawnAt": "2026-10-22T14:18:50.430Z",
+        "recordId": "rec_684eb5d3bff94310805c96d5a25bc574"
       },
       {
-        "ref": "rev_43e3acbc4b7c",
+        "ref": "rev_7dce7fed43b0",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_bf1e45c6",
-        "projectId": "prj_679681ca3a1c",
+        "clientId": "cli_350dcea5",
+        "projectId": "prj_c2544126e6b3",
         "name": "",
         "company": "",
         "role": "",
@@ -1240,19 +1256,20 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.765Z",
-        "updatedAt": "2026-10-21T22:19:52.765Z",
-        "decidedAt": "2026-10-21T22:19:52.768Z",
+        "receivedAt": "2026-10-22T14:18:50.434Z",
+        "updatedAt": "2026-10-22T14:18:50.434Z",
+        "recordId": "rec_459966d7121443c99814222c70df5ace",
+        "decidedAt": "2026-10-22T14:18:50.438Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_43c7e72a5746",
+        "ref": "rev_643747894e15",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_8bd1ba84",
-        "projectId": "prj_6d43911ba3f8",
+        "clientId": "cli_bf72b44c",
+        "projectId": "prj_a92cf28473ab",
         "name": "Erin Unfinished",
         "company": "",
         "role": "",
@@ -1265,17 +1282,18 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.780Z",
-        "updatedAt": "2026-10-21T22:19:52.780Z"
+        "receivedAt": "2026-10-22T14:18:50.452Z",
+        "updatedAt": "2026-10-22T14:18:50.452Z",
+        "recordId": "rec_82166881e0ce40ca910fc6b70e221582"
       },
       {
-        "ref": "rev_43c7e72a5746",
+        "ref": "rev_643747894e15",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_8bd1ba84",
-        "projectId": "prj_6d43911ba3f8",
+        "clientId": "cli_bf72b44c",
+        "projectId": "prj_a92cf28473ab",
         "name": "Erin Unfinished",
         "company": "",
         "role": "",
@@ -1288,19 +1306,20 @@
           "displayName": ""
         },
         "revision": 2,
-        "receivedAt": "2026-10-21T22:19:52.780Z",
-        "updatedAt": "2026-10-21T22:19:52.783Z",
-        "decidedAt": "2026-10-21T22:19:52.789Z",
+        "receivedAt": "2026-10-22T14:18:50.452Z",
+        "updatedAt": "2026-10-22T14:18:50.455Z",
+        "recordId": "rec_2ada4d30ef984791b1949369f9cbd8cf",
+        "decidedAt": "2026-10-22T14:18:50.461Z",
         "decidedBy": "one-click-link"
       },
       {
-        "ref": "rev_fad48904bafb",
+        "ref": "rev_cc19632e2564",
         "type": "review",
         "state": "pending",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_3920f70b",
-        "projectId": "prj_fdbfe6f1425e",
+        "clientId": "cli_8108bf16",
+        "projectId": "prj_3206a40734b5",
         "name": "Heidi Consent",
         "company": "",
         "role": "",
@@ -1313,17 +1332,18 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.805Z",
-        "updatedAt": "2026-10-21T22:19:52.805Z"
+        "receivedAt": "2026-10-22T14:18:50.479Z",
+        "updatedAt": "2026-10-22T14:18:50.479Z",
+        "recordId": "rec_5522f972fb8c44ad91567372bd65f6e1"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1336,17 +1356,18 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.818Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.490Z",
+        "recordId": "rec_eb044fd6bb4f4eb3af91c3a0b073f9ef"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1359,17 +1380,18 @@
           "displayName": ""
         },
         "revision": 2,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.821Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.493Z",
+        "recordId": "rec_c8b45e24f00e43fdb4683c1b36a4e99c"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1382,17 +1404,18 @@
           "displayName": ""
         },
         "revision": 3,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.824Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.496Z",
+        "recordId": "rec_12df638c215245038c1b9e2bc3bf5eec"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1405,17 +1428,18 @@
           "displayName": ""
         },
         "revision": 4,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.826Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.499Z",
+        "recordId": "rec_d9e9407f8f804bab965caea85963d8d6"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1428,17 +1452,18 @@
           "displayName": ""
         },
         "revision": 5,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.829Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.502Z",
+        "recordId": "rec_c30add3ec8a94152988babe902d36f39"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1451,17 +1476,18 @@
           "displayName": ""
         },
         "revision": 6,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.831Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.505Z",
+        "recordId": "rec_e040ca24ba1a47fcb45931422d6c0c52"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1474,17 +1500,18 @@
           "displayName": ""
         },
         "revision": 7,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.834Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.508Z",
+        "recordId": "rec_5fe5f6f835134ffc8f30914938ab5f99"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1497,17 +1524,18 @@
           "displayName": ""
         },
         "revision": 8,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.837Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.512Z",
+        "recordId": "rec_6e09743cbee048d9a148fc6e7b0f026a"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1520,17 +1548,18 @@
           "displayName": ""
         },
         "revision": 9,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.839Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.516Z",
+        "recordId": "rec_624de6a5b34b4585bd3dbc73142d3abe"
       },
       {
-        "ref": "rev_0cf42fafec20",
+        "ref": "rev_0d4c3d1e5b98",
         "type": "review",
         "state": "snoozed",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_7f9b7e46",
-        "projectId": "prj_9f927dd9ec6b",
+        "clientId": "cli_df6ba865",
+        "projectId": "prj_c22152024b81",
         "name": "",
         "company": "",
         "role": "",
@@ -1543,17 +1572,18 @@
           "displayName": ""
         },
         "revision": 10,
-        "receivedAt": "2026-10-21T22:19:52.818Z",
-        "updatedAt": "2026-10-21T22:19:52.843Z"
+        "receivedAt": "2026-10-22T14:18:50.490Z",
+        "updatedAt": "2026-10-22T14:18:50.519Z",
+        "recordId": "rec_320af5e0355d4eb981ddc42b98ac12d4"
       },
       {
-        "ref": "rev_bce16fa9d22c",
+        "ref": "rev_7a365ce2de72",
         "type": "review",
         "state": "approved",
         "source": "portal",
         "verifiedClient": true,
-        "clientId": "cli_afaff6fd",
-        "projectId": "prj_de80ee1f8a42",
+        "clientId": "cli_698e9d8a",
+        "projectId": "prj_9d0abab80272",
         "name": "Frank Spoof",
         "company": "",
         "role": "",
@@ -1566,71 +1596,72 @@
           "displayName": ""
         },
         "revision": 1,
-        "receivedAt": "2026-10-21T22:19:52.868Z",
-        "updatedAt": "2026-10-21T22:19:52.868Z",
-        "decidedAt": "2026-10-21T22:19:52.871Z",
+        "receivedAt": "2026-10-22T14:18:50.552Z",
+        "updatedAt": "2026-10-22T14:18:50.552Z",
+        "recordId": "rec_80cfa2ec787e45778d15b1d4c08eddf4",
+        "decidedAt": "2026-10-22T14:18:50.557Z",
         "decidedBy": "one-click-link"
       }
     ],
     "clients": [
       {
-        "id": "cli_604df176",
+        "id": "cli_85984b9b",
         "email": "alice@client.test",
         "name": "Alice Longname",
         "company": "",
         "role": "COO"
       },
       {
-        "id": "cli_e8b65821",
+        "id": "cli_e60148b0",
         "email": "bob@client.test",
         "name": "Bob Other",
         "company": "",
         "role": ""
       },
       {
-        "id": "cli_bf1e45c6",
+        "id": "cli_350dcea5",
         "email": "carol@client.test",
         "name": "Carol Anonymous",
         "company": "Carol Corp",
         "role": "CFO"
       },
       {
-        "id": "cli_31e9ccc2",
+        "id": "cli_ee63bd81",
         "email": "dave@client.test",
         "name": "Dave Withdrawn",
         "company": "Dave Ltd",
         "role": "COO"
       },
       {
-        "id": "cli_8bd1ba84",
+        "id": "cli_bf72b44c",
         "email": "erin@client.test",
         "name": "Erin Unfinished",
         "company": "",
         "role": ""
       },
       {
-        "id": "cli_afaff6fd",
+        "id": "cli_698e9d8a",
         "email": "frank@client.test",
         "name": "Frank Spoof",
         "company": "",
         "role": ""
       },
       {
-        "id": "cli_7f9b7e46",
+        "id": "cli_df6ba865",
         "email": "grace@client.test",
         "name": "Grace Rate",
         "company": "",
         "role": ""
       },
       {
-        "id": "cli_3920f70b",
+        "id": "cli_8108bf16",
         "email": "heidi@client.test",
         "name": "Heidi Consent",
         "company": "",
         "role": ""
       },
       {
-        "id": "cli_bf4a5d3f",
+        "id": "cli_6563a685",
         "email": "ivan@client.test",
         "name": "Ivan Moderation",
         "company": "",
@@ -1638,8 +1669,8 @@
       }
     ],
     "keys": {
-      "aliceRef": "rev_fc5067d5db01",
-      "revokedRef": "rev_b6777b7d15ed"
+      "aliceRef": "rev_9f13f1fbcb56",
+      "revokedRef": "rev_872d9caed809"
     }
   }
 }

@@ -3,14 +3,14 @@
 // The shared durable rate counter, on the same libSQL connection as the store.
 //
 // WHY THIS EXISTS (design §3.8)
-//   api/lib/rate-limit.ts:203-252 (createFileBackend) keeps the counter in a
+//   site/shared/server/rate-limit.ts (createFileBackend) keeps the counter in a
 //   JSON file guarded by a lock file. On Vercel that fails twice over: the
 //   filesystem is read-only, and every function instance keeps its OWN copy of
 //   the file — so the limit is per instance, not per site. The Code Reviewer
 //   also executed a case where 5 s of lock contention permanently abandons the
 //   durable counter for the life of the process.
 //
-// THE CONTRACT IS ONE METHOD (api/lib/rate-limit.ts:41-48):
+// THE CONTRACT IS ONE METHOD (site/shared/server/rate-limit.ts):
 //   hit(key: string, windowMs: number): Promise<number>
 // so the SQL backend needs NO change to the limiter itself: the existing
 // RateLimiter class (rate-limit.ts:262-327) already falls back to the
@@ -33,7 +33,7 @@ import type { LibsqlTransport, SqlArg } from './libsql-transport.js';
 /**
  * The one method a rate-limit backend has to provide.
  *
- * Structurally identical to `RateLimitBackend` in api/lib/rate-limit.ts, so
+ * Structurally identical to `RateLimitBackend` in site/shared/server/rate-limit.ts, so
  * the limiter accepts this backend as-is. The type is declared here (and not
  * imported) because site/shared/** may not import from api/**: the Cloudflare
  * functions tree cannot see the Vercel tree.
@@ -57,6 +57,22 @@ ON CONFLICT(bucket) DO UPDATE SET
   reset_at = CASE WHEN rate_counters.reset_at <= ? THEN ? + ? ELSE rate_counters.reset_at END
 RETURNING count`;
 
+/**
+ * The statement that drops the expired buckets (wave 10, F-5).
+ *
+ * The old comment on this backend claimed "one row per bucket, so the table
+ * cannot grow without bound". That was false: there was no DELETE for
+ * `rate_counters` anywhere, so every bucket that was ever used stayed in the
+ * table for ever. With a client-chosen bucket key (an x-forwarded-for the
+ * client could vary) the table grew with every request.
+ *
+ * A bucket whose window has expired carries no information — the next hit on
+ * it starts at 1 anyway — so it can go. The DELETE runs BEFORE the counter is
+ * written, in the same pipeline round trip, so the table only ever holds the
+ * buckets that are still inside their window.
+ */
+export const RATE_COUNTER_PRUNE_SQL = `DELETE FROM rate_counters WHERE reset_at <= ?`;
+
 /** SHA-256 of a key, as hex. WebCrypto only (Node >= 18, workerd). */
 export async function hashCounterKey(key: string): Promise<string> {
   const subtle = globalThis.crypto?.subtle;
@@ -75,15 +91,18 @@ export async function hashCounterKey(key: string): Promise<string> {
 /**
  * The libSQL-backed durable counter.
  *
- * One row per bucket, so the table cannot grow without bound: the file
- * backend's bucket cleanup (rate-limit.ts:242-245) is unnecessary.
+ * One row per LIVE bucket: the expired ones are pruned (see
+ * RATE_COUNTER_PRUNE_SQL), so the table cannot grow without bound, and one
+ * atomic statement, so two instances cannot lose each other's hits. The key
+ * is hashed by the counter itself (SHA-256), so no client id and no IP
+ * address reaches the database.
  */
 export function createLibsqlRateLimitBackend(transport: LibsqlTransport): DurableCounterBackend {
   return {
     async hit(key: string, windowMs: number): Promise<number> {
       const bucket = await hashCounterKey(key);
       const now = Date.now();
-      const args: SqlArg[] = [
+      const counterArgs: SqlArg[] = [
         { type: 'text', value: bucket },
         { type: 'integer', value: String(now + windowMs) },
         { type: 'integer', value: String(now) },
@@ -91,8 +110,25 @@ export function createLibsqlRateLimitBackend(transport: LibsqlTransport): Durabl
         { type: 'integer', value: String(now) },
         { type: 'integer', value: String(windowMs) },
       ];
-      const result = await transport.execute(RATE_COUNTER_SQL, args);
-      const count = result.rows[0]?.[0];
+      const pruneArgs: SqlArg[] = [{ type: 'integer', value: String(now) }];
+
+      // The prune and the counter run in ONE round trip when the transport
+      // can do a pipeline: the expired buckets go first, the hit is counted
+      // after. The bucket being counted is never pruned — its window has not
+      // expired yet.
+      let count: unknown;
+      if (typeof transport.executeAll === 'function') {
+        const results = await transport.executeAll([
+          { sql: RATE_COUNTER_PRUNE_SQL, args: pruneArgs },
+          { sql: RATE_COUNTER_SQL, args: counterArgs },
+        ]);
+        count = results[1]?.rows?.[0]?.[0];
+      } else {
+        await transport.execute(RATE_COUNTER_PRUNE_SQL, pruneArgs);
+        const result = await transport.execute(RATE_COUNTER_SQL, counterArgs);
+        count = result.rows[0]?.[0];
+      }
+
       const numeric = typeof count === 'number' ? count : Number(count);
       if (!Number.isFinite(numeric)) {
         throw new Error('the durable rate counter returned no count');

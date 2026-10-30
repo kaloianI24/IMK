@@ -189,7 +189,7 @@ let role: 'admin' | 'client' = 'client' as 'admin' | 'client';
         todo: 'var(--color-text-muted)',
         'in-progress': 'var(--color-link)',
         done: 'var(--color-accent-text)',
-        blocked: '#b00020',
+        blocked: 'var(--color-error)',
       };
       return `<span class="tag" style="background:var(--color-neutral-soft);color:${colors[status] || 'var(--color-text)'};">${escapeHtml(status)}</span>`;
     }

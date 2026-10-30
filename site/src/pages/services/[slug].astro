@@ -15,7 +15,7 @@ const d = service.data;
 const slug = service.id;
 const sd = { "@context": "https://schema.org", "@type": "Service", "name": d.title, "description": d.tagline, "offers": { "@type": "Offer", "priceSpecification": d.startingAt } };
 ---
-<BaseLayout title={`${d.title} — IMK`} description={d.summary} path={`/services/${slug}`} structuredData={sd} stickyCta={{ label: "Book a 15-minute call", href: "/book" }}>
+<BaseLayout title={`${d.title} — IMK`} description={d.summary} path={`/services/${slug}`} structuredData={sd} stickyCta={{ label: "Email us", href: "/contact" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Services', href: '/services' }, { label: d.title }]} />
     <p class="eyebrow">{d.whoFor}</p>
@@ -23,7 +23,7 @@ const sd = { "@context": "https://schema.org", "@type": "Service", "name": d.tit
     <p style="font-size:var(--text-xl);max-width:55ch;">{d.tagline}</p>
     <div style="margin-top:var(--space-4);"><span class="tag">{d.startingAt}</span> <span class="muted" style="margin-left:var(--space-3);">{d.timeline}</span></div>
     <div style="margin-top:var(--space-6);display:flex;gap:var(--space-3);">
-      <a class="btn btn-primary" href="/book">Book a 15-minute call</a>
+      <a class="btn btn-primary" href="/contact">Email us</a>
       <a class="btn btn-secondary" href="/pricing">See pricing</a>
     </div>
   </section>

@@ -35,6 +35,9 @@ desktop.ini
 # Wrangler / miniflare state (Cloudflare local dev)
 site/.wrangler/
 
+# Vercel CLI project link state (written by "vercel link")
+.vercel/
+
 # Scratch dumps — site/jar.txt contains a session cookie (treat as secret)
 site/headers.txt
 site/jar.txt

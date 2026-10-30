@@ -39,7 +39,7 @@ import { spawn } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = fs.existsSync(path.join(HERE, 'api', 'portal', 'auth.ts')) ? HERE : path.resolve(HERE, '..');
+const REPO = fs.existsSync(path.join(HERE, 'api', 'portal.ts')) ? HERE : path.resolve(HERE, '..');
 const SITE = path.join(REPO, 'site');
 const siteRequire = createRequire(path.join(SITE, 'package.json'));
 const { build } = siteRequire('esbuild');
@@ -115,9 +115,25 @@ function normalise(value) {
   return value;
 }
 
-/** The source without its comments — a comment may NAME the store, not use it. */
-function stripComments(source) {
-  return source
+/**
+ * The records without their record identity (wave 12, B-1).
+ *
+ * A record in the 'reviews' collection carries an identity the store
+ * assigns; the pre-wave-9 fixture cannot have that field, so it is taken
+ * out before the records are compared. Everything else must still be
+ * byte-for-byte the pre-wave-9 record.
+ */
+function withoutIdentity(records) {
+  return (records || []).map((record) => {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) return record;
+    const out = { ...record };
+    delete out.recordId;
+    return out;
+  });
+}
+
+/** The source without its comments - a comment may NAME the store, not use it. */
+function stripComments(source) {  return source
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/^[ \t]*\/\/.*$/gm, ' ');
 }
@@ -405,16 +421,16 @@ async function bundleHandlers(name) {
   fs.writeFileSync(
     entryFile,
     [
-      `export { default as auth } from '${from('api/portal/auth.ts')}';`,
-      `export { default as projects } from '${from('api/portal/projects.ts')}';`,
-      `export { default as planItems } from '${from('api/portal/plan-items.ts')}';`,
-      `export { default as updates } from '${from('api/portal/updates.ts')}';`,
-      `export { default as comments } from '${from('api/portal/comments.ts')}';`,
-      `export { default as invites } from '${from('api/portal/invites.ts')}';`,
-      `export { default as testimonials } from '${from('api/portal/testimonials.ts')}';`,
+      `export { default as auth } from '${from('site/shared/portal-handlers/portal-auth.ts')}';`,
+      `export { default as projects } from '${from('site/shared/portal-handlers/portal-projects.ts')}';`,
+      `export { default as planItems } from '${from('site/shared/portal-handlers/portal-plan-items.ts')}';`,
+      `export { default as updates } from '${from('site/shared/portal-handlers/portal-updates.ts')}';`,
+      `export { default as comments } from '${from('site/shared/portal-handlers/portal-comments.ts')}';`,
+      `export { default as invites } from '${from('site/shared/portal-handlers/portal-invites.ts')}';`,
+      `export { default as testimonials } from '${from('site/shared/portal-handlers/portal-testimonials.ts')}';`,
       `export { default as moderate } from '${from('api/moderate/review.ts')}';`,
       `export { createSession } from '${from('site/shared/server/portal-session.ts')}';`,
-      `export { createPortalRateLimiter } from '${from('api/lib/rate-limit.ts')}';`,
+      `export { createPortalRateLimiter } from '${from('site/shared/server/rate-limit.ts')}';`,
       `export { getPortalStore } from '${from('site/shared/server/portal-store-access.ts')}';`,
     ].join('\n'),
     'utf8',
@@ -747,14 +763,14 @@ function runRateChild(bundleFile, env, key) {
 // ---------------------------------------------------------------------------
 
 const SCANNED_FILES = [
-  'api/portal/auth.ts',
-  'api/portal/comments.ts',
-  'api/portal/invites.ts',
-  'api/portal/plan-items.ts',
-  'api/portal/projects.ts',
-  'api/portal/session.ts',
-  'api/portal/testimonials.ts',
-  'api/portal/updates.ts',
+  'site/shared/portal-handlers/portal-auth.ts',
+  'site/shared/portal-handlers/portal-comments.ts',
+  'site/shared/portal-handlers/portal-invites.ts',
+  'site/shared/portal-handlers/portal-plan-items.ts',
+  'site/shared/portal-handlers/portal-projects.ts',
+  'site/shared/portal-handlers/portal-session.ts',
+  'site/shared/portal-handlers/portal-testimonials.ts',
+  'site/shared/portal-handlers/portal-updates.ts',
   'api/moderate/review.ts',
 ];
 
@@ -811,14 +827,31 @@ async function main() {
     await t('W2b', 'the file-mode records are the pre-wave-9 records', async () => {
       const fixture = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
       for (const relative of Object.keys(fileRun.files)) {
+        // RE-PINNED (wave 12, B-1): a record in the 'reviews' collection now
+        // carries a RECORD IDENTITY — the store assigns it, so the signed
+        // moderation link can name the exact record the owner was shown. It
+        // is a NEW field, and the pre-wave-9 fixture cannot have it. The
+        // check keeps its meaning (the records are otherwise exactly the
+        // pre-wave-9 ones) by taking the identity out before the comparison;
+        // the identity itself is asserted right below.
         assertEqual(
-          JSON.stringify(fileRun.files[relative]),
+          JSON.stringify(withoutIdentity(fileRun.files[relative])),
           JSON.stringify(fixture.files[relative] || []),
           `the records of ${relative} changed`,
         );
       }
+      // The identity is there, and it is there for every review record.
+      for (const relative of Object.keys(fileRun.files)) {
+        for (const record of fileRun.files[relative] || []) {
+          if (!record || record.type !== 'review') continue;
+          assert(
+            typeof record.recordId === 'string' && record.recordId.length > 0,
+            `the review record in ${relative} carries no identity`,
+          );
+        }
+      }
       const total = Object.values(fileRun.files).reduce((n, list) => n + list.length, 0);
-      return `${total} records across ${Object.keys(fileRun.files).length} files, identical`;
+      return `${total} records across ${Object.keys(fileRun.files).length} files, identical (the identity aside)`;
     });
   }
 

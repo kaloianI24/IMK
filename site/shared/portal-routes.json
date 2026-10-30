@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "$comment": [
+    "THE ROUTE TABLE (wave 13, function budget).",
+    "",
+    "One machine-readable source of truth for every PUBLIC API URL of the Vercel",
+    "tree. Three consumers read it, so it can never disagree with itself:",
+    "",
+    "  1. the two entry points (api/portal.ts, api/admin.ts) - they map a route",
+    "     to a handler module;",
+    "  2. site/scripts/check-api-routes.mjs - it verifies that every called URL",
+    "     is served and that the handler module behind it exists;",
+    "  3. site/scripts/dev-portal.js - the local dev server serves the SAME table",
+    "     the deployed target serves, instead of matching by prefix.",
+    "",
+    "families:   one entry point serves several public URLs. The entry file is a",
+    "            Vercel FUNCTION (one file = one function = one Hobby slot).",
+    "            vercel.json rewrites every route of a family to that entry",
+    "            point with the ORIGINAL public path in the __imk_route query",
+    "            parameter.",
+    "standalone: a public URL that keeps its own function file (a query-bearing",
+    "            URL or a security-sensitive family).",
+    "handlers:   handler module name -> the file that implements it.",
+    "",
+    "The '*' pattern is ONE dynamic segment - the same shape as the platform's",
+    "[id].ts route. There is no catch-all."
+  ],
+  "families": {
+    "/api/portal": {
+      "entry": "api/portal.ts",
+      "routes": {
+        "/api/portal/comments": "portal-comments",
+        "/api/portal/invites": "portal-invites",
+        "/api/portal/plan-items": "portal-plan-items",
+        "/api/portal/plan-items/*": "portal-plan-items",
+        "/api/portal/projects": "portal-projects",
+        "/api/portal/projects/*": "portal-projects",
+        "/api/portal/session": "portal-session",
+        "/api/portal/testimonials": "portal-testimonials",
+        "/api/portal/updates": "portal-updates"
+      }
+    },
+    "/api/admin": {
+      "entry": "api/admin.ts",
+      "routes": {
+        "/api/admin/reviews": "admin-reviews",
+        "/api/admin/session": "admin-session"
+      }
+    }
+  },
+  "standalone": {
+    "/api/contact": { "entry": "api/contact.ts", "handler": "contact" },
+    "/api/moderate/review": { "entry": "api/moderate/review.ts", "handler": "moderate" },
+    "/api/portal/auth/request-link": {
+      "entry": "api/portal/auth/request-link.ts",
+      "handler": "portal-auth"
+    },
+    "/api/portal/auth/verify": {
+      "entry": "api/portal/auth/verify.ts",
+      "handler": "portal-auth"
+    },
+    "/api/portal/auth/logout": {
+      "entry": "api/portal/auth/logout.ts",
+      "handler": "portal-auth"
+    }
+  },
+  "handlers": {
+    "contact": "api/contact.ts",
+    "moderate": "api/moderate/review.ts",
+    "portal-auth": "site/shared/portal-handlers/portal-auth.ts",
+    "portal-comments": "site/shared/portal-handlers/portal-comments.ts",
+    "portal-invites": "site/shared/portal-handlers/portal-invites.ts",
+    "portal-plan-items": "site/shared/portal-handlers/portal-plan-items.ts",
+    "portal-projects": "site/shared/portal-handlers/portal-projects.ts",
+    "portal-session": "site/shared/portal-handlers/portal-session.ts",
+    "portal-testimonials": "site/shared/portal-handlers/portal-testimonials.ts",
+    "portal-updates": "site/shared/portal-handlers/portal-updates.ts",
+    "admin-reviews": "site/shared/portal-handlers/admin-reviews.ts",
+    "admin-session": "site/shared/portal-handlers/admin-session.ts"
+  }
+}

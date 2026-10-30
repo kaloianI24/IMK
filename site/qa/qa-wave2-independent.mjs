@@ -38,6 +38,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
+import { handlerPath, fwd } from './handler-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE = path.resolve(__dirname, '..');
@@ -173,22 +174,33 @@ function rmrf(target) {
   }
 }
 
-// QA_API_DIR lets the suite run against a PATCHED COPY of the api/ tree, so a
-// check can be proven to FAIL when the defect is put back (a mutation probe).
-// It is never set in normal use -- the default is the repo's real handlers.
+// QA_API_DIR / QA_SHARED_DIR let the suite run against a PATCHED COPY of the
+// tree, so a check can be proven to FAIL when the defect is put back (a
+// mutation probe). They are never set in normal use -- the default is the
+// repo's real handlers.
+//
+// The SHARED root is new in wave 13: the handler bodies moved out of api/ and
+// into site/shared/portal-handlers/, so a patched copy of the tree has to
+// carry the shared tree as well, or the probe would measure the repo's
+// handlers instead of its own.
 const API_DIR = process.env.QA_API_DIR
   ? path.resolve(process.env.QA_API_DIR)
   : path.join(REPO, 'api');
-const API_FWD = API_DIR.replace(/\\/g, '/');
+const SHARED_DIR = process.env.QA_SHARED_DIR
+  ? path.resolve(process.env.QA_SHARED_DIR)
+  : path.join(SITE, 'shared');
+const ROOTS = { apiDir: API_DIR, sharedDir: SHARED_DIR };
 const PUBLISH_SCRIPT = process.env.QA_PUBLISH_SCRIPT
   ? path.resolve(process.env.QA_PUBLISH_SCRIPT)
   : path.join(SITE, 'scripts', 'publish-testimonials.mjs');
 
-const ENTRY = `export { default as auth } from '${API_FWD}/portal/auth.ts';
-export { default as invites } from '${API_FWD}/portal/invites.ts';
-export { default as projects } from '${API_FWD}/portal/projects.ts';
-export { default as testimonials } from '${API_FWD}/portal/testimonials.ts';
-export { default as moderate } from '${API_FWD}/moderate/review.ts';
+// The handlers under test. The pin follows the PRODUCT's route table, so a
+// future move is a one-line change there and not thirteen here.
+const ENTRY = `export { default as auth } from '${fwd(handlerPath('portal-auth', ROOTS))}';
+export { default as invites } from '${fwd(handlerPath('portal-invites', ROOTS))}';
+export { default as projects } from '${fwd(handlerPath('portal-projects', ROOTS))}';
+export { default as testimonials } from '${fwd(handlerPath('portal-testimonials', ROOTS))}';
+export { default as moderate } from '${fwd(handlerPath('moderate', ROOTS))}';
 `;
 
 const ROUTES = [
@@ -446,7 +458,14 @@ async function clickLink(url) {
 async function decideLink(url) {
   const parsed = new URL(url);
   const body = {};
-  for (const name of ['ref', 'decision', 'revision', 'ts', 'sig']) {
+  // recordId (wave 12, B-1): the signed message is
+  // ref|decision|revision|recordId|ts, so the identity of the record the
+  // owner was shown is PART OF THE SIGNATURE. A body that drops it no longer
+  // verifies, and the endpoint answers 400 {code:'signature'} — which is
+  // the product being right and the helper being wrong. An empty recordId is
+  // harmless: the parser treats '' as absent, so a link minted before wave 12
+  // keeps working.
+  for (const name of ['ref', 'decision', 'revision', 'recordId', 'ts', 'sig']) {
     body[name] = parsed.searchParams.get(name) || '';
   }
   return req('POST', '/api/moderate/review', { body, form: true, origin: ORIGIN });

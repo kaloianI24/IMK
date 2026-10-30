@@ -207,6 +207,36 @@ export class StoreUnreachableError extends Error {
 }
 
 /**
+ * Can this deployment hold a store at `dir`?
+ *
+ * The answer is asked for a directory that does not exist yet: a fresh
+ * install has no data directory, and the first request must not be refused
+ * for that (the owner's first sign-in is what creates the store).
+ *
+ * The nearest existing ancestor decides: it has to be a DIRECTORY and it has
+ * to be writable. A file in the way (ENOTDIR) or a read-only ancestor (a
+ * serverless function's filesystem) means this deployment can never hold a
+ * store.
+ */
+function canHoldStore(dir: string): boolean {
+  let current = dir;
+  for (;;) {
+    if (fs.existsSync(current)) {
+      try {
+        if (!fs.statSync(current).isDirectory()) return false;
+        fs.accessSync(current, fs.constants.W_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
+/**
  * Is the collection reachable at all?
  *
  * FILE MODE: the store is a file. A missing file means this target cannot
@@ -216,16 +246,46 @@ export class StoreUnreachableError extends Error {
  *
  * LIBSQL MODE: the store is a database. It is reachable by definition; an
  * empty table means "nothing stored yet", which is a normal answer.
+ *
+ * WITH a collection: that collection's FILE must be there. This is the check
+ * the moderation endpoint and the owner's inbox use — they serve exactly one
+ * collection, and a missing file means the store cannot serve it.
+ *
+ * WITHOUT a collection: the STORE itself must be reachable — it is either
+ * there, or this deployment can put it there (a fresh install has no data
+ * directory yet, and the owner's first request creates it). A deployment that
+ * can do NEITHER — a read-only function filesystem with no store, which is
+ * what a serverless target looks like — cannot serve the portal at all, and
+ * it must say so (501) instead of answering "not invited" / "no projects" /
+ * "no quote" (wave 10, F-3).
+ *
+ * WHY THE STORE AND NOT EVERY COLLECTION: the file adapter's own contract is
+ * that a missing collection file is an EMPTY collection ("a missing file is
+ * still an empty collection, not an error"), and the product depends on it:
+ * a client who has no comments yet must get an empty list, and the owner's
+ * first sign-in must work before the invite file exists. The store itself is
+ * a different question, and it has exactly two answers: it is reachable, or
+ * this deployment cannot serve it.
  */
 export function assertStoreReachable(
-  coll: Collection,
+  coll?: Collection,
   env: Record<string, string | undefined> = process.env,
 ): void {
   if (portalStoreMode(env) !== 'file') return;
   const bag = envBag(env);
-  const file = path.join(bag.PORTAL_DATA_DIR as string, COLLECTION_FILES[coll]);
-  if (!fs.existsSync(file)) {
-    throw new StoreUnreachableError(`the ${coll} store is not there: ${file}`);
+  const root = bag.PORTAL_DATA_DIR as string;
+  if (coll) {
+    const file = path.join(root, COLLECTION_FILES[coll]);
+    if (!fs.existsSync(file)) {
+      throw new StoreUnreachableError(`the ${coll} store is not there: ${file}`);
+    }
+    return;
+  }
+  if (fs.existsSync(root)) return;
+  if (!canHoldStore(root)) {
+    throw new StoreUnreachableError(
+      `the portal store is not there and this deployment cannot hold one: ${root}`,
+    );
   }
 }
 

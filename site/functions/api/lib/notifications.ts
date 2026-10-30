@@ -1,6 +1,11 @@
 // site/functions/api/lib/notifications.ts — Cloudflare Pages Function module.
 //
-// The edge twin of api/lib/notifications.ts (Vercel). Before this file the CF
+//   A SEPARATE COPY of the Vercel module site/shared/server/notifications.ts:
+//   the two files are NOT the same code, and an edit to the Vercel module
+//   does NOT reach this file. Change the Vercel module and change THIS file
+//   too.
+//
+// The edge twin of site/shared/server/notifications.ts (Vercel). Before this file the CF
 // tree had NO notification path at all: a testimonial submitted on the CF
 // target produced no mail, no one-click approve/reject link and no owner
 // notification — the quote sat `pending` forever and nobody knew it existed
@@ -10,9 +15,11 @@
 // crypto.subtle, not node:crypto.
 //
 // The signed message and the link shape are IDENTICAL to the Vercel tree
-// (`ref|decision|revision|ts`), so a link works on whichever target served
-// the site, and the revision binding that stops the owner from approving a
-// quote they were never shown (audit M5) is in force here too.
+// (`ref|decision|revision|recordId|ts`, and the legacy
+// `ref|decision|revision|ts` for a link minted before wave 12), so a link
+// works on whichever target served the site, and the revision binding that
+// stops the owner from approving a quote they were never shown (audit M5) is
+// in force here too.
 
 import { baseUrl } from '../portal/session.js';
 
@@ -36,6 +43,15 @@ export interface ReviewSubmission {
   review: string;
   /** The revision this mail (and its links) is about. */
   revision: number;
+  /**
+   * THE IDENTITY OF THE RECORD THIS MAIL IS ABOUT (wave 12, B-1).
+   *
+   * A revision number is NOT an identity: two concurrent submissions compute
+   * the same revision from the same read, so two records can share
+   * (ref, revision) — and a link carrying only the number then approves the
+   * wrong one (audit MAJOR-1). The identity names the exact record.
+   */
+  recordId?: string;
   /** True when the client changed the quote after an earlier message. */
   updated?: boolean;
 }
@@ -74,14 +90,28 @@ async function sha256Hmac(secret: string, message: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Sign a moderation link.
+ *
+ * The signed message is `ref|decision|revision|recordId|ts` when the link
+ * names a record (wave 12, B-1) and the legacy `ref|decision|revision|ts`
+ * when it does not. The legacy form is still accepted, so a link that is
+ * already in an owner's inbox keeps working; there is no downgrade, because
+ * a link WITH an identity is signed over the identity.
+ */
 async function signModerationLink(
   secret: string,
   ref: string,
   decision: string,
   revision: number,
   ts: number,
+  recordId?: string,
 ): Promise<string> {
-  return sha256Hmac(secret, `${ref}|${decision}|${revision}|${ts}`);
+  const message =
+    recordId === undefined || recordId === ''
+      ? `${ref}|${decision}|${revision}|${ts}`
+      : `${ref}|${decision}|${revision}|${recordId}|${ts}`;
+  return sha256Hmac(secret, message);
 }
 
 export async function verifyModerationSignature(
@@ -91,9 +121,10 @@ export async function verifyModerationSignature(
   revision: number,
   ts: number,
   sig: string,
+  recordId?: string,
 ): Promise<boolean> {
   const secret = env.FORM_WEBHOOK_SECRET || '';
-  const expected = await signModerationLink(secret, ref, decision, revision, ts);
+  const expected = await signModerationLink(secret, ref, decision, revision, ts, recordId);
   if (expected.length !== sig.length) return false;
   let diff = 0;
   for (let i = 0; i < expected.length; i++) {
@@ -116,11 +147,13 @@ export async function buildModerationUrl(
   decision: string,
   revision: number,
   ts: number,
+  recordId?: string,
 ): Promise<string> {
   const secret = env.FORM_WEBHOOK_SECRET || '';
-  const sig = await signModerationLink(secret, ref, decision, revision, ts);
+  const sig = await signModerationLink(secret, ref, decision, revision, ts, recordId);
   const base = baseUrl(env);
-  return `${base}/api/moderate/review?ref=${encodeURIComponent(ref)}&decision=${encodeURIComponent(decision)}&revision=${encodeURIComponent(String(revision))}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
+  const identity = recordId ? `&recordId=${encodeURIComponent(recordId)}` : '';
+  return `${base}/api/moderate/review?ref=${encodeURIComponent(ref)}&decision=${encodeURIComponent(decision)}&revision=${encodeURIComponent(String(revision))}${identity}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
 }
 
 async function sendResendEmail(
@@ -157,8 +190,8 @@ export async function notifyReviewSubmitted(env: Env, data: ReviewSubmission): P
   if (!to) return;
 
   const ts = Math.floor(Date.now() / 1000);
-  const approveUrl = await buildModerationUrl(env, data.ref, 'approve', data.revision, ts);
-  const rejectUrl = await buildModerationUrl(env, data.ref, 'reject', data.revision, ts);
+  const approveUrl = await buildModerationUrl(env, data.ref, 'approve', data.revision, ts, data.recordId);
+  const rejectUrl = await buildModerationUrl(env, data.ref, 'reject', data.revision, ts, data.recordId);
 
   const heading = data.updated ? 'Updated review' : 'New review';
   const subject = data.updated

@@ -1,7 +1,13 @@
 // site/functions/api/admin/session.ts — Cloudflare Pages Function.
 //   GET /api/admin/session — "is this request the owner?"
 //
-// THE CLOUDFLARE TWIN OF api/admin/session.ts (spec/07 §1, D-6: the two trees
+//   A SEPARATE COPY of the Vercel module
+//   site/shared/portal-handlers/admin-session.ts. The two files are NOT the
+//   same code: an edit to the Vercel module does NOT reach this file, and
+//   this file does NOT import it. Change the Vercel module and change THIS
+//   file too.
+//
+// THE CLOUDFLARE TWIN OF site/shared/portal-handlers/admin-session.ts (spec/07 §1, D-6: the two trees
 // must answer the same way for the same input). The behaviour is identical:
 //   - the owner session lives in `imk_admin_session`, not `imk_session`;
 //   - the gate is TWO checks — an admin session AND an email on the
@@ -16,11 +22,11 @@
 //   target is accepted on both.
 //
 // THIS FILE ALSO HOLDS THE SHARED GATE
-//   api/admin/reviews.ts imports the helpers below from './session.js'. On
+//   site/shared/portal-handlers/admin-reviews.ts imports the helpers below from './session.js'. On
 //   Cloudflare every file under functions/ is a route, so the gate cannot live
 //   in a separate module file without adding a route that does not exist;
 //   here it rides along with the route that needs it, and the Vercel tree does
-//   the same thing (api/admin/reviews.ts imports './session.js').
+//   the same thing (site/shared/portal-handlers/admin-reviews.ts imports './session.js').
 
 import {
   resolveOwnerSession,

@@ -1,0 +1,51 @@
+// ---------------------------------------------------------------------
+// FROZEN PRE-WAVE-9 FIXTURE -- api/lib/jsonl.ts as it was BEFORE the
+// moderation log moved into the PortalStore contract (wave 9).
+//
+// Provenance : git a4b10a8:api/lib/jsonl.ts
+//              ("checkpoint: wave 6 complete -- admin inbox, signed sessions,")
+// SHA-256    : 31b5d1be7a8cb6911c507dc408e363b4a8819d3d00d3f3236ef28f6be4d57df4
+//              (of everything BELOW the marker line, UTF-8, unmodified)
+//
+// the Vercel-side JSONL reader the pre-wave-9 inbox imported.
+//
+// This is the module the pre-wave-9 inbox imported:
+//     import { parseJsonlStrict, guardStorage } from '../lib/jsonl.js';
+// It has ZERO importers in the product since wave 9 (the inbox reads
+// through the portal store), so it is a DEAD Vercel function -- and it
+// is on the function-budget list. The legacy tree below therefore
+// carries its OWN copy, taken from this checkpoint, so the legacy
+// sandbox does not depend on the product file existing.
+//
+// The QA wave-9 suite copies it into the scratch "legacy" tree, so the
+// legacy tree is SELF-CONTAINED: it does not need the product file to
+// exist, and the product file can therefore be deleted (wave 10, F-7).
+//
+// The suite verifies the body against this hash, and against git when
+// git is available, so a stale snapshot can never pass silently.
+// ===== END OF PROVENANCE HEADER =====
+// api/lib/jsonl.ts — Vercel-side store reader.
+//
+// The parsing rules live in site/shared/portal-store/jsonl.ts so both handler
+// trees use the same one (see that file for why: audit M3 / QA D3).
+// This module only adds the Node filesystem access.
+
+import * as fs from 'node:fs';
+import {
+  parseJsonlStrict,
+  StorageCorruptError,
+  isStorageCorrupt,
+  guardStorage,
+} from '../../site/shared/portal-store/jsonl.js';
+
+export { parseJsonlStrict, StorageCorruptError, isStorageCorrupt, guardStorage };
+
+/**
+ * Read a JSONL store file.
+ *   - a missing file is an empty store (a fresh install) — not an error
+ *   - a malformed line throws StorageCorruptError (file + line)
+ */
+export function readJsonlFile(file: string): Array<Record<string, any>> {
+  if (!fs.existsSync(file)) return [];
+  return parseJsonlStrict(fs.readFileSync(file, 'utf8'), file);
+}
