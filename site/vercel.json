@@ -1,9 +1,9 @@
 {
   "version": 3,
   "framework": null,
-  "installCommand": "npm install --no-audit --no-fund && cd site && npm ci",
-  "buildCommand": "cd site && npm run build",
-  "outputDirectory": "site/dist",
+  "installCommand": "npm install --no-audit --no-fund && npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "redirects": [
     { "source": "/book", "destination": "/contact", "permanent": true }
   ],
