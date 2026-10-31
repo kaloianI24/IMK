@@ -57,14 +57,6 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     <Footer />
     {stickyCta && <StickyCta label={stickyCta.label} href={stickyCta.href} />}
     <script>
-      const burger = document.querySelector('[data-burger]');
-      const drawer = document.querySelector('[data-drawer]');
-      if (burger && drawer) {
-        burger.addEventListener('click', () => drawer.classList.toggle('open'));
-        drawer.addEventListener('click', (e) => {
-          if (e.target === drawer) drawer.classList.remove('open');
-        });
-      }
       // mobile sticky CTA show after scroll out of hero
       const sticky = document.querySelector('[data-sticky-cta]');
       if (sticky) {
