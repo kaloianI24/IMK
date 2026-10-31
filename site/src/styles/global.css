@@ -59,32 +59,37 @@ p { margin: 0 0 var(--space-4); max-width: 65ch; }
 .nav a:not(.btn) { color: var(--color-text); font-size: var(--text-sm); font-weight: 500; }
 .nav a:not(.btn):hover { color: var(--color-accent-text); text-decoration: none; }
 .brand-wordmark { display: inline-flex; align-items: center; gap: var(--space-2); }
-.drawer { 
+.imk-mobile-menu { 
   position: fixed !important; 
   top: 0 !important; 
   left: 0 !important; 
   width: 100vw !important; 
   height: 100vh !important; 
-  background: rgba(0,0,0,0.7) !important; 
-  z-index: 9999 !important; 
+  background: rgba(0,0,0,0.8) !important; 
+  z-index: 100000 !important; 
   display: none; 
   justify-content: flex-start; 
   align-items: stretch; 
 }
-.drawer.open { 
+.imk-mobile-menu.open { 
   display: flex !important; 
 }
-.drawer-panel { 
-  background: var(--color-surface) !important; 
+.imk-mobile-menu-panel { 
+  background: var(--color-surface, #fff) !important; 
   width: 300px !important; 
   max-width: 80vw !important; 
   height: 100vh !important; 
-  padding: var(--space-6) !important; 
+  padding: 24px !important; 
   overflow-y: auto !important; 
-  box-shadow: var(--shadow-medium) !important;
-  z-index: 10000 !important;
+  box-shadow: 0 0 20px rgba(0,0,0,0.5) !important;
 }
-.drawer-panel nav a:not(.btn) { display: block; padding: var(--space-3) 0; color: var(--color-text); font-weight: 500; }
+.imk-mobile-menu-panel nav a { 
+  display: block !important; 
+  padding: 12px 0 !important; 
+  color: var(--color-text, #000) !important; 
+  font-weight: 500 !important; 
+  text-decoration: none !important;
+}
 .burger { display: flex; flex-direction: column; gap: 6px; background: none; border: none; cursor: pointer; padding: var(--space-2); }
 .hamburger-bar { width: 25px; height: 3px; background: var(--color-text); border-radius: 2px; display: block; }
 .footer { background: var(--color-surface); border-top: 1px solid var(--color-border); padding: var(--space-12) var(--space-6); }
