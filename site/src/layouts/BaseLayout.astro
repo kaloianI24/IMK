@@ -49,15 +49,7 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     <Seo title={title} description={description} canonical={canonical} structuredData={structuredData} image={`${siteUrl}/og.png`} />
   </head>
   <body>
-    <a class="skip-link" href="#main">Skip to content</a>
-    <Header />
-    <main id="main">
-      <slot />
-    </main>
-    <Footer />
-    {stickyCta && <StickyCta label={stickyCta.label} href={stickyCta.href} />}
-
-    <!-- Mobile Menu Overlay -->
+    <!-- Mobile Menu Overlay - Moved to top for absolute priority -->
     <div id="imk-menu-overlay" class="imk-menu-overlay">
       <div class="imk-menu-content">
         <nav aria-label="Mobile primary">
@@ -74,40 +66,53 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
       </div>
     </div>
 
+    <a class="skip-link" href="#main">Skip to content</a>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+    {stickyCta && <StickyCta label={stickyCta.label} href={stickyCta.href} />}
+
+    <script is:inline>
+      (function() {
+        function setupMenu() {
+          const btn = document.getElementById('burger-btn');
+          const overlay = document.getElementById('imk-menu-overlay');
+          
+          if (!btn || !overlay) return;
+
+          btn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const isOpen = overlay.classList.toggle('open');
+            overlay.style.setProperty('display', isOpen ? 'flex' : 'none', 'important');
+            btn.setAttribute('aria-expanded', isOpen);
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+          };
+
+          overlay.onclick = function(e) {
+            if (e.target === overlay) {
+              overlay.classList.remove('open');
+              overlay.style.setProperty('display', 'none', 'important');
+              btn.setAttribute('aria-expanded', 'false');
+              document.body.style.overflow = '';
+            }
+          };
+        }
+
+        // Setup immediately and repeatedly for 2 seconds to ensure it catches the DOM
+        setupMenu();
+        const interval = setInterval(setupMenu, 200);
+        setTimeout(() => clearInterval(interval), 2000);
+
+        document.addEventListener('DOMContentLoaded', setupMenu);
+        window.addEventListener('load', setupMenu);
+        document.addEventListener('astro:after-swap', setupMenu);
+      })();
+    </script>
+
     <script>
-      function setupMenu() {
-        const btn = document.getElementById('burger-btn');
-        const overlay = document.getElementById('imk-menu-overlay');
-        
-        if (!btn || !overlay) return;
-
-        btn.onclick = (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const isOpen = overlay.classList.toggle('open');
-          overlay.style.display = isOpen ? 'flex' : 'none';
-          btn.setAttribute('aria-expanded', isOpen);
-          document.body.style.overflow = isOpen ? 'hidden' : '';
-        };
-
-        overlay.onclick = (e) => {
-          if (e.target === overlay) {
-            overlay.classList.remove('open');
-            overlay.style.display = 'none';
-            btn.setAttribute('aria-expanded', 'false');
-            document.body.style.overflow = '';
-          }
-        };
-      }
-
-      // Initial setup
-      setupMenu();
-      // Handle Astro view transitions
-      document.addEventListener('astro:after-swap', setupMenu);
-      // Fallback for standard loads
-      window.addEventListener('load', setupMenu);
-      document.addEventListener('DOMContentLoaded', setupMenu);
-
       // mobile sticky CTA show after scroll out of hero
       const sticky = document.querySelector('[data-sticky-cta]');
       if (sticky) {
