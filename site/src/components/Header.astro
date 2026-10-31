@@ -46,20 +46,17 @@ import BrandMark from './BrandMark.astro';
       const burger = document.querySelector('[data-burger]');
       const drawer = document.querySelector('[data-drawer]');
       if (burger && drawer) {
-        burger.addEventListener('click', (e) => {
+        burger.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          const isOpen = drawer.classList.toggle('open');
-          burger.setAttribute('aria-expanded', isOpen.toString());
-          document.body.style.overflow = isOpen ? 'hidden' : '';
-        });
-        drawer.addEventListener('click', (e) => {
+          drawer.classList.toggle('open');
+          console.log('Drawer toggle:', drawer.classList.contains('open'));
+        };
+        drawer.onclick = (e) => {
           if (e.target === drawer) {
             drawer.classList.remove('open');
-            burger.setAttribute('aria-expanded', 'false');
-            document.body.style.overflow = '';
           }
-        });
+        };
       }
     }
     init();
