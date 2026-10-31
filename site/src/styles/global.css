@@ -63,13 +63,13 @@ p { margin: 0 0 var(--space-4); max-width: 65ch; }
 .drawer.open { display: flex !important; }
 .drawer-panel { 
   background: var(--color-surface); 
-  width: 84%; 
-  max-width: 320px; 
+  width: 300px; 
+  max-width: 80vw; 
+  height: 100vh; 
   padding: var(--space-6); 
   overflow-y: auto; 
-  position: relative;
+  box-shadow: var(--shadow-medium);
   z-index: var(--z-drawer);
-  min-height: 100vh;
 }
 .drawer-panel nav a:not(.btn) { display: block; padding: var(--space-3) 0; color: var(--color-text); font-weight: 500; }
 .burger { display: flex; flex-direction: column; gap: 6px; background: none; border: none; cursor: pointer; padding: var(--space-2); }

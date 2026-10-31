@@ -42,24 +42,28 @@ import BrandMark from './BrandMark.astro';
 
 <script is:inline>
   (function() {
-    const init = () => {
+    function init() {
       const burger = document.querySelector('[data-burger]');
       const drawer = document.querySelector('[data-drawer]');
       if (burger && drawer) {
-        burger.onclick = (e) => {
+        burger.addEventListener('click', (e) => {
           e.preventDefault();
+          e.stopPropagation();
           const isOpen = drawer.classList.toggle('open');
           burger.setAttribute('aria-expanded', isOpen.toString());
-        };
-        drawer.onclick = (e) => {
+          document.body.style.overflow = isOpen ? 'hidden' : '';
+        });
+        drawer.addEventListener('click', (e) => {
           if (e.target === drawer) {
             drawer.classList.remove('open');
             burger.setAttribute('aria-expanded', 'false');
+            document.body.style.overflow = '';
           }
-        };
+        });
       }
-    };
+    }
     init();
+    document.addEventListener('DOMContentLoaded', init);
     document.addEventListener('astro:after-swap', init);
   })();
 </script>
