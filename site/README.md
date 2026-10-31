@@ -11,4 +11,4 @@ npm install
 npm run dev
 ```
 
-Build: `npm run build` → `dist/`. Pages Function: `functions/`. Deploy via Wrangler/CF Pages (DevOps T11).
+Build: `npm run build` → `dist/`. Pages Function: `functions/`. Deploy via Wrangler/CF Pages (DevOps T11). 
