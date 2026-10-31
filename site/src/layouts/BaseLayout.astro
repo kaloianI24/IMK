@@ -61,7 +61,8 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
         const burger = document.querySelector('[data-burger]');
         const drawer = document.querySelector('[data-drawer]');
         if (burger && drawer) {
-          burger.addEventListener('click', () => {
+          burger.addEventListener('click', (e) => {
+            e.preventDefault();
             const isOpen = drawer.classList.toggle('open');
             burger.setAttribute('aria-expanded', isOpen.toString());
           });
@@ -73,7 +74,13 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
           });
         }
       };
+
+      // Run on initial load
       initMenu();
+      // Run on Astro page transitions if they exist
+      document.addEventListener('astro:after-swap', initMenu);
+      document.addEventListener('DOMContentLoaded', initMenu);
+
       // mobile sticky CTA show after scroll out of hero
       const sticky = document.querySelector('[data-sticky-cta]');
       if (sticky) {
