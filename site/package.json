@@ -10,7 +10,6 @@
     "brand": "node scripts/gen-brand.mjs",
     "dev": "astro dev",
     "dev:portal": "npm run build && node scripts/dev-portal.js",
-    "prebuild": "node scripts/publish-testimonials.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",
