@@ -56,7 +56,58 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     </main>
     <Footer />
     {stickyCta && <StickyCta label={stickyCta.label} href={stickyCta.href} />}
+
+    <!-- Mobile Menu Overlay -->
+    <div id="imk-menu-overlay" class="imk-menu-overlay">
+      <div class="imk-menu-content">
+        <nav aria-label="Mobile primary">
+          <a href="/">Home</a>
+          <a href="/services">Services</a>
+          <a href="/work">Work</a>
+          <a href="/automations">Tools</a>
+          <a href="/process">Process</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/about">About</a>
+          <a href="/login">Log in</a>
+          <a href="/contact" class="btn btn-primary" style="margin-top:var(--space-4);width:100%;">Email us</a>
+        </nav>
+      </div>
+    </div>
+
     <script>
+      function setupMenu() {
+        const btn = document.getElementById('burger-btn');
+        const overlay = document.getElementById('imk-menu-overlay');
+        
+        if (!btn || !overlay) return;
+
+        btn.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const isOpen = overlay.classList.toggle('open');
+          overlay.style.display = isOpen ? 'flex' : 'none';
+          btn.setAttribute('aria-expanded', isOpen);
+          document.body.style.overflow = isOpen ? 'hidden' : '';
+        };
+
+        overlay.onclick = (e) => {
+          if (e.target === overlay) {
+            overlay.classList.remove('open');
+            overlay.style.display = 'none';
+            btn.setAttribute('aria-expanded', 'false');
+            document.body.style.overflow = '';
+          }
+        };
+      }
+
+      // Initial setup
+      setupMenu();
+      // Handle Astro view transitions
+      document.addEventListener('astro:after-swap', setupMenu);
+      // Fallback for standard loads
+      window.addEventListener('load', setupMenu);
+      document.addEventListener('DOMContentLoaded', setupMenu);
+
       // mobile sticky CTA show after scroll out of hero
       const sticky = document.querySelector('[data-sticky-cta]');
       if (sticky) {
