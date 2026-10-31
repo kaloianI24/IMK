@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 2,
   "framework": null,
   "installCommand": "npm install --no-audit --no-fund && npm ci",
   "buildCommand": "npm run build",
