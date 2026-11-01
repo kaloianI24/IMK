@@ -1,25 +1,27 @@
 ---
 import '../styles/global.css';
 import BrandMark from './BrandMark.astro';
+import { primaryNav, primaryCta } from '../data/navigation';
 ---
 <header class="header">
   <div class="header-inner">
     <a href="/" class="brand-wordmark" aria-label="IMK home">
       <BrandMark variant="wordmark" height={22} />
     </a>
-    <button id="burger-btn" class="burger" aria-label="Open menu" aria-expanded="false">
+    <button
+      type="button"
+      id="burger-btn"
+      class="burger"
+      aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+      aria-haspopup="dialog"
+    >
       <span class="hamburger-bar"></span><span class="hamburger-bar"></span><span class="hamburger-bar"></span>
     </button>
     <nav class="nav" aria-label="Primary">
-      <a href="/">Home</a>
-      <a href="/services">Services</a>
-      <a href="/work">Work</a>
-      <a href="/automations">Tools</a>
-      <a href="/process">Process</a>
-      <a href="/pricing">Pricing</a>
-      <a href="/about">About</a>
-      <a href="/login">Log in</a>
-      <a href="/contact" class="btn btn-primary btn-sm">Email us</a>
+      {primaryNav.map((item) => <a href={item.href}>{item.label}</a>)}
+      <a href={primaryCta.href} class="btn btn-primary btn-sm">{primaryCta.label}</a>
     </nav>
   </div>
 </header>

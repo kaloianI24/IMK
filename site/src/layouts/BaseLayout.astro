@@ -6,6 +6,8 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import StickyCta from '../components/StickyCta.astro';
 import Seo from '../components/Seo.astro';
+import BrandMark from '../components/BrandMark.astro';
+import { primaryNav, primaryCta } from '../data/navigation';
 
 interface Props {
   title: string;
@@ -49,19 +51,25 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     <Seo title={title} description={description} canonical={canonical} structuredData={structuredData} image={`${siteUrl}/og.png`} />
   </head>
   <body>
-    <!-- Mobile Menu Overlay - Moved to top for absolute priority -->
-    <div id="imk-menu-overlay" class="imk-menu-overlay">
-      <div class="imk-menu-content">
-        <nav aria-label="Mobile primary">
-          <a href="/">Home</a>
-          <a href="/services">Services</a>
-          <a href="/work">Work</a>
-          <a href="/automations">Tools</a>
-          <a href="/process">Process</a>
-          <a href="/pricing">Pricing</a>
-          <a href="/about">About</a>
-          <a href="/login">Log in</a>
-          <a href="/contact" class="btn btn-primary" style="margin-top:var(--space-4);width:100%;">Email us</a>
+    <!-- Mobile navigation drawer: rendered once, outside <header>, because the
+         header's backdrop-filter would make it the containing block for
+         position: fixed. -->
+    <div id="mobile-menu" class="mobile-menu" role="dialog" aria-modal="true" aria-label="Site menu" inert>
+      <button type="button" class="mobile-menu__backdrop" data-menu-close tabindex="-1" aria-hidden="true"></button>
+      <div class="mobile-menu__panel">
+        <div class="mobile-menu__head">
+          <span class="brand-wordmark" aria-hidden="true">
+            <BrandMark variant="wordmark" height={20} />
+          </span>
+          <button type="button" class="mobile-menu__close" data-menu-close aria-label="Close menu">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <nav class="mobile-menu__nav" aria-label="Mobile primary">
+          {primaryNav.map((item) => <a href={item.href}>{item.label}</a>)}
+          <a href={primaryCta.href} class="btn btn-primary mobile-menu__cta">{primaryCta.label}</a>
         </nav>
       </div>
     </div>
@@ -75,40 +83,85 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     {stickyCta && <StickyCta label={stickyCta.label} href={stickyCta.href} />}
 
     <script is:inline>
-      (function() {
-        function setupMenu() {
-          const btn = document.getElementById('burger-btn');
-          const overlay = document.getElementById('imk-menu-overlay');
-          
-          if (!btn || !overlay) return;
+      (function () {
+        var btn = document.getElementById('burger-btn');
+        var menu = document.getElementById('mobile-menu');
+        if (!btn || !menu) return;
 
-          btn.onclick = function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const isOpen = overlay.classList.toggle('open');
-            overlay.style.setProperty('display', isOpen ? 'flex' : 'none', 'important');
-            btn.setAttribute('aria-expanded', isOpen);
-            document.body.style.overflow = isOpen ? 'hidden' : '';
-          };
+        var panel = menu.querySelector('.mobile-menu__panel');
+        var closeEls = menu.querySelectorAll('[data-menu-close]');
+        var lastFocused = null;
 
-          overlay.onclick = function(e) {
-            if (e.target === overlay) {
-              overlay.classList.remove('open');
-              overlay.style.setProperty('display', 'none', 'important');
-              btn.setAttribute('aria-expanded', 'false');
-              document.body.style.overflow = '';
-            }
-          };
+        function isOpen() {
+          return menu.classList.contains('open');
         }
 
-        // Setup immediately and repeatedly for 2 seconds to ensure it catches the DOM
-        setupMenu();
-        const interval = setInterval(setupMenu, 200);
-        setTimeout(() => clearInterval(interval), 2000);
+        function onKeydown(e) {
+          if (e.key === 'Escape' || e.key === 'Esc') {
+            e.preventDefault();
+            close();
+            return;
+          }
+          if (e.key !== 'Tab' || !panel) return;
+          var focusable = panel.querySelectorAll('a[href], button:not([disabled])');
+          if (!focusable.length) return;
+          var first = focusable[0];
+          var last = focusable[focusable.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
 
-        document.addEventListener('DOMContentLoaded', setupMenu);
-        window.addEventListener('load', setupMenu);
-        document.addEventListener('astro:after-swap', setupMenu);
+        function open() {
+          if (isOpen()) return;
+          lastFocused = document.activeElement;
+          menu.removeAttribute('inert');
+          menu.classList.add('open');
+          document.body.classList.add('menu-open');
+          btn.setAttribute('aria-expanded', 'true');
+          btn.setAttribute('aria-label', 'Close menu');
+          var closeBtn = menu.querySelector('.mobile-menu__close');
+          if (closeBtn) closeBtn.focus();
+          document.addEventListener('keydown', onKeydown);
+        }
+
+        function close() {
+          if (!isOpen()) return;
+          menu.classList.remove('open');
+          menu.setAttribute('inert', '');
+          document.body.classList.remove('menu-open');
+          btn.setAttribute('aria-expanded', 'false');
+          btn.setAttribute('aria-label', 'Open menu');
+          document.removeEventListener('keydown', onKeydown);
+          if (lastFocused && typeof lastFocused.focus === 'function') lastFocused.focus();
+        }
+
+        btn.addEventListener('click', function (e) {
+          e.preventDefault();
+          if (isOpen()) close();
+          else open();
+        });
+
+        for (var i = 0; i < closeEls.length; i++) {
+          closeEls[i].addEventListener('click', close);
+        }
+
+        var links = menu.querySelectorAll('a[href]');
+        for (var j = 0; j < links.length; j++) {
+          links[j].addEventListener('click', close);
+        }
+
+        // Never leave the drawer open when the viewport grows past the breakpoint.
+        window.addEventListener('resize', function () {
+          if (window.innerWidth >= 900) close();
+        });
+        window.addEventListener('orientationchange', function () {
+          if (window.innerWidth >= 900) close();
+        });
       })();
     </script>
 
