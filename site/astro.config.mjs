@@ -15,5 +15,14 @@ export default defineConfig({
       },
     }),
   ],
-  vite: {},
+  vite: {
+    build: {
+      // The deployed CSP is `script-src 'self'` without 'unsafe-inline', so a
+      // script the bundler inlines into the HTML is silently blocked by the
+      // browser (this is what killed the mobile menu, the login forms and the
+      // pricing form on the live site). Forcing every asset into its own file
+      // keeps all script tags external and CSP-compatible.
+      assetsInlineLimit: 0,
+    },
+  },
 });

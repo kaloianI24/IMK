@@ -427,7 +427,15 @@ if (apiFiles.length > FUNCTION_BUDGET) {
 
 /* ------------------------------------- the rewrites must match the table */
 
-const VERCEL_JSON = join(REPO, 'vercel.json');
+// The Vercel project moved from the repo root to site/ (commit f15c136), so
+// accept either location instead of crashing when the root file is absent.
+const VERCEL_JSON = [join(REPO, 'vercel.json'), join(REPO, 'site', 'vercel.json')].find((p) =>
+  existsSync(p),
+);
+if (!VERCEL_JSON) {
+  console.error('[check-api-routes] FAILED: no vercel.json at the repo root or in site/.');
+  process.exit(1);
+}
 const vercelJson = JSON.parse(readFileSync(VERCEL_JSON, 'utf8'));
 const rewrites = Array.isArray(vercelJson.rewrites) ? vercelJson.rewrites : [];
 
