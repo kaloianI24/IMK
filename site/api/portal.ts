@@ -12,6 +12,11 @@ import {
   canReadClient,
   expectedOrigin,
   baseUrlConfigured,
+  baseUrl,
+  isAdminEmail,
+  createSession,
+  sessionCookieString,
+  isSecureBaseUrl,
 } from '../shared/server/portal-session.js';
 import {
   createMagicToken,
@@ -28,6 +33,7 @@ const PROJECTS_FILE = 'site/data/portal/projects.jsonl';
 const CLIENTS_FILE = 'site/data/portal/clients.jsonl';
 const REVIEWS_FILE = 'site/data/moderation/reviews.jsonl';
 const PLAN_ITEMS_FILE = 'site/data/portal/planItems.jsonl';
+const INVITED_FILE = 'site/data/portal/invites.jsonl';
 
 function json(body: any, status = 200, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
