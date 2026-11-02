@@ -19,10 +19,10 @@
 // portal store onto a real database (CF KV/D1) is a separate, sized piece of
 // work — spec/08 §6 / Phase 3.2.
 
-import { resolveAccess, expectedOrigin, baseUrlConfigured } from '../../../shared/server/portal-session.js';
+import { resolveAccess, expectedOrigin, baseUrlConfigured } from '../../shared/server/portal-session.js';
 import { notifyReviewSubmitted } from '../lib/notifications.js';
-import { newRecordId } from '../../../shared/portal-store/record-id.js';
-import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
+import { newRecordId } from '../../shared/portal-store/record-id.js';
+import { parseJsonlStrict, guardStorage } from '../../shared/portal-store/jsonl.js';
 import { createPortalRateLimiter } from '../lib/rate-limit.js';
 
 const PROJECTS_FILE = 'site/data/portal/projects.jsonl';
