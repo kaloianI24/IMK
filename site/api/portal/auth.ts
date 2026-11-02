@@ -16,7 +16,7 @@ import {
   baseUrlConfigured,
   isProductionEnv,
   sessionSecretProblem,
-} from './session.js';
+} from '../../../shared/server/portal-session.js';
 import { secretProblem } from '../../../shared/server/secret.js';
 import { platformAddress } from '../../../shared/server/platform-address.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';

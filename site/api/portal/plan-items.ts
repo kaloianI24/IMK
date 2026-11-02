@@ -3,7 +3,7 @@
 //   POST    /api/portal/plan-items        — create plan item (owner only, deferred)
 //   PATCH   /api/portal/plan-items/:id    — update plan item status (deferred)
 
-import { resolveAccess, resolveOwnerSession, canReadClient } from './session.js';
+import { resolveAccess, resolveOwnerSession, canReadClient } from '../../../shared/server/portal-session.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 
 const PROJECTS_FILE = 'site/data/portal/projects.jsonl';

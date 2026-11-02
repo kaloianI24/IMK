@@ -4,7 +4,7 @@
 //   POST   /api/portal/projects        — create project (owner only, deferred)
 //   PATCH  /api/portal/projects/:id    — update project status (owner only, deferred)
 
-import { resolveAccess, resolveOwnerSession, canReadClient, expectedOrigin } from './session.js';
+import { resolveAccess, resolveOwnerSession, canReadClient, expectedOrigin } from '../../../shared/server/portal-session.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 
 const PROJECTS_FILE = 'site/data/portal/projects.jsonl';

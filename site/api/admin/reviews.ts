@@ -33,7 +33,7 @@
 import {
   adminEmailsConfigured,
   resolveAdmin,
-} from './session.js';
+} from '../../../shared/server/portal-session.js';
 import { isProductionEnv } from '../../../shared/server/portal-session.js';
 import { secretProblem } from '../../../shared/server/secret.js';
 

@@ -2,7 +2,7 @@
 //   GET  /api/portal/updates        — list changelog entries
 //   POST /api/portal/updates        — create changelog entry (deferred)
 
-import { resolveAccess, canReadClient } from './session.js';
+import { resolveAccess, canReadClient } from '../../../shared/server/portal-session.js';
 import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 
 const PROJECTS_FILE = 'site/data/portal/projects.jsonl';
