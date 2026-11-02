@@ -28,6 +28,14 @@ function html(body: string, status = 200) {
   });
 }
 
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: Request) {
+  return onRequest({ request, env: process.env }, {});
+}
+
 export const onRequest: any = async (ctx: any): Promise<Response> => {
   const { request, env } = ctx;
   const url = new URL(request.url);

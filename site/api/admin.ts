@@ -25,6 +25,14 @@ export function resolveAdmin(source: SessionSource, env: any, sessionEnv?: any):
   return resolveOwnerSession(source, env as any, sessionEnv);
 }
 
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: Request) {
+  return onRequest({ request, env: process.env }, {});
+}
+
 export const onRequest: any = async (ctx: any): Promise<Response> => {
   const { request, env } = ctx;
   const url = new URL(request.url);

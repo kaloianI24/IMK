@@ -77,8 +77,12 @@ async function rateLimit(env: Env, ip: string, hour: string): Promise<boolean> {
 }
 const delay = (ms:number)=>new Promise(r=>setTimeout(r,ms));
 
-export default async function handler(request: Request, env: Env, context: any) {
-  return onRequestPost({ request, env }, context);
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: Request) {
+  return onRequestPost({ request, env: process.env }, {});
 }
 
 export const onRequestPost: any = async (ctx: any) => {

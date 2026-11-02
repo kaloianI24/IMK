@@ -200,6 +200,14 @@ async function handlePortalData(ctx: any): Promise<Response> {
   return json({ error: 'not found', code: 'not-found' }, 404);
 }
 
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(request: Request) {
+  return onRequest({ request, env: process.env }, {});
+}
+
 export const onRequest: any = async (ctx: any): Promise<Response> => {
   const { request } = ctx;
   const url = new URL(request.url);
