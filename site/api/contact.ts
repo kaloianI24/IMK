@@ -135,7 +135,7 @@ export const onRequestPost: any = async (ctx: any) => {
       };
     } else if (ct.includes('multipart')) {
       const parsed = parseMultipart(rawBytes, ct);
-      if (!parsed.ok) {
+      if (parsed.ok === false) {
         const code = parsed.code;
         const status = code === 'payload-too-large' ? 413 : 400;
         return wantsJson ? json({ error: 'invalid payload', code }, status) : new Response('Bad request', { status });
