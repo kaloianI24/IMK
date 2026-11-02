@@ -290,7 +290,8 @@ ${attachmentNames ? `<p><b>Attachments:</b> ${escapeHtml(attachmentNames)}</p>` 
       if (r.ok) {
         emailed = true;
       } else {
-        console.log(JSON.stringify({ ts: now, ref, outcome: 'email_fail', ipHash: ipHashVal }));
+        const errorText = await r.text().catch(() => 'No error body');
+        console.log(JSON.stringify({ ts: now, ref, outcome: 'email_fail', ipHash: ipHashVal, error: errorText }));
       }
     } catch (e) {
       console.log(JSON.stringify({ ts: now, ref, outcome: 'email_error', ipHash: ipHashVal }));
