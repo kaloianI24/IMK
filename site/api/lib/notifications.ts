@@ -21,7 +21,7 @@
 // stops the owner from approving a quote they were never shown (audit M5) is
 // in force here too.
 
-import { baseUrl } from '../portal/session.js';
+import { baseUrl } from '../../shared/server/portal-session.js';
 
 export interface Env {
   FORM_WEBHOOK_SECRET?: string;

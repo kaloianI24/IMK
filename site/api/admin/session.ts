@@ -34,7 +34,7 @@ import {
   adminEmailsConfigured as adminEmailsConfiguredShared,
   type Session,
   type SessionSource,
-} from '../portal/session.js';
+} from '../../shared/server/portal-session.js';
 
 /** The part of the environment the admin gate reads. */
 export interface AdminEnv {
