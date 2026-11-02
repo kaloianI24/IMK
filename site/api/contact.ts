@@ -1,5 +1,5 @@
-import { isProductionEnv } from '../shared/server/portal-session.js';
-import { parseMultipart, sniffMime, ALLOWED_MIMES, toBase64 } from '../shared/server/multipart.js';
+import { isProductionEnv } from '../../shared/server/portal-session.js';
+import { parseMultipart, sniffMime, ALLOWED_MIMES, toBase64 } from '../../shared/server/multipart.js';
 
 interface Env {
   TURNSTILE_SECRET_KEY?: string;

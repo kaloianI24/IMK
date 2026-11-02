@@ -1,7 +1,7 @@
 // site/functions/api/portal/invites.ts — Cloudflare Pages Function.
 //   POST /api/portal/invites — invite a client by email (owner only, deferred)
 
-import { resolveOwnerSession, expectedOrigin } from '../../shared/server/portal-session.js';
+import { resolveOwnerSession, expectedOrigin } from '../../../shared/server/portal-session.js';
 
 function json(body: any, status = 200, extra: Record<string, string> = {}): Response {
   const payload = JSON.stringify(body);
