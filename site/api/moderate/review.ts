@@ -187,7 +187,7 @@ async function readModerationParams(request: Request):
 async function handle(ctx: any, commit: boolean): Promise<Response> {
   const { request, env } = ctx;
   const parsed = await readModerationParams(request);
-  if (!parsed.ok) {
+  if (parsed.ok === false) {
     return json(parsed.body, parsed.status);
   }
   const { ref, decision, revision, ts, sig, recordId } = parsed.params;
