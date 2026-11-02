@@ -243,7 +243,7 @@ export const onRequestPost: any = async (ctx: any) => {
   const day = new Date(now).toISOString().slice(0,10);
 
   // 8. Resend email
-  const from = env.RESEND_FROM || 'IMK <2imk4support@gmail.com>';
+  const from = env.RESEND_FROM || 'IMK <onboarding@resend.dev>';
   const to = env.RESEND_TO || env.CONTACT_TO || '';
   const rawSubject = input.subject ? String(input.subject) : '';
   const cleanSubject = rawSubject.replace(/[\r\n\t\x00-\x1f\x7f]/g, ' ').trim().slice(0, 120);

@@ -451,7 +451,12 @@ export default async function handler(
   const day = new Date(now).toISOString().slice(0, 10);
 
   // 9. Resend e-mail
-  const from = process.env.RESEND_FROM || 'IMK <2imk4support@gmail.com>';
+  // Replying to a lead is what matters, so reply_to is the visitor. The From
+  // must be a Resend-verified identity: with no verified domain use Resend's
+  // test sender (it only delivers to the Resend account owner's address, which
+  // is where CONTACT_TO points). Set RESEND_FROM to the verified domain sender
+  // once the domain is added in Resend.
+  const from = process.env.RESEND_FROM || 'IMK <onboarding@resend.dev>';
   const to = process.env.RESEND_TO || process.env.CONTACT_TO || '';
   const rawSubject = (input as any).subject ? String((input as any).subject) : '';
   const cleanSubject = rawSubject.replace(/[\r\n\t\x00-\x1f\x7f]/g, ' ').trim().slice(0, 120);

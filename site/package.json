@@ -14,6 +14,7 @@
     "preview": "astro preview",
     "check": "astro check",
     "check:routes": "node scripts/check-api-routes.mjs",
+    "check:mail": "node scripts/check-mail.mjs",
     "typecheck:api": "tsc -p tsconfig.api.json --noEmit",
     "test:store": "node scripts/test-portal-store.mjs",
     "og": "node scripts/gen-og.mjs",

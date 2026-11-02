@@ -367,3 +367,42 @@ Both CSP copies no longer allow Calendly domains:
 ### 9.5 Public URL list updated
 
 The site now includes `/contact` as a public page. The `/book` path is a redirect only.
+
+## 10. Contact-form e-mail (Resend)
+
+The contact form posts to `/api/contact`, which sends through Resend when two
+variables are set. With them missing the endpoint answers `ok:true, emailed:false`,
+so the form shows its "email 2imk4support@gmail.com" fallback instead of claiming
+success — nothing is silently lost, but nothing is delivered either.
+
+| Variable | Purpose |
+|---|---|
+| `RESEND_API_KEY` | Resend API key (`re_...`). Missing = no e-mail is sent. |
+| `CONTACT_TO` (or `RESEND_TO`) | Destination inbox. Missing = no e-mail is sent. |
+| `RESEND_FROM` | Verified sender. Defaults to `IMK <onboarding@resend.dev>`, which only delivers to the Resend account owner address. |
+
+### 10.1 First working setup (no domain needed)
+
+1. Create a free Resend account with **2imk4support@gmail.com**.
+2. Create an API key (starts with `re_`).
+3. Put it in `site/.env` (never commit that file) and in the host's environment
+   settings: `RESEND_API_KEY=re_...`, `CONTACT_TO=2imk4support@gmail.com`,
+   `RESEND_FROM="IMK <onboarding@resend.dev>"`.
+4. Verify without sending: `cd site && node scripts/check-mail.mjs --test`.
+5. Verify for real: `cd site && node scripts/check-mail.mjs --send` — one e-mail
+   lands in the support inbox.
+
+### 10.2 Sending to anyone (portal sign-in links)
+
+`onboarding@resend.dev` only reaches the account owner, so portal magic links
+need a verified domain: add it in Resend, publish the DNS records, then set
+`RESEND_FROM` to that domain (e.g. `IMK <hello@yourdomain>`). Until then the
+portal sign-in answers `500 {code:'internal'}` in production, by design.
+
+### 10.3 Guard rails
+
+- The From address must be a Resend-verified identity; a Gmail `From` is refused
+  by Resend even though the code would send it.
+- `reply_to` is the visitor's address, so replying from the support inbox reaches
+  the lead.
+- Secrets live only in `site/.env` (gitignored) and the host dashboard.

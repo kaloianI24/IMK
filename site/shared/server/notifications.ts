@@ -69,7 +69,7 @@ function notificationTo(): string | undefined {
 }
 
 function fromHeader(): string {
-  return process.env.RESEND_FROM || 'IMK <2imk4support@gmail.com>';
+  return process.env.RESEND_FROM || 'IMK <onboarding@resend.dev>';
 }
 
 async function sendResendEmail(params: {
