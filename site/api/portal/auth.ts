@@ -16,10 +16,10 @@ import {
   baseUrlConfigured,
   isProductionEnv,
   sessionSecretProblem,
-} from '../../../shared/server/portal-session.js';
-import { secretProblem } from '../../../shared/server/secret.js';
-import { platformAddress } from '../../../shared/server/platform-address.js';
-import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
+} from '../../shared/server/portal-session.js';
+import { secretProblem } from '../../shared/server/secret.js';
+import { platformAddress } from '../../shared/server/platform-address.js';
+import { parseJsonlStrict, guardStorage } from '../../shared/portal-store/jsonl.js';
 import { createPortalRateLimiter } from '../lib/rate-limit.js';
 import {
   createMagicToken,
@@ -28,7 +28,7 @@ import {
   magicLinkMisconfigured,
   magicLinkUrl,
   PORTAL_MAGIC_PURPOSE,
-} from '../../../shared/server/magic-link.js';
+} from '../../shared/server/magic-link.js';
 
 const RATE_LIMIT = 5; // per hour per IP
 const RATE_LIMIT_WINDOW_MS = 3600 * 1000;

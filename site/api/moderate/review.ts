@@ -27,15 +27,15 @@ import {
   verifyModerationSignature,
 } from '../lib/notifications.js';
 import type { Env } from '../lib/notifications.js';
-import { parseJsonlStrict, isStorageCorrupt } from '../../../shared/portal-store/jsonl.js';
+import { parseJsonlStrict, isStorageCorrupt } from '../../shared/portal-store/jsonl.js';
 import {
   MODERATION_PATH,
   parseModerationParams,
   renderConfirmationPage,
   type ModerationParams,
-} from '../../../shared/server/moderation.js';
-import { isProductionEnv } from '../../../shared/server/portal-session.js';
-import { secretProblem } from '../../../shared/server/secret.js';
+} from '../../shared/server/moderation.js';
+import { isProductionEnv } from '../../shared/server/portal-session.js';
+import { secretProblem } from '../../shared/server/secret.js';
 
 function json(body: any, status = 200, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
