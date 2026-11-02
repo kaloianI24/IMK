@@ -57,9 +57,9 @@ import {
   sessionSecretProblem,
   type EnvLike,
   type Session,
-} from '../../shared/server/portal-session.js';
+} from '../../../shared/server/portal-session.js';
 
-export * from '../../shared/server/portal-session.js';
+export * from '../../../shared/server/portal-session.js';
 
 function json(body: any, status = 200, extra: Record<string, string> = {}): Response {
   const payload = JSON.stringify(body);

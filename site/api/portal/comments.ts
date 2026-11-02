@@ -2,8 +2,8 @@
 //   GET  /api/portal/comments        — list comments
 //   POST /api/portal/comments        — create comment (deferred)
 
-import { resolveAccess, canReadClient } from '../../shared/server/portal-session.js';
-import { parseJsonlStrict, guardStorage } from '../../shared/portal-store/jsonl.js';
+import { resolveAccess, canReadClient } from '../../../shared/server/portal-session.js';
+import { parseJsonlStrict, guardStorage } from '../../../shared/portal-store/jsonl.js';
 
 const PROJECTS_FILE = 'site/data/portal/projects.jsonl';
 const COMMENTS_FILE = 'site/data/portal/comments.jsonl';

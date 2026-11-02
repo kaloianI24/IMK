@@ -33,9 +33,9 @@
 import {
   adminEmailsConfigured,
   resolveAdmin,
-} from '../../../shared/server/portal-session.js';
-import { isProductionEnv } from '../../../shared/server/portal-session.js';
-import { secretProblem } from '../../../shared/server/secret.js';
+} from '../../shared/server/portal-session.js';
+import { isProductionEnv } from '../../shared/server/portal-session.js';
+import { secretProblem } from '../../shared/server/secret.js';
 
 function json(body: any, status = 200, extra: Record<string, string> = {}): Response {
   const payload = JSON.stringify(body);
