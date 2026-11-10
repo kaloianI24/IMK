@@ -1,0 +1,30 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { getCollection } from 'astro:content';
+
+const posts = await getCollection('blog');
+posts.sort((a, b) => new Date(b.data.publishedAt).getTime() - new Date(a.data.publishedAt).getTime());
+---
+<BaseLayout title="Blog — IMK" description="Automation tips, case studies, and practical guides for teams looking to save hours every week." path="/blog">
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Blog' }]} />
+    <h1>Blog</h1>
+    <p style="max-width:60ch;">Practical guides on automation, AI agents, and workflow optimization.</p>
+  </section>
+
+  <section class="container section" style="padding-top:0;">
+    <div class="grid-2">
+      {posts.map((post) => (
+        <article class="card">
+          <p class="muted" style="font-size:var(--text-sm);margin-bottom:var(--space-2);">{post.data.publishedAt} · {post.data.author}</p>
+          <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;"><a href={`/blog/${post.id.replace('.md', '')}`}>{post.data.title}</a></h2>
+          <p class="muted" style="margin:var(--space-2) 0;">{post.data.description}</p>
+          <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-3);">
+            {post.data.tags.map((tag) => <span class="tag">{tag}</span>)}
+          </div>
+        </article>
+      ))}
+    </div>
+  </section>
+</BaseLayout>

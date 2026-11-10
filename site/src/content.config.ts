@@ -74,4 +74,15 @@ const testimonials = defineCollection({
   }),
 });
 
-export const collections = { services, cases, testimonials };
+const blog = defineCollection({
+  loader: glob({ pattern: '**/*.md', base: './src/content/blog' }),
+  schema: z.object({
+    title: z.string().min(1).max(120),
+    description: z.string().min(1).max(260),
+    publishedAt: z.string().min(1).max(20),
+    author: z.string().min(1).max(80).default('IMK'),
+    tags: z.array(z.string().min(1).max(40)).min(1).max(6),
+  }),
+});
+
+export const collections = { services, cases, testimonials, blog };

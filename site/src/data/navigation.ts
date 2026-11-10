@@ -17,6 +17,7 @@ export const primaryNav: NavItem[] = [
   { label: 'Process', href: '/process' },
   { label: 'Pricing', href: '/pricing' },
   { label: 'About', href: '/about' },
+  { label: 'Blog', href: '/blog' },
   { label: 'Log in', href: '/login' },
 ];
 

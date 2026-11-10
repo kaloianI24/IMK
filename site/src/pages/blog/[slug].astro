@@ -1,0 +1,31 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog');
+  return posts.map((post) => ({
+    params: { slug: post.id.replace('.md', '') },
+    props: { post },
+  }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+---
+<BaseLayout title={`${post.data.title} — IMK`} description={post.data.description} path={`/blog/${post.id.replace('.md', '')}`}>
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Blog', href: '/blog' }, { label: post.data.title }]} />
+    <article style="max-width:720px;">
+      <p class="muted" style="font-size:var(--text-sm);margin-bottom:var(--space-2);">{post.data.publishedAt} · {post.data.author}</p>
+      <h1>{post.data.title}</h1>
+      <div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin:var(--space-3) 0;">
+        {post.data.tags.map((tag) => <span class="tag">{tag}</span>)}
+      </div>
+      <div class="prose" style="margin-top:var(--space-6);">
+        <Content />
+      </div>
+    </article>
+  </section>
+</BaseLayout>
