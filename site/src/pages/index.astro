@@ -32,10 +32,39 @@ const globalFaq = [
 const sd = [
   {
     "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "IMK",
+    "description": "Automation agency: workflow automation, B2B AI agents, integration, automation audit.",
+    "url": "https://imk-coral.vercel.app",
+    "logo": "https://imk-coral.vercel.app/favicon.svg",
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "contactType": "sales",
+      "email": "2imk4support@gmail.com",
+      "availableLanguage": "English",
+    },
+    "sameAs": [],
+  },
+  {
+    "@context": "https://schema.org",
     "@type": "ProfessionalService",
     "name": "IMK",
     "description": "Automation agency: workflow automation, B2B AI agents, integration, automation audit.",
     "priceRange": "£800-£10,000",
+    "areaServed": "Worldwide",
+    "serviceType": ["Workflow Automation", "B2B AI Agent", "Integration Services", "Automation Audit"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": globalFaq.map((f) => ({
+      "@type": "Question",
+      "name": f.q,
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": f.a,
+      },
+    })),
   },
 ];
 ---
