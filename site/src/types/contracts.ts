@@ -2,13 +2,14 @@
 export const CTA_ROLES = ['book-15','audit','quote','discuss','see-pricing'] as const;
 export type CtaRole = (typeof CTA_ROLES)[number];
 
-export const BUDGET_ENUM = ['under-1k','1k-5k','5k-15k','15k+','not-sure'] as const;
+export const BUDGET_ENUM = ['under-1k','1k-3k','3k-6k','6k-10k','10k+','not-sure'] as const;
 export type Budget = (typeof BUDGET_ENUM)[number];
 export const BUDGET_LABELS: Record<Budget, string> = {
   'under-1k': 'Under £1,000 (or local equivalent)',
-  '1k-5k': '£1,000 – £5,000',
-  '5k-15k': '£5,000 – £15,000',
-  '15k+': '£15,000+',
+  '1k-3k': '£1,000 – £3,000',
+  '3k-6k': '£3,000 – £6,000',
+  '6k-10k': '£6,000 – £10,000',
+  '10k+': '£10,000+',
   'not-sure': 'Not sure yet',
 };
 
