@@ -71,7 +71,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
           <button type="button" class="btn btn-secondary" id="attach-btn">Attach images or video</button>
           <input type="file" id="attachments" name="attachments" multiple accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime,video/webm" aria-label="Attach images or a short video" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
         </div>
-        <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-1);">Up to 3 files, 4 MB total. PNG, JPEG, WebP, GIF or short MP4/MOV/WebM.</p>
+        <p class="muted" style="font-size:var(--text-sm);margin-top:var(--space-1);">Up to 3 files, 10 MB total. PNG, JPEG, WebP, GIF or short MP4/MOV/WebM.</p>
         <div id="file-chips" style="display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2);"></div>
       </div>
 
@@ -124,7 +124,7 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
     // attachments
     const ALLOWED = ['image/png','image/jpeg','image/webp','image/gif','video/mp4','video/quicktime','video/webm'];
     const MAX_FILES = 3;
-    const MAX_TOTAL = 4 * 1024 * 1024;
+    const MAX_TOTAL = 10 * 1024 * 1024;
     let selectedFiles: File[] = [];
     const fileInput = document.getElementById('attachments') as HTMLInputElement | null;
     const attachBtn = document.getElementById('attach-btn');
@@ -181,13 +181,13 @@ import Breadcrumbs from '../components/Breadcrumbs.astro';
       'challenge': 'Security check failed — please try again.',
       'time-trap': "You sent that very quickly — take a moment and try again.",
       'rate-limit': "You've sent a few emails in a short while — please wait before sending again.",
-      'payload-too-large': 'That file is too large — the limit is 4 MB per email. Try a shorter video or remove it.',
+      'payload-too-large': 'That file is too large — the limit is 10 MB per email. Try a shorter video or remove it.',
       'too-many-files': 'You can attach up to 3 files — please remove one and try again.',
       'unsupported-file': "That file type isn't supported — attach an image (PNG, JPEG, WebP, GIF) or a short video (MP4, MOV, WebM). SVG isn't accepted.",
       'internal': 'Something went wrong while sending — please try again in a moment.',
       'method': 'Something went wrong while sending — please try again in a moment.',
       'server': 'Something went wrong while sending — please try again in a moment.',
-      'file-too-large': 'That file is too large — the limit is 4 MB per email. Try a shorter video or remove it.',
+      'file-too-large': 'That file is too large — the limit is 10 MB per email. Try a shorter video or remove it.',
       'unsupported-type': "That file type isn't supported — attach an image (PNG, JPEG, WebP, GIF) or a short video (MP4, MOV, WebM). SVG isn't accepted.",
     };
 

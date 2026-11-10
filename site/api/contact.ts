@@ -27,7 +27,7 @@ interface ContactReq {
 }
 const BUDGETS = ['under-1k','1k-3k','3k-6k','6k-10k','10k+','not-sure'];
 const TIMELINES = ['asap','1-month','3-months','exploring'];
-const MAX = { name:80, email:254, company:120, project:500, body:4194304, recent:3000, stale:4*60*60*1000, skew:60000 };
+const MAX = { name:80, email:254, company:120, project:500, body:10485760, recent:3000, stale:4*60*60*1000, skew:60000 };
 
 function json(body: any, status = 200, extra: Record<string,string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -273,7 +273,7 @@ ${attachmentNames ? `<p><b>Attachments:</b> ${escapeHtml(attachmentNames)}</p>` 
   const attachments = files.map((f) => ({ filename: f.filename, content: toBase64(f.data) }));
   let encodedSize = 0;
   for (const a of attachments) encodedSize += a.content.length;
-  if (encodedSize > 5872025) {
+  if (encodedSize > 13981013) {
     return wantsJson ? json({ error: 'request too large', code: 'payload-too-large' }, 413) : new Response('Request too large', { status: 413 });
   }
 
