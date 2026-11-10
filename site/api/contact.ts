@@ -25,7 +25,7 @@ interface ContactReq {
   type?: string;
   linkedin?: string;
 }
-const BUDGETS = ['under-1k','1k-5k','5k-15k','15k+','not-sure'];
+const BUDGETS = ['under-1k','1k-3k','3k-6k','6k-10k','10k+','not-sure'];
 const TIMELINES = ['asap','1-month','3-months','exploring'];
 const MAX = { name:80, email:254, company:120, project:500, body:4194304, recent:3000, stale:4*60*60*1000, skew:60000 };
 
