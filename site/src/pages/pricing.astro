@@ -3,11 +3,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../types/contracts';
 ---
-<BaseLayout title="Pricing — IMK" description="Automation audit from £800. Fixed-scope builds £1,000–£10,000, automation care from £400/mo. No hourly billing, no surprise retainers." path="/pricing" stickyCta={{ label: "Email us", href: "/contact" }}>
+
+<BaseLayout title="Pricing — IMK" description="Automation audit from £800 / €950 / $1,000. Fixed-scope builds £1,000–£10,000. Automation care from £400/mo. No hourly billing." path="/pricing" stickyCta={{ label: "Email us", href: "/contact" }}>
   <section class="container section">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Pricing' }]} />
     <h1>Pricing</h1>
     <p style="max-width:60ch;">Fixed scope, starting prices. We quote after an audit or a scoping call. Nothing is billed hourly — ever.</p>
+
+    <div style="margin:var(--space-4) 0;display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;">
+      <label for="currency-select" style="font-weight:600;">Currency:</label>
+      <select id="currency-select" style="padding:var(--space-2);border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-bg);color:var(--color-text);font:inherit;">
+        <option value="GBP">GBP (£)</option>
+        <option value="EUR">EUR (€)</option>
+        <option value="USD">USD ($)</option>
+      </select>
+      <span class="muted" style="font-size:var(--text-sm);">Approximate rates. Final quotes in your preferred currency.</span>
+    </div>
   </section>
 
   <section class="container section" style="padding-top:0;">
@@ -15,7 +26,7 @@ import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../t
       <div class="card">
         <p class="eyebrow">Audit</p>
         <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;">Automation audit</h2>
-        <p style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">from £800</p>
+        <p class="price" data-gbp="800" data-eur="950" data-usd="1000" style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">from £800</p>
         <p class="muted">10 working days · written report · one scoped quick win.</p>
         <ul class="muted">
           <li>Process inventory (hours/week)</li>
@@ -27,7 +38,7 @@ import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../t
       <div class="card">
         <p class="eyebrow">Build</p>
         <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;">Fixed-scope build</h2>
-        <p style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">£1,000 – £10,000</p>
+        <p class="price" data-gbp-low="1000" data-gbp-high="10000" data-eur-low="1200" data-eur-high="12000" data-usd-low="1300" data-usd-high="13000" style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">£1,000 – £10,000</p>
         <p class="muted">Agreed in writing at kickoff. Timeline fixed.</p>
         <ul class="muted">
           <li>Workflow automation, agents, integrations</li>
@@ -39,7 +50,7 @@ import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../t
       <div class="card">
         <p class="eyebrow">Care</p>
         <h2 style="margin:0;font-size:var(--text-xl);font-weight:600;">Automation Care</h2>
-        <p style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">from £400/mo</p>
+        <p class="price" data-gbp="400" data-eur="475" data-usd="510" style="font-size:var(--text-2xl);font-weight:700;margin:var(--space-2) 0;">from £400/mo</p>
         <p class="muted">Same-week critical fixes, monthly health check, API guard.</p>
         <ul class="muted">
           <li>Alerts on silent failures</li>
@@ -127,7 +138,36 @@ import { BUDGET_ENUM, BUDGET_LABELS, TIMELINE_ENUM, TIMELINE_LABELS } from '../t
         }
       });
     }
+
+    // Currency converter
+    const symbols: Record<string,string> = { GBP: '£', EUR: '€', USD: '$' };
+    const select = document.getElementById('currency-select') as HTMLSelectElement | null;
+    function formatNum(n: number): string {
+      return n.toLocaleString('en-GB');
+    }
+    function updatePrices() {
+      const cur = select ? select.value : 'GBP';
+      const sym = symbols[cur] || '£';
+      document.querySelectorAll('.price').forEach((el) => {
+        const h = el as HTMLElement;
+        const gbp = h.getAttribute('data-gbp');
+        const gbpLow = h.getAttribute('data-gbp-low');
+        const gbpHigh = h.getAttribute('data-gbp-high');
+        if (gbpLow && gbpHigh) {
+          const low = h.getAttribute('data-' + cur.toLowerCase() + '-low');
+          const high = h.getAttribute('data-' + cur.toLowerCase() + '-high');
+          h.textContent = sym + formatNum(Number(low)) + ' – ' + sym + formatNum(Number(high));
+        } else if (gbp) {
+          const val = h.getAttribute('data-' + cur.toLowerCase());
+          const suffix = h.textContent && h.textContent.includes('/mo') ? '/mo' : '';
+          h.textContent = 'from ' + sym + formatNum(Number(val)) + suffix;
+        }
+      });
+    }
+    if (select) {
+      select.addEventListener('change', updatePrices);
+      updatePrices();
+    }
   </script>
   {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && <script async src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>}
-</BaseLayout
->
+</BaseLayout>
