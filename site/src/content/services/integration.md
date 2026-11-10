@@ -29,7 +29,7 @@ outOfScope:
   - "Custom enterprise middleware (we advise, not necessarily build)"
   - "Bulk historical migrations without a written spec"
 timeline: "3–5 weeks, agreed and fixed at kickoff."
-startingAt: "from £2,000"
+startingAt: "from £1,000"
 careOption: "Automation Care keeps mappings correct as vendors ship new fields."
 caseSnapshot: "Monthly reconciliation replaced with a nightly automated sync that catches mismatches."
 cta: quote

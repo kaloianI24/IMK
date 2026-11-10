@@ -30,7 +30,7 @@ outOfScope:
   - "Legacy on-premise systems with no API"
   - "Native integrations the vendor already ships (we configure, not rebuild)"
 timeline: "2–4 weeks typical; agreed and fixed in writing at kickoff."
-startingAt: "from £1,500"
+startingAt: "from £1,000"
 careOption: "Automation Care turns this into a covered, supported system for a flat monthly fee."
 caseSnapshot: "Take a daily manual report that took 8 hours and bring it to 10 minutes of human review — car dealership."
 cta: audit

@@ -27,7 +27,7 @@ inScope:
 outOfScope:
   - "Implementation – audit and build are separate engagements"
 timeline: "10 working days."
-startingAt: "from £600"
+startingAt: "from £800"
 careOption: "A separate engagement; the recommended first step of any build project."
 caseSnapshot: "Two weeks of audit surfaced an 8-hour daily job worth £30k a year."
 cta: audit
