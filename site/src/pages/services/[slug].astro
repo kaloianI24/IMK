@@ -13,7 +13,10 @@ const { service } = Astro.props;
 const { Content } = await render(service);
 const d = service.data;
 const slug = service.id;
-const sd = { "@context": "https://schema.org", "@type": "Service", "name": d.title, "description": d.tagline, "offers": { "@type": "Offer", "priceSpecification": d.startingAt } };
+const sd = [
+  { "@context": "https://schema.org", "@type": "Service", "name": d.title, "description": d.tagline, "offers": { "@type": "Offer", "priceSpecification": d.startingAt } },
+  { "@context": "https://schema.org", "@type": "FAQPage", "mainEntity": d.faq.map((f: any) => ({ "@type": "Question", "name": f.q, "acceptedAnswer": { "@type": "Answer", "text": f.a } })) },
+];
 ---
 <BaseLayout title={`${d.title} — IMK`} description={d.summary} path={`/services/${slug}`} structuredData={sd} stickyCta={{ label: "Email us", href: "/contact" }}>
   <section class="container section">

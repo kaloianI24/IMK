@@ -1,0 +1,59 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+---
+<BaseLayout title="Free Automation Audit Checklist — IMK" description="A free checklist to identify automation opportunities in your business. Map your processes, count hours, and find quick wins." path="/resources/automation-audit-checklist">
+  <section class="container section">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }, { label: 'Resources' }, { label: 'Automation Audit Checklist' }]} />
+    <h1>Free: Automation Audit Checklist</h1>
+    <p style="max-width:60ch;">Use this checklist to map your processes, count hours, and identify automation opportunities — before spending a penny.</p>
+  </section>
+
+  <section class="container section" style="padding-top:0;max-width:720px;">
+    <div class="card" style="padding:var(--space-6);">
+      <h2>1. Process Inventory</h2>
+      <ul>
+        <li>List every recurring task your team does weekly</li>
+        <li>Count hours per task per person</li>
+        <li>Note which tools are involved (CRM, email, spreadsheets, etc.)</li>
+        <li>Identify who owns each process</li>
+      </ul>
+
+      <h2>2. Pain Points</h2>
+      <ul>
+        <li>Which tasks are most error-prone?</li>
+        <li>Which tasks cause the most delays?</li>
+        <li>Where does data get copy-pasted between systems?</li>
+        <li>Which tasks are bottlenecked on one person?</li>
+      </ul>
+
+      <h2>3. Automation Readiness</h2>
+      <ul>
+        <li>Does the process have clear inputs and outputs?</li>
+        <li>Is the data structured (not free-text emails)?</li>
+        <li>Are the tools involved API-accessible?</li>
+        <li>Is the process stable (not changing weekly)?</li>
+      </ul>
+
+      <h2>4. Quick Win Identification</h2>
+      <ul>
+        <li>Which task takes the most hours per week?</li>
+        <li>Which task has the simplest logic?</li>
+        <li>Which task has the clearest success criteria?</li>
+        <li>Pick one: scope it for 2-4 weeks</li>
+      </ul>
+
+      <h2>5. Next Steps</h2>
+      <ul>
+        <li>Calculate annual cost of the manual process (hours × rate × 52)</li>
+        <li>Compare to automation build cost</li>
+        <li>If ROI is clear, book an audit</li>
+      </ul>
+
+      <div style="margin-top:var(--space-6);text-align:center;">
+        <p class="muted">Want us to do this for you? An automation audit costs from £800 and delivers a ranked roadmap in 10 working days.</p>
+        <a class="btn btn-primary" href="/pricing#apply?offer=audit" style="margin-top:var(--space-3);">Start an automation audit</a>
+      </div>
+    </div>
+  </section>
+</BaseLayout

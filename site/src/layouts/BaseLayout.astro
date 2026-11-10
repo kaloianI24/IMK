@@ -7,6 +7,7 @@ import Footer from '../components/Footer.astro';
 import StickyCta from '../components/StickyCta.astro';
 import Seo from '../components/Seo.astro';
 import BrandMark from '../components/BrandMark.astro';
+import CookieConsent from '../components/CookieConsent.astro';
 import { primaryNav, primaryCta } from '../data/navigation';
 
 interface Props {
@@ -48,6 +49,7 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     <link rel="canonical" href={canonical} />
     {noindex && <meta name="robots" content={nofollow ? 'noindex, nofollow' : 'noindex, follow'} />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="alternate" type="application/rss+xml" title="IMK Blog RSS" href="/rss.xml" />
     <Seo title={title} description={description} canonical={canonical} structuredData={structuredData} image={`${siteUrl}/og.png`} />
   </head>
   <body>
@@ -81,6 +83,7 @@ const canonical = `${siteUrl}${path === '/' ? '/' : path.replace(/\/$/, '')}`;
     </main>
     <Footer />
     {stickyCta && <StickyCta label={stickyCta.label} href={stickyCta.href} />}
+    <CookieConsent />
 
     <script is:inline src="/scripts/mobile-menu.js" defer></script>
   </body>
